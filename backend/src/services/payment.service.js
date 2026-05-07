@@ -13,6 +13,7 @@ const {
 } = require('../utils/momo.helper');
 const { hmacSHA256 } = require('../utils/zalopay.helper');
 const { updateStatus: updateOrderStatus } = require('./order.service');
+const { hasEnvValues } = require('../config/runtime.js');
 
 const MOMO_CONFIG = {
     partnerCode: process.env.MOMO_PARTNER_CODE,
@@ -35,6 +36,19 @@ const ZALOPAY_CONFIG = {
 // ======================== MOMO PAYMENT ==========================
 
 async function createMomoPayment(orderId) {
+    if (
+        !hasEnvValues(
+            'MOMO_PARTNER_CODE',
+            'MOMO_ACCESS_KEY',
+            'MOMO_SECRET_KEY',
+            'MOMO_ENDPOINT',
+            'MOMO_REDIRECT_URL',
+            'MOMO_IPN_URL',
+        )
+    ) {
+        throw new Error('MoMo payment is not configured');
+    }
+
     const order = await orderRepository.findById(orderId);
     if (!order) throw new Error('Order not found');
 
@@ -128,6 +142,19 @@ async function handleMomoReturn(query) {
 // ======================== ZALOPAY PAYMENT ==========================
 
 async function createZaloPayOrderService(order) {
+    if (
+        !hasEnvValues(
+            'ZALOPAY_APP_ID',
+            'ZALOPAY_KEY1',
+            'ZALOPAY_KEY2',
+            'ZALOPAY_ENDPOINT',
+            'ZALOPAY_REDIRECT_URL',
+            'ZALOPAY_CALLBACK_URL',
+        )
+    ) {
+        throw new Error('ZaloPay payment is not configured');
+    }
+
     const { appId, key1, endpoint, redirectUrl, callbackUrl } = ZALOPAY_CONFIG;
 
     const date = new Date();

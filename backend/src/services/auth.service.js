@@ -8,16 +8,13 @@ const { getDefaultAvatar } = require("../utils/defaultAvatar.js");
 const User = require("../models/user.model.js");
 const { sendMail } = require("../libs/mailer.js");
 const { message } = require("statuses");
+const { getBackendUrl, getFrontendUrl } = require('../config/runtime.js');
 
-const FRONTEND_URL =
-    process.env.FRONTEND_URL || "https://d1qc4bz6yrxl8k.cloudfront.net";
+const FRONTEND_URL = getFrontendUrl();
 const VERIFY_TTL_MINUTES = Number(process.env.VERIFY_TTL_MINUTES || 1440);
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30m";
-const BACKEND_URL =
-    process.env.BACKEND_URL ||
-    process.env.BACKEND_BASE_URL ||
-    "https://api.milkybloomtoystore.id.vn";
+const BACKEND_URL = getBackendUrl();
 
 //Trường hợp đăng nhập sai quá 5 lần thì phải nhập otp
 const MAX_FAILS = Number(process.env.LOGIN_MAX_FAILS || 5);
@@ -30,7 +27,7 @@ const VERIFY_NEW_EMAIL_TOKEN_TTL_MINUTES = Number(
 );
 const CHANGE_EMAIL_CONFIRM_URL =
     process.env.CHANGE_EMAIL_CONFIRM_URL ||
-    "https://api.milkybloomtoystore.id.vn/api/auth/change-email/confirm";
+    `${BACKEND_URL}/api/auth/change-email/confirm`;
 
 const userSchema = Joi.object({
     fullName: Joi.string().min(3).max(100).required(), // Họ và tên
@@ -189,10 +186,7 @@ const register = async (data) => {
 
     await userRepository.setResetToken(user._id, { tokenHash, expiresAt });
     //Đường dẫn backend
-    const verifyBase =
-        process.env.BACKEND_URL ||
-        process.env.BACKEND_BASE_URL ||
-        "https://api.milkybloomtoystore.id.vn";
+    const verifyBase = getBackendUrl();
     const verifyLink = `${verifyBase}/api/auth/verify-email?uid=${user._id}&token=${token}`;
     try {
         await sendMail({

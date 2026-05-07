@@ -30,10 +30,11 @@ const {
     passwordResetLimiter,
     otpLimiter,
 } = require("../middlewares/rateLimit.middleware.js");
-
-setupFacebookPassport();
+const { getCookieDomain, getFrontendUrl, isProduction } = require('../config/runtime.js');
 
 const router = express.Router();
+
+setupFacebookPassport();
 
 //google login flow
 router.get(
@@ -63,26 +64,22 @@ router.get(
             { expiresIn: "7d" },
         );
 
-        // Support both production and local development
-        const isProduction = process.env.NODE_ENV === 'production';
-        const frontendUrl = process.env.FRONTEND_URL || (isProduction 
-            ? "https://www.milkybloomtoystore.id.vn" 
-            : "http://localhost:5173");
-        
-        const target = new URL(frontendUrl);
+        const target = new URL(getFrontendUrl());
         target.searchParams.set("token", token);
 
-        if (isProduction) {
-            res.cookie("token", token, {
-                httpOnly: true,
-                secure: true,
-                sameSite: "none",
-                domain: ".milkybloomtoystore.id.vn",
-                path: "/",
-                maxAge: 7 * 24 * 60 * 60 * 1000,
-            });
+        const cookieOptions = {
+            httpOnly: true,
+            secure: isProduction(),
+            sameSite: isProduction() ? "none" : "lax",
+            path: "/",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        };
+        const cookieDomain = getCookieDomain();
+        if (cookieDomain) {
+            cookieOptions.domain = cookieDomain;
         }
-        
+
+        res.cookie("token", token, cookieOptions);
         res.redirect(target.toString());
     },
 );
@@ -109,26 +106,22 @@ router.get(
             { expiresIn: "7d" },
         );
 
-        // Support both production and local development
-        const isProduction = process.env.NODE_ENV === 'production';
-        const frontendUrl = process.env.FRONTEND_URL || (isProduction 
-            ? "https://www.milkybloomtoystore.id.vn" 
-            : "http://localhost:5173");
-        
-        const target = new URL(frontendUrl);
+        const target = new URL(getFrontendUrl());
         target.searchParams.set("token", token);
 
-        if (isProduction) {
-            res.cookie("token", token, {
-                httpOnly: true,
-                secure: true,
-                sameSite: "none",
-                domain: ".milkybloomtoystore.id.vn",
-                path: "/",
-                maxAge: 7 * 24 * 60 * 60 * 1000,
-            });
+        const cookieOptions = {
+            httpOnly: true,
+            secure: isProduction(),
+            sameSite: isProduction() ? "none" : "lax",
+            path: "/",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        };
+        const cookieDomain = getCookieDomain();
+        if (cookieDomain) {
+            cookieOptions.domain = cookieDomain;
         }
-        
+
+        res.cookie("token", token, cookieOptions);
         res.redirect(target.toString());
     },
 );

@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 const BranchMap = ({ branches = [] }) => {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
+  const fallbackStyleUrl = 'https://demotiles.maplibre.org/style.json';
 
   // Build GeoJSON from branches
   const buildGeoJson = () => ({
@@ -26,13 +27,8 @@ const BranchMap = ({ branches = [] }) => {
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    const apiKey = import.meta.env.VITE_VIETMAP_API_KEY;
     const customStyle = (import.meta.env.VITE_VIETMAP_STYLE_URL || '').trim();
-    const styleUrl = customStyle
-      ? customStyle
-      : apiKey
-        ? `https://maps.vietmap.vn/api/maps/streets/styles.json?apikey=${apiKey}`
-        : 'https://demotiles.maplibre.org/style.json';
+    const styleUrl = customStyle || fallbackStyleUrl;
 
     mapRef.current = new maplibregl.Map({
       container: mapContainer.current,

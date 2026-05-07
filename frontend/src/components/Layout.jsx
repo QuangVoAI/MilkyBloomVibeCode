@@ -5,6 +5,7 @@ import { Fragment } from 'react'
 import { Toaster } from './ui/sonner'
 import Footer from './Footer'
 import ScrollToTop from './ScrollToTop'
+import ChatWidget from './ChatWidget'
 
 const Layout = () => {
     return (
@@ -21,6 +22,7 @@ const Layout = () => {
             
             <Footer />
             <Toaster />
+            <ChatWidget />
         </div>
     )
 }

@@ -6,6 +6,7 @@ const userRepository = require("../repositories/user.repository.js");
 const { mongo } = require("mongoose");
 const { message } = require("statuses");
 const jwt = require("jsonwebtoken");
+const { getCookieDomain, getFrontendUrl, isProduction } = require('../config/runtime.js');
 
 const resolveUserId = (req) =>
    
@@ -90,18 +91,23 @@ const verifyEmail = async (req, res, next) => {
             { expiresIn: "7d" },
         );
 
-        const target = new URL("https://www.milkybloomtoystore.id.vn");
+        const target = new URL(getFrontendUrl());
         target.searchParams.set("verified", "true");
         target.searchParams.set("token", loginToken);
 
-        res.cookie("token", loginToken, {
+        const cookieOptions = {
             httpOnly: true,
-            secure: true,
-            sameSite: "none", // cho phép dùng giữa api.milkybloom... và www.milkybloom...
-            domain: ".milkybloomtoystore.id.vn",
+            secure: isProduction(),
+            sameSite: isProduction() ? "none" : "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000,
             path: "/",
-        });
+        };
+        const cookieDomain = getCookieDomain();
+        if (cookieDomain) {
+            cookieOptions.domain = cookieDomain;
+        }
+
+        res.cookie("token", loginToken, cookieOptions);
 
         return res.redirect(target.toString());
     } catch (err) {

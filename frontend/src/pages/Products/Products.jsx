@@ -1,17 +1,21 @@
-import React, { useState, lazy, Suspense, useMemo, useCallback } from 'react';
+import React, { useState, lazy, Suspense, useMemo, useCallback, useEffect, useRef } from 'react';
 import { SlidersHorizontal, X, ArrowUpDown, Grid3X3, LayoutList, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useProductCatalog } from './hooks';
 import ProductFilters from './components/ProductFilters';
+import { getActiveBannerVideo } from '@/services/media.service';
 import './Products.css';
-
-const catalogBannerVideo = 'https://toy-store-project-of-springwang.s3.ap-southeast-2.amazonaws.com/banner/THE+MONSTERS+BIG+INTO+ENERGY+Series.mp4';
 
 // Lazy load heavy components
 const ProductGrid = lazy(() => import('./components/ProductGrid'));
 
+const BANNER_VIDEO_CACHE_KEY = 'milkybloom-products-banner-video';
+const BANNER_VIDEO_CACHE_TTL = 30 * 60 * 1000;
+
 const Products = () => {
   const [videoError, setVideoError] = useState(false);
+  const [catalogBannerVideo, setCatalogBannerVideo] = useState('');
+  const bannerPreloaderRef = useRef(null);
   const [showFilters, setShowFilters] = useState(true);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -67,7 +71,121 @@ const Products = () => {
     opt => opt.sortBy === filters.sortBy && opt.sortOrder === filters.sortOrder
   ) || sortOptions[0];
 
+  useEffect(() => {
+    let mounted = true;
+
+    const readCachedBannerVideo = () => {
+      try {
+        const raw = sessionStorage.getItem(BANNER_VIDEO_CACHE_KEY);
+        if (!raw) return '';
+
+        const parsed = JSON.parse(raw);
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          typeof parsed.url !== 'string' ||
+          !parsed.url
+        ) {
+          return '';
+        }
+
+        const age = Date.now() - Number(parsed.savedAt || 0);
+        if (Number.isNaN(age) || age > BANNER_VIDEO_CACHE_TTL) {
+          return '';
+        }
+
+        return parsed.url;
+      } catch (_error) {
+        return '';
+      }
+    };
+
+    const writeCachedBannerVideo = (url) => {
+      if (!url) return;
+
+      try {
+        sessionStorage.setItem(
+          BANNER_VIDEO_CACHE_KEY,
+          JSON.stringify({
+            url,
+            savedAt: Date.now(),
+          }),
+        );
+      } catch (_error) {
+        // Ignore storage failures
+      }
+    };
+
+    const cachedVideo = readCachedBannerVideo();
+    if (cachedVideo) {
+      setCatalogBannerVideo(cachedVideo);
+      setVideoError(false);
+    }
+
+    const loadBannerVideo = async () => {
+      try {
+        const data = await getActiveBannerVideo();
+        if (!mounted) return;
+        const nextUrl = data?.streamUrl || '';
+        if (nextUrl) {
+          writeCachedBannerVideo(nextUrl);
+          setCatalogBannerVideo(nextUrl);
+          setVideoError(false);
+        }
+      } catch (_error) {
+        if (!mounted) return;
+        if (!cachedVideo) {
+          setCatalogBannerVideo('');
+        }
+      }
+    };
+
+    loadBannerVideo();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const showVideo = !!catalogBannerVideo && !videoError;
+
+  useEffect(() => {
+    if (!catalogBannerVideo) return undefined;
+
+    const preloader = document.createElement('video');
+    preloader.preload = 'auto';
+    preloader.muted = true;
+    preloader.playsInline = true;
+    preloader.src = catalogBannerVideo;
+    preloader.load();
+    bannerPreloaderRef.current = preloader;
+
+    return () => {
+      try {
+        preloader.pause();
+        preloader.removeAttribute('src');
+        preloader.load();
+      } catch (_error) {
+        // ignore cleanup errors
+      }
+      bannerPreloaderRef.current = null;
+    };
+  }, [catalogBannerVideo]);
+
+  useEffect(() => {
+    if (!catalogBannerVideo) return undefined;
+
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'video';
+    link.href = catalogBannerVideo;
+    link.crossOrigin = 'anonymous';
+    document.head.appendChild(link);
+
+    return () => {
+      link.remove();
+    };
+  }, [catalogBannerVideo]);
 
   // Memoize priceRange to prevent unnecessary re-renders
   const priceRange = useMemo(() => ({ min: 0, max: 500 }), []);
@@ -81,12 +199,16 @@ const Products = () => {
             <div className="products-banner-media">
               {showVideo ? (
                 <video
+                  key={catalogBannerVideo}
                   className="products-banner-video"
                   autoPlay
                   muted
                   loop
                   playsInline
+                  preload="auto"
+                  controls={false}
                   onError={() => setVideoError(true)}
+                  onLoadedData={() => setVideoError(false)}
                 >
                   <source src={catalogBannerVideo} type="video/mp4" />
                 </video>

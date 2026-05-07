@@ -19,8 +19,12 @@ module.exports = function setupFacebookPassport() {
             async (accessToken, refreshToken, profile, done) => {
                 try {
                     const socialId = profile.id;
-                    const email =
+                    const emailFromProfile =
                         profile.emails?.[0]?.value?.toLowerCase() || null;
+                    // Facebook may not return an email for some accounts.
+                    // Our User schema requires email, so generate a stable fallback.
+                    const email =
+                        emailFromProfile || `facebook_${socialId}@facebook.local`;
                     const fullName = profile.displayName || 'Facebook User';
 
                     // Trích xuất ảnh và kiểm tra có phải ảnh mặc định không

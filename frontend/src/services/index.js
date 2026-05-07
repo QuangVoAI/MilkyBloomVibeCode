@@ -10,6 +10,7 @@ export * from './dashboard.service';
 export * from './addresses.service';
 export * from './payments.service';
 export * from './shipping.service';
+export * from './chat.service';
 // Socket service is NOT exported here - import directly to avoid bundling in main chunk
 // import { socketService } from '@/services/socket.service';
 export * from './config';
@@ -29,6 +30,7 @@ import * as dashboardService from './dashboard.service';
 import * as addressesService from './addresses.service';
 import * as paymentsService from './payments.service';
 import * as shippingService from './shipping.service';
+import * as chatService from './chat.service';
 
 export default {
   products: productsService,
@@ -43,4 +45,5 @@ export default {
   addresses: addressesService,
   payments: paymentsService,
   shipping: shippingService,
+  chat: chatService,
 };

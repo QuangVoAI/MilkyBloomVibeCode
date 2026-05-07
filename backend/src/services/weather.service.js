@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { hasEnvValues, isProviderEnabled } = require('../config/runtime.js');
 const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
 
 /**
@@ -9,6 +10,15 @@ const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
  */
 async function getWeatherCondition(lat, lng) {
     if (!lat || !lng) return { isBadWeather: false, message: 'Thiếu tọa độ' };
+    if (
+        !isProviderEnabled('WEATHER_ENABLED', true) ||
+        !hasEnvValues('OPENWEATHER_API_KEY')
+    ) {
+        return {
+            isBadWeather: false,
+            message: 'Weather provider unavailable',
+        };
+    }
 
     try {
         const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=vi`;

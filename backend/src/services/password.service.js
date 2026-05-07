@@ -4,6 +4,7 @@ const { sendMail } = require('../libs/mailer.js');
 const bcrypt = require('bcrypt');
 const Joi = require('joi');
 const { message } = require('statuses');
+const { getFrontendUrl } = require('../config/runtime.js');
 
 const ttlMinutes = Number(process.env.RESET_TTL_MINUTES) || 15; //thời gian hết hạn của link reset
 
@@ -29,10 +30,7 @@ const requestReset = async (identifier, finders) => {
 
     await userRepository.setResetToken(user._id, { tokenHash, expiresAt }); // lưu token đã băm và thời gian hết hạn vào cơ sở dữ liệu
 
-    const linkBase =
-        process.env.CLIENT_URL ||
-        process.env.FRONTEND_URL ||
-        "https://www.milkybloomtoystore.id.vn";
+    const linkBase = process.env.CLIENT_URL || getFrontendUrl();
     const link = `${linkBase}/reset-password?uid=${user._id}&token=${token}`; //tạo link đặt lại mật khẩu
 
     await sendMail({

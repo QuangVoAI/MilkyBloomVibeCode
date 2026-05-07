@@ -1,0 +1,390 @@
+"""
+Empathy Writer — Sinh phản hồi thấu cảm cho khách hàng.
+Dual backend: Vertex AI fine-tuned Llama 3.1-8B (primary) + Groq Llama 3.1-8B (fallback).
+"""
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+
+from typing import AsyncGenerator, Callable, Awaitable, Optional
+
+from agents.llm_client import (
+    groq_complete, groq_stream_complete,
+    vertex_custom_complete,
+    GROQ_MODEL_FAST,
+)
+from config import EMPATHY_MODE
+
+EMPATHY_SYSTEM_PROMPT = """\
+Bạn là EmpathAI - trợ lý CSKH của MyKingdom (chuỗi cửa hàng đồ chơi trẻ em hàng đầu Việt Nam).
+
+THÔNG TIN LIÊN HỆ MYKINGDOM:
+- Hotline: 1900 1208 (Thứ 2-7: 08:00-17:00, CN: 08:00-12:00)
+- Email: hotro@mykingdom.com.vn
+- Website: https://www.mykingdom.com.vn
+- Hệ thống: Hơn 200 cửa hàng toàn quốc
+
+KHẢ NĂNG THỰC THI CỦA HỆ THỐNG:
+Hệ thống CÓ THỂ tự động thực hiện các tác vụ sau ngay trong chat:
+- Đổi/cập nhật địa chỉ giao hàng (khi đơn đang processing hoặc shipping)
+- Hủy đơn hàng (khi đơn đang processing)
+- Tạo yêu cầu hoàn tiền
+- Tạo yêu cầu đổi trả hàng
+Khi khách muốn thực hiện một trong các tác vụ trên, hãy HỎI MÃ ĐƠN HÀNG nếu chưa có.
+KHÔNG BAO GIỜ nói "không có quyền truy cập" hay "liên hệ hotline" khi có thể tự xử lý.
+
+QUY TẮC BẮT BUỘC:
+1. KHÔNG BAO GIờ nói "Chúng tôi rất tiếc", "Xin lỗi vì sự bất tiện", "theo chính sách công ty", "theo chính sách của chúng tôi"
+2. Thấu cảm THỰC SỰ bằng cảm xúc chân thật. Ví dụ: "Nghe bạn nói xong mình cũng thấy bực mình thay..."
+3. NHƯỢNG BỘ THÔNG MINH: Đề xuất giải pháp CỤ THỂ dựa trên chính sách MyKingdom (đổi trả 7 ngày, bảo hành, MyPoints...)
+4. KẾT THÚC bằng câu hỏi mở để khách xả tiếp hoặc bình tĩnh lại
+5. KHÔNG BAO GIỜ cãi lại khách, không đổ lỗi cho khách
+6. Trả lời tự nhiên, thân thiện như người thật đang nhắn tin
+7. Dựa trên CHÍNH SÁCH được cung cấp để đề xuất giải pháp cụ thể
+8. Chỉ đề cập hotline 1900 1208 khi không thể tự xử lý
+
+VĂN MẪU BỊ CẤM TUYỆT ĐỐI (KHÔNG ĐƯỢC DÙNG BẤT KỲ DẠNG NÀO):
+- "Chúng tôi rất tiếc về sự bất tiện này"
+- "theo chính sách công ty" / "theo chính sách của chúng tôi" / "theo quy định"
+  ĐƯỢC PHÉP: "Theo chính sách đổi trả của MyKingdom, ..." (có brand + nội dung cụ thể)
+  => Tốt hơn là dùng câu chủ động: "MyKingdom hỗ trợ đổi trả 7 ngày" hoặc "Mình có thể giúp bạn..."
+- "Xin quý khách vui lòng chờ..."
+- "Chúng tôi sẽ chuyển vấn đề này..."
+- Bất kỳ câu nào nghe như robot/copy-paste
+- KHÔNG DÙNG "Vui lòng..." — nghe như lệnh/form. Thay bằng "Bạn + động từ" hoặc "Bạn giúp mình..."
+  Ví dụ: thay "Vui lòng cho mình biết" → "Bạn cho mình biết nhé", "Bạn giúp mình chụp ảnh được không"
+
+TUYỆT ĐỐI KHÔNG SUY ĐOÁN KHI CHƯA CÓ THÔNG TIN ĐƠN:
+- KHÔNG ĐƯỢC kết luận "đơn đã quá hạn", "không thể hoàn tiền", "không đủ điều kiện" khi chưa tra cứu mã đơn cụ thể
+- KHÔNG ĐƯỢC áp dụng giới hạn thời gian từ chính sách (7 ngày, 72 giờ...) cho đơn chưa được kiểm tra
+- Nếu khách muốn hoàn tiền / đổi trả / hủy đơn mà CHƯA cung cấp mã đơn → HỎI MÃ ĐƠN TRƯỚC, không kết luận gì cả
+
+Độ dài phản hồi: TỐI ĐA 4-5 câu, ngắn gọn, đúng trọng tâm.
+
+PHONG CÁCH PHẢN HỒI:
+- Thân thiện, dùng "mình/bạn" thay vì "chúng tôi/quý khách"
+- Dùng emoji vừa phải (1-2 cái)
+- Nói như đang nhắn tin với bạn bè
+"""
+
+CASUAL_SYSTEM_PROMPT = (
+    "Bạn là EmpathAI, trợ lý CSKH thân thiện. "
+    "Trả lời ngắn gọn, lịch sự, tự nhiên. "
+    "Nếu khách hỏi về sản phẩm/dịch vụ, khuyên họ mô tả cụ thể hơn."
+)
+
+INQUIRY_SYSTEM_PROMPT = """\
+Bạn là EmpathAI - trợ lý CSKH của MyKingdom, thân thiện và chuyên nghiệp.
+
+KHẢ NĂNG THỰC THI:
+Hệ thống CÓ THỂ tự động thực hiện ngay trong chat:
+- Đổi/cập nhật địa chỉ giao hàng
+- Hủy đơn hàng (khi đơn đang processing)
+- Tạo yêu cầu hoàn tiền / đổi trả
+Nếu khách hỏi CÁCH làm một trong các việc trên, hãy cho biết hệ thống làm được và hỏi mã đơn hàng.
+KHÔNG hướng dẫn thủ công khi có thể tự xử lý.
+
+QUY TẮC:
+- Trả lời dựa trên chính sách được cung cấp, rõ ràng, cụ thể
+- Dùng "mình/bạn", thân thiện như nhắn tin với bạn bè
+- KHÔNG nói "không có quyền truy cập" hay chuyển hotline khi hệ thống tự làm được
+- KHÔNG dùng "theo chính sách công ty/của chúng tôi" — thay bằng câu chủ động như "MyKingdom hỗ trợ đổi trả trong 7 ngày"
+- KHÔNG dùng "Vui lòng..." — thay bằng "Bạn + động từ" hoặc "Bạn giúp mình..."
+- KHÔNG KẾT LUẬN "quá hạn", "không đủ điều kiện" khi chưa có mã đơn cụ thể — hỏi mã đơn trước
+- Trả lời tối đa 4-5 câu, ngắn gọn
+\
+"""
+
+
+def _deduplicate_response(text: str) -> str:
+    """Remove repeated consecutive paragraphs/sentences that LLMs produce when looping."""
+    # Split by paragraph
+    paragraphs = [p.strip() for p in text.strip().split("\n") if p.strip()]
+    seen = []
+    for p in paragraphs:
+        # Skip if identical or highly similar to a recent paragraph
+        if not any(p == s or (len(p) > 20 and p in s) for s in seen[-3:]):
+            seen.append(p)
+    return "\n".join(seen)
+
+def _build_action_context(action_result: dict, action_intent: dict) -> str:
+    """Build context block thông báo kết quả thực thi action cho LLM."""
+    if not action_result or not action_intent:
+        return ""
+    action = action_intent.get("action", "no_action")
+    if action == "no_action":
+        return ""
+
+    if action_result.get("success"):
+        msg = action_result.get("message", "")
+        ticket = action_result.get("ticket_id", "")
+        return (
+            f"\nHỆ THỐNG ĐÃ THỰC HIỆN THÀNH CÔNG:\n"
+            f"{msg}\n"
+            f"=> Hãy BÁO CHO KHÁCH BIẾT hệ thống đã xử lý xong, "
+            f"cung cấp mã ticket {ticket} để theo dõi.\n"
+        )
+    elif action_result.get("needs_order_id") or action_intent.get("needs_order_id"):
+        action_labels = {
+            "update_address": "cập nhật địa chỉ giao hàng",
+            "cancel_order": "hủy đơn hàng",
+            "request_refund": "yêu cầu hoàn tiền",
+            "process_return": "đổi trả hàng",
+            "check_order_status": "kiểm tra tình trạng đơn hàng",
+        }
+        label = action_labels.get(action, "xử lý yêu cầu")
+        return (
+            f"\nKHÁCH YÊU CẦU: {label}.\n"
+            f"HỆ THỐNG CÓ THỂ TỰ ĐỘNG THỰC HIỆN ngay bây giờ.\n"
+            f"=> Khách CHƯA CUNG CẤP MÃ ĐƠN HÀNG.\n"
+            f"=> Hãy HỎI KHÁCH MÃ ĐƠN HÀNG (ví dụ: MK001) để tiến hành {label}.\n"
+            f"KHÔNG được nói 'không có quyền' hay 'liên hệ hotline' vì hệ thống làm được.\n"
+        )
+    elif action_result.get("blocked"):
+        reason = action_result.get("message", "")
+        return (
+            f"\n⛔ HỆ THỐNG ĐÃ TỪ CHỐI HÀNH ĐỘNG — BẮT BUỘC TUÂN THỦ:\n"
+            f"Lý do từ hệ thống: {reason}\n"
+            f"=> Bạn CHỈ được GIẢI THÍCH lý do không thể xử lý "
+            f"và đề xuất giải pháp thay thế (ví dụ: liên hệ hotline 1900 1208, ra cửa hàng).\n"
+            f"=> KHÔNG ĐƯỢC nói 'mình có thể hỗ trợ đổi trả/hoàn tiền/hủy' vì hệ thống ĐÃ TỪ CHỐI.\n"
+            f"=> KHÔNG ĐƯỢC dùng thông tin từ CHÍNH SÁCH THAM KHẢO bên dưới để vượt qua quyết định blocked.\n"
+            f"   Ví dụ: nếu chính sách ghi '7 ngày' nhưng hệ thống từ chối vì 'quá 72h', thì kết quả hệ thống WIN.\n"
+            f"=> BẮT ĐẦU bằng thấu cảm, SAU ĐÓ giải thích lý do blocked, RỒI đề xuất giải pháp thay thế.\n"
+        )
+    elif (action_result.get("needs_more_info") or action_intent.get("needs_more_info")) and action == "update_address":
+        return (
+            f"\nKHÁCH MUỐN ĐỔI ĐỊA CHỈ nhưng CHƯA CUNG CẤP địa chỉ mới.\n"
+            f"=> Hãy HỎI LẠI địa chỉ mới để cập nhật (ngắn gọn, thân thiện).\n"
+        )
+    return ""
+
+
+def _build_order_context(order_info: dict) -> str:
+    """Build order context block từ kết quả tra cứu đơn hàng."""
+    if not order_info:
+        return ""
+    if not order_info.get("found"):
+        oid = order_info.get("order_id", "")
+        return (
+            f"\nTHÔNG TIN ĐƠN HÀNG:\n"
+            f"Mã đơn **{oid}** KHÔNG TÌM THẤY trong hệ thống.\n"
+            f"=> TUYỆT ĐỐI KHÔNG được suy đoán trạng thái đơn, KHÔNG được áp dụng chính sách đổi trả/hoàn tiền cho đơn này.\n"
+            f"=> Hãy xác nhận lại mã đơn với khách (có thể gõ nhầm) hoặc đề nghị kiểm tra qua hotline 1900 1208.\n"
+        )
+
+    summary = order_info.get("summary", "")
+    actions = order_info.get("suggested_actions", [])
+    actions_str = ", ".join(actions) if actions else "không có"
+    return (
+        f"\nTHÔNG TIN ĐƠN HÀNG (đã tra cứu):\n{summary}\n"
+        f"Action gợi ý hệ thống: {actions_str}\n"
+        f"=> Sử dụng thông tin này để trả lời CỤ THỂ, KHÔNG hỏi lại mã đơn.\n"
+    )
+
+
+def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compensation="", order_info=None, action_result=None, action_intent=None):
+    """Build prompt cho empathy response."""
+    sentiment_context = ""
+    if sentiment:
+        sentiment_guide = {
+            "toxic": "Khách ĐANG RẤT TỨC GIẬN. Cần xả hơi trước, sau đó mới đề xuất giải pháp. Nhượng bộ MẠNH.",
+            "frustrated": "Khách đang BỰC BỘI, ĐÃ CỐ GẮNG KIÊN NHẪN. Ghi nhận sự kiên nhẫn của họ, giải quyết nhanh.",
+            "disappointed": "Khách THẤT VỌNG, BUỒN. Cần an ủi nhẹ nhàng, thể hiện sự quan tâm chân thành.",
+            "neutral": "Khách hỏi bình thường. Trả lời thân thiện, chuyên nghiệp.",
+        }
+        sentiment_context = f"\nMỨC ĐỘ CẢM XÚC: {sentiment} (score: {score})\nHƯỚNG DẪN: {sentiment_guide.get(sentiment, '')}\n"
+
+    compensation_context = ""
+    if compensation:
+        compensation_context = f"\nBỒI THƯỜNG ÁP DỤNG: {compensation}\nHÃY ĐỀ XUẤT BỒI THƯỜNG CỤ THỂ NÀY CHO KHÁCH.\n"
+
+    order_context = _build_order_context(order_info or {})
+    action_context = _build_action_context(action_result or {}, action_intent or {})
+
+    if not evidence_text or len(evidence_text) < 30:
+        return (
+            f"KHÁCH HÀNG GỬI:\n{question}\n\n"
+            f"{sentiment_context}"
+            f"{order_context}"
+            f"{compensation_context}\n"
+            f"CHÍNH SÁCH: Không tìm thấy chính sách cụ thể. "
+            f"Hãy xử lý linh hoạt, thấu cảm và đề nghị chuyển lên cấp trên nếu cần.\n"
+            f"{action_context}"
+        )
+
+    # Khi order not found: cắt evidence để tránh LLM hallucinate policy cho đơn không tồn tại
+    order_not_found = order_info and not order_info.get("found") and order_info.get("order_id")
+    # Khi action blocked: đặt action_context SAU evidence để LLM weight nó cao hơn
+    action_blocked = action_result and action_result.get("blocked")
+
+    if order_not_found:
+        evidence_block = (
+            "CHÍNH SÁCH THAM KHẢO: KHÔNG ÁP DỤNG — đơn hàng không tồn tại, "
+            "KHÔNG được trích dẫn bất kỳ chính sách đổi trả/hoàn tiền nào cho đơn này.\n"
+        )
+    else:
+        evidence_block = f"CHÍNH SÁCH THAM KHẢO:\n{evidence_text[:4000]}\n"
+
+    if action_context and action_blocked:
+        # Blocked: evidence trước, action_context cuối (LLM weight cuối prompt cao hơn)
+        closing = f"{evidence_block}\n\nNHIỆM VỤ BẮT BUỘC (ưu tiên cao nhất):\n{action_context}"
+    elif action_context:
+        closing = f"NHIỆM VỤ CỦA BẠN:\n{action_context}\n\n{evidence_block}"
+    else:
+        closing = f"{evidence_block}\n\nHãy phản hồi khách hàng bằng cách thấu cảm + đề xuất giải pháp cụ thể dựa trên chính sách."
+
+    return (
+        f"KHÁCH HÀNG GỬI:\n{question}\n\n"
+        f"{sentiment_context}"
+        f"{order_context}"
+        f"{compensation_context}\n"
+        f"{closing}"
+    )
+
+
+async def generate_empathy_response(question, evidence_text, sentiment="", score=0, compensation="", order_info=None):
+    """Non-streaming empathy response."""
+    prompt = _build_empathy_prompt(question, evidence_text, sentiment, score, compensation, order_info)
+
+    messages = [
+        {"role": "system", "content": EMPATHY_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    if EMPATHY_MODE == "vertex":
+        try:
+            return _deduplicate_response(await vertex_custom_complete(
+                messages=messages,
+                max_tokens=400,
+                temperature=0.7,
+            ))
+        except Exception as e:
+            print(f"Vertex AI error: {e}, falling back to Groq")
+
+    return await groq_complete(
+        prompt=prompt,
+        system_prompt=EMPATHY_SYSTEM_PROMPT,
+        model=GROQ_MODEL_FAST,
+        max_tokens=512,
+        temperature=0.7,
+    )
+
+
+async def generate_empathy_streaming(
+    question, evidence_text,
+    sentiment="", score=0,
+    compensation="",
+    order_info=None,
+    action_result=None,
+    action_intent=None,
+    stream_callback=None,
+):
+    """Streaming empathy response."""
+    prompt = _build_empathy_prompt(question, evidence_text, sentiment, score, compensation, order_info, action_result, action_intent)
+    
+    messages = [
+        {"role": "system", "content": EMPATHY_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    full_answer = ""
+    token_buffer = ""
+    BUFFER_SIZE = 12
+
+    if EMPATHY_MODE == "vertex":
+        # Vertex Custom Endpoint không hỗ trợ streaming — simulate bằng word-by-word
+        try:
+            full_answer = await vertex_custom_complete(
+                messages=messages,
+                max_tokens=400,
+                temperature=0.7,
+            )
+            full_answer = _deduplicate_response(full_answer)
+            if stream_callback:
+                words = full_answer.split(" ")
+                for i, word in enumerate(words):
+                    token = word if i == 0 else " " + word
+                    await stream_callback(token)
+            return full_answer
+        except Exception as e:
+            print(f"Vertex AI streaming error: {e}, falling back to Groq")
+
+    # Groq streaming fallback (Llama 3.1-8B)
+    async for token in groq_stream_complete(
+        prompt=prompt,
+        system_prompt=EMPATHY_SYSTEM_PROMPT,
+        model=GROQ_MODEL_FAST,
+        max_tokens=350,
+        temperature=0.7,
+    ):
+        full_answer += token
+        token_buffer += token
+        if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
+            if stream_callback:
+                await stream_callback(token_buffer)
+            token_buffer = ""
+
+    if token_buffer and stream_callback:
+        await stream_callback(token_buffer)
+
+    return full_answer
+
+
+async def generate_casual(question):
+    """Casual response (không cần RAG)."""
+    messages = [
+        {"role": "system", "content": CASUAL_SYSTEM_PROMPT},
+        {"role": "user", "content": question},
+    ]
+    
+    if EMPATHY_MODE == "vertex":
+        try:
+            return await vertex_custom_complete(
+                messages=messages,
+                max_tokens=256,
+                temperature=0.7,
+            )
+        except Exception as e:
+            print(f"Vertex AI error: {e}, falling back to Groq")
+    
+    return await groq_complete(
+        prompt=question,
+        system_prompt=CASUAL_SYSTEM_PROMPT,
+        model=GROQ_MODEL_FAST,
+        max_tokens=256,
+        temperature=0.7,
+    )
+
+
+async def generate_inquiry(question, evidence_text, order_info=None):
+    """Inquiry response (RAG nhẹ, không cần sentiment)."""
+    order_context = _build_order_context(order_info or {})
+    prompt = (
+        f"KHÁCH HÀNG HỎI:\n{question}\n\n"
+        f"{order_context}"
+        f"THÔNG TIN CHÍNH SÁCH:\n{evidence_text[:4000]}\n\n"
+        f"Trả lời cụ thể, thân thiện."
+    )
+    messages = [
+        {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+    
+    if EMPATHY_MODE == "vertex":
+        try:
+            return await vertex_custom_complete(
+                messages=messages,
+                max_tokens=512,
+                temperature=0.3,
+            )
+        except Exception as e:
+            print(f"Vertex AI error: {e}, falling back to Groq")
+    
+    return await groq_complete(
+        prompt=prompt,
+        system_prompt=INQUIRY_SYSTEM_PROMPT,
+        model=GROQ_MODEL_FAST,
+        max_tokens=512,
+        temperature=0.3,
+    )

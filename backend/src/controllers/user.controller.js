@@ -116,7 +116,10 @@ const setUserPassword = async (req, res, next) => {
             });
         }
 
-        if (!currentPassword) {
+        const isSelfChange = req.user.id === id;
+        const isAdminReset = req.user.role === 'admin' && !isSelfChange;
+
+        if (!currentPassword && !isAdminReset) {
             return res.status(400).json({
                 success: false,
                 message: 'Current password is required',

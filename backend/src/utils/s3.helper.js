@@ -1,6 +1,5 @@
-const s3 = require('../config/s3');
 const { v4: uuidv4 } = require('uuid');
-const sharp = require('sharp');
+const { hasEnvValues, isProviderEnabled } = require('../config/runtime.js');
 
 /**
  * Optimize image before upload
@@ -20,6 +19,7 @@ const optimizeImage = async (buffer, mimetype, folder) => {
     }
 
     try {
+        const sharp = require('sharp');
         // Determine max width based on folder type
         const maxWidth = folder.includes('banner') || folder.includes('hero') ? 1920 : 1200;
         
@@ -48,6 +48,17 @@ const optimizeImage = async (buffer, mimetype, folder) => {
 };
 
 const uploadToS3 = async (files, folder = 'Uncategorized') => {
+    const { getS3 } = require('../config/s3');
+    const s3 = getS3();
+
+    if (
+        !isProviderEnabled('S3_ENABLED', true) ||
+        !s3 ||
+        !hasEnvValues('AWS_BUCKET_NAME')
+    ) {
+        throw new Error('S3 storage is not configured');
+    }
+
     // Upload all files in parallel for better performance
     const uploadPromises = files.map(async (file) => {
         // Optimize image before upload
@@ -86,6 +97,13 @@ const uploadToS3 = async (files, folder = 'Uncategorized') => {
 };
 
 const deleteFromS3 = async (urls) => {
+    const { getS3 } = require('../config/s3');
+    const s3 = getS3();
+
+    if (!isProviderEnabled('S3_ENABLED', true) || !s3) {
+        return;
+    }
+
     for (const url of urls) {
         try {
             const key = url.split('.amazonaws.com/')[1];

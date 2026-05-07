@@ -1,94 +1,156 @@
-const express = require("express");
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const {
+    generateChatReply,
+    getProviderSnapshot,
+} = require('../services/chat.service.js');
+
 const router = express.Router();
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const axios = require("axios");
 
-const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
-// Explicit model names to avoid v1/v1beta mismatch
-const MODEL_CANDIDATES = [
-    "models/gemini-1.5-flash-latest",
-    "models/gemini-1.5-flash",
-    "models/gemini-1.5-pro",
-    "models/gemini-pro",
-];
+const getBearerToken = (req) => {
+    const header = req.get('Authorization') || req.get('authorization') || '';
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    return match ? match[1].trim() : '';
+};
 
-const SYSTEM_PROMPT =
-    "You are MilkyBloom store assistant. Be concise, friendly, and helpful about toys, orders, shipping, and store policies.";
+const buildShopContext = (req, forwardedSessionId = '') => {
+    const authToken = getBearerToken(req);
+    let decodedUser = null;
 
-router.post("/gemini", async (req, res) => {
+    if (authToken && process.env.JWT_SECRET) {
+        try {
+            decodedUser = jwt.verify(authToken, process.env.JWT_SECRET);
+        } catch (_error) {
+            decodedUser = null;
+        }
+    }
+
+    const body = req.body || {};
+    const guestEmail = body.guestEmail || body.email || '';
+
+    return {
+        auth_token: authToken,
+        user_id: decodedUser?.id || decodedUser?._id || '',
+        email: decodedUser?.email || guestEmail || '',
+        role: decodedUser?.role || '',
+        session_id: forwardedSessionId,
+        sessionId: forwardedSessionId,
+        guest_email: guestEmail,
+    };
+};
+
+router.get('/providers', (_req, res) => {
+    return res.json({
+        success: true,
+        data: getProviderSnapshot(),
+    });
+});
+
+router.post('/message', async (req, res) => {
     try {
-        if (!GEMINI_KEY) {
-            return res.status(503).json({
-                success: false,
-                message: "Gemini API key not configured",
-            });
-        }
+        const { message, history = [], provider, sessionId = '' } = req.body || {};
+        const forwardedSessionId =
+            sessionId || req.get('X-Session-Id') || req.get('x-session-id') || '';
+        const shopContext = buildShopContext(req, forwardedSessionId);
 
-        const { message, history = [] } = req.body || {};
-        if (!message || typeof message !== "string") {
-            return res
-                .status(400)
-                .json({ success: false, message: "message is required" });
-        }
-
-        // map history to Gemini format
-        const formattedHistory = history
-            .filter((h) => h?.content)
-            .map((h) => ({
-                role: h.role === "model" ? "model" : "user",
-                parts: [{ text: String(h.content) }],
-            }));
-
-        // init model per request to allow fallback names
-        const genAI = new GoogleGenerativeAI({
-            apiKey: GEMINI_KEY,
-            apiEndpoint: "https://generativelanguage.googleapis.com",
+        const result = await generateChatReply({
+            message,
+            history,
+            providerOverride: provider,
+            sessionId: forwardedSessionId,
+            shopContext,
         });
-        let chat = null;
-        let lastErr = null;
 
-        for (const name of MODEL_CANDIDATES) {
-            try {
-                const current = genAI.getGenerativeModel({ model: name });
-                chat = current.startChat({
-                    history: [
-                        {
-                            role: "user",
-                            parts: [{ text: SYSTEM_PROMPT }],
-                        },
-                        ...formattedHistory,
-                    ],
-                    generationConfig: {
-                        maxOutputTokens: 200,
-                    },
-                });
-                break;
-            } catch (e) {
-                lastErr = e;
-            }
-        }
+        return res.json({
+            success: true,
+            reply: result.reply,
+            provider: result.provider,
+            model: result.model,
+        });
+    } catch (error) {
+        const message =
+            error?.response?.data?.error?.message ||
+            error?.response?.data?.message ||
+            error?.message ||
+            'Chat service error';
 
-        if (!chat) {
-            throw lastErr || new Error("No Gemini model available");
-        }
+        console.error('[chat] message error:', message);
 
-        const result = await chat.sendMessage(message);
-        const reply = result?.response?.text?.() || "Sorry, I could not answer that.";
-
-        return res.json({ success: true, reply });
-    } catch (err) {
-        const apiError =
-            err?.response?.error?.message ||
-            err?.response?.statusText ||
-            err?.message ||
-            JSON.stringify(err) ||
-            "Unknown error";
-
-        console.error("Gemini chat error:", apiError);
-
-        return res.status(500).json({
+        return res.status(503).json({
             success: false,
-            message: `Gemini service error: ${apiError}`,
+            message,
+        });
+    }
+});
+
+router.post('/agentic', async (req, res) => {
+    try {
+        const { message, history = [], sessionId = '' } = req.body || {};
+        const forwardedSessionId =
+            sessionId || req.get('X-Session-Id') || req.get('x-session-id') || '';
+        const shopContext = buildShopContext(req, forwardedSessionId);
+        const result = await generateChatReply({
+            message,
+            history,
+            providerOverride: 'agentic',
+            sessionId: forwardedSessionId,
+            shopContext,
+        });
+
+        return res.json({
+            success: true,
+            reply: result.reply,
+            provider: result.provider,
+            model: result.model,
+        });
+    } catch (error) {
+        const message =
+            error?.response?.data?.error?.message ||
+            error?.response?.data?.message ||
+            error?.message ||
+            'Agentic chat service error';
+
+        console.error('[chat] agentic error:', message);
+
+        return res.status(503).json({
+            success: false,
+            message,
+        });
+    }
+});
+
+router.post('/gemini', async (req, res) => {
+    try {
+        const { message, history = [], sessionId = '' } = req.body || {};
+        const forwardedSessionId =
+            sessionId || req.get('X-Session-Id') || req.get('x-session-id') || '';
+        const shopContext = buildShopContext(req, forwardedSessionId);
+        const result = await generateChatReply({
+            message,
+            history,
+            providerOverride: 'gemini',
+            sessionId: forwardedSessionId,
+            shopContext,
+        });
+
+        return res.json({
+            success: true,
+            reply: result.reply,
+            provider: result.provider,
+            model: result.model,
+        });
+    } catch (error) {
+        const message =
+            error?.response?.data?.error?.message ||
+            error?.response?.data?.message ||
+            error?.message ||
+            'Gemini chat service error';
+
+        console.error('[chat] gemini error:', message);
+
+        return res.status(503).json({
+            success: false,
+            message,
         });
     }
 });

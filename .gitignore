@@ -1,0 +1,8 @@
+.env
+.env.*
+backend/.env
+frontend/.env
+node_modules/
+dist/
+coverage/
+frontend/public/seed-images/

@@ -13,13 +13,13 @@ const connectDB = async () => {
             process.exit(1);
         }
 
+        console.log('Attempting MongoDB connection...');
         const conn = await mongoose.connect(CONNECTION_URL, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
             // Những option này giúp Beanstalk tự động reconnect khi mạng AWS delay nhẹ
             serverSelectionTimeoutMS: 10000, // timeout sau 10s
             socketTimeoutMS: 45000, // giữ socket mở 45s
         });
+        console.log(`Connected to MongoDB: ${conn.connection.host}`);
 
         // Nếu mất kết nối
         mongoose.connection.on("disconnected", () => {
