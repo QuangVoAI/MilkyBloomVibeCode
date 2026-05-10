@@ -91,6 +91,8 @@ COMPLAINT_FAST = [
     "đổi trả hàng", "trả hàng",
     # Check order status — must route COMPLAINT for action_executor
     "kiểm tra đơn", "tra cứu đơn", "tình trạng đơn", "đơn đâu",
+    "trạng thái đơn hàng", "kiểm tra trạng thái đơn hàng",
+    "xem trạng thái đơn hàng", "theo dõi trạng thái đơn hàng",
     "track đơn", "theo dõi đơn", "đơn đến đâu", "bao giờ giao",
     "chưa thấy giao", "chưa nhận được hàng", "hàng chưa đến",
     # Delivery failure keywords

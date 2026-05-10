@@ -408,7 +408,23 @@ def build_graph() -> StateGraph:
     # Complaint: order_lookup -> action_executor -> sentiment -> retrieve
     graph.add_edge("order_lookup", "action_executor")
     graph.add_edge("action_executor", "sentiment")
-    graph.add_edge("sentiment", "retrieve")
+
+    # If we still need an order id or extra info, answer directly with empathy
+    # instead of forcing retrieval / rerank. This keeps order-status turns fast.
+    def route_after_sentiment(state):
+        action_intent = state.get("action_intent") or {}
+        if action_intent.get("needs_order_id") or action_intent.get("needs_more_info"):
+            return "direct"
+        return "retrieve"
+
+    graph.add_conditional_edges(
+        "sentiment",
+        route_after_sentiment,
+        {
+            "direct": "empathy_writer",
+            "retrieve": "retrieve",
+        },
+    )
 
     # Inquiry: order_lookup_inquiry -> retrieve (no sentiment needed)
     graph.add_edge("order_lookup_inquiry", "retrieve")

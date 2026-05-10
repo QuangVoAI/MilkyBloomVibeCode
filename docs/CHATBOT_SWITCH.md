@@ -35,7 +35,7 @@ CHAT_MAX_OUTPUT_TOKENS=300
 CHAT_TEMPERATURE=0.3
 
 AGENTIC_AI_WS_URL=ws://127.0.0.1:8788
-AGENTIC_AI_BASE_URL=http://127.0.0.1:8787
+# AGENTIC_AI_BASE_URL is internal-only and not used by the public streaming path
 AGENTIC_AI_TIMEOUT_MS=120000
 ```
 

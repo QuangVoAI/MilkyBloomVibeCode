@@ -245,9 +245,9 @@ class QdrantWrapper:
             info = self.client.get_collection(self.collection_name)
             return {
                 "name": self.collection_name,
-                "points_count": info.points_count,
-                "vectors_count": info.vectors_count,
-                "status": info.status.value,
+                "points_count": getattr(info, "points_count", None),
+                "vectors_count": getattr(info, "vectors_count", None),
+                "status": getattr(getattr(info, "status", None), "value", None),
             }
         except Exception as e:
             return {"error": str(e)}

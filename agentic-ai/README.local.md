@@ -38,6 +38,13 @@ If you prefer a single command, use the helper script:
 That script starts both the HTTP bridge and the WebSocket bridge in one shot.
 The UI-facing chat path is streaming only.
 
+Before starting the chat services, seed the policy index into Qdrant:
+
+```bash
+cd python
+python seed_qdrant_policies.py --recreate
+```
+
 If you want to run the services separately:
 
 ```bash

@@ -321,21 +321,33 @@ async def generate_empathy_streaming(
         except Exception as e:
             print(f"Legacy streaming error: {e}, falling back to primary LLM backend")
 
-    stream_fn = featherless_stream_complete if EMPATHY_MODE == "featherless" else groq_stream_complete
-
-    async for token in stream_fn(
-        prompt=prompt,
-        system_prompt=EMPATHY_SYSTEM_PROMPT,
-        model=FEATHERLESS_MODEL_FAST if EMPATHY_MODE == "featherless" else GROQ_MODEL_FAST,
-        max_tokens=350,
-        temperature=0.7,
-    ):
-        full_answer += token
-        token_buffer += token
-        if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
-            if stream_callback:
-                await stream_callback(token_buffer)
-            token_buffer = ""
+    if EMPATHY_MODE == "featherless":
+        async for token in featherless_stream_complete(
+            messages=messages,
+            model=FEATHERLESS_MODEL_FAST,
+            max_tokens=350,
+            temperature=0.7,
+        ):
+            full_answer += token
+            token_buffer += token
+            if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
+                if stream_callback:
+                    await stream_callback(token_buffer)
+                token_buffer = ""
+    else:
+        async for token in groq_stream_complete(
+            prompt=prompt,
+            system_prompt=EMPATHY_SYSTEM_PROMPT,
+            model=GROQ_MODEL_FAST,
+            max_tokens=350,
+            temperature=0.7,
+        ):
+            full_answer += token
+            token_buffer += token
+            if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
+                if stream_callback:
+                    await stream_callback(token_buffer)
+                token_buffer = ""
 
     if token_buffer and stream_callback:
         await stream_callback(token_buffer)
