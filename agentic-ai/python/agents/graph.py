@@ -15,6 +15,7 @@ Entry point: run_streaming(question, history, stream_callback)
 import asyncio
 import time
 import sys
+import re
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -32,7 +33,13 @@ from agents.grader import grade_documents_node
 from agents.rewriter import rewrite_query_node
 from agents.llm_client import observe
 from indexing.query_engine import retrieve_and_rerank_async, format_evidence
-from tools.order_tool import extract_order_id, get_order_info, determine_suggested_actions
+from tools.order_tool import (
+    extract_order_id,
+    extract_phone_number,
+    get_order_info,
+    get_order_info_by_phone,
+    determine_suggested_actions,
+)
 from tools.action_tool import detect_action_intent, execute_action, resume_action_intent
 
 from config import MAX_REWRITE_RETRIES
@@ -59,6 +66,7 @@ def order_lookup_node(state: AgentState) -> dict:
     )
 
     order_id = extract_order_id(all_text)
+    phone_number = extract_phone_number(all_text) if not order_id else None
     order_info: dict = {}
     suggested_actions: list = []
 
@@ -67,13 +75,21 @@ def order_lookup_node(state: AgentState) -> dict:
 
     if order_id:
         order_info = get_order_info(order_id, shop_context)
+    elif phone_number:
+        order_info = get_order_info_by_phone(phone_number, shop_context)
+    else:
+        console.print("[dim]  OrderLookup: no order ID in message[/]")
+
+    if order_info:
         sentiment = state.get("sentiment", "")
         suggested_actions = determine_suggested_actions(order_info, sentiment)
+        lookup_label = f"order '{order_id}'" if order_id else f"phone '{phone_number}'"
         found_str = "found" if order_info.get("found") else "not found"
         console.print(
-            f"[dim]  OrderLookup: '{order_id}' -> {found_str} "
+            f"[dim]  OrderLookup: {lookup_label} -> {found_str} "
             f"(status: {order_info.get('status', '-')})[/]"
         )
+
         # Multi-turn: if order found and session has pending action, resume it
         if order_info.get("found") and session_id and session_id in _session_pending_actions:
             pending_action_intent = _session_pending_actions.pop(session_id)
@@ -81,19 +97,19 @@ def order_lookup_node(state: AgentState) -> dict:
                 f"[dim]  OrderLookup: resumed pending action '{pending_action_intent.get('action')}' "
                 f"for session {session_id}[/]"
             )
-    else:
-        console.print("[dim]  OrderLookup: no order ID in message[/]")
 
     elapsed = int((time.time() - t0) * 1000)
 
     return {
         "order_id": order_id or "",
+        "phone_number": phone_number or "",
         "order_info": order_info,
         "suggested_actions": suggested_actions,
         "pending_action_intent": pending_action_intent,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "order_id_extracted": order_id,
+            "phone_extracted": phone_number,
             "order_found": bool(order_info.get("found")),
             "order_status": order_info.get("status", ""),
             "order_lookup_ms": elapsed,
@@ -112,6 +128,9 @@ def action_executor_node(state: AgentState) -> dict:
     session_id = state.get("session_id", "")
     pending = state.get("pending_action_intent", {})
     shop_context = state.get("shop_context", {}) or {}
+    order_id = state.get("order_id", "")
+    phone_number = state.get("phone_number", "")
+    identifier_only = bool(re.fullmatch(r"[\d\+\-\s\(\)]{8,}", question.strip()))
 
     # Multi-turn resume: if order_lookup found a pending action for this session
     if pending and order_info.get("found"):
@@ -119,6 +138,17 @@ def action_executor_node(state: AgentState) -> dict:
         console.print(
             f"[dim]  ActionExecutor: resumed pending action '{pending.get('action')}' "
             f"with order {order_info.get('order_id', '')}[/]"
+        )
+    elif order_info.get("found") and identifier_only and (order_id or phone_number):
+        action_intent = {
+            "action": "check_order_status",
+            "executable": True,
+            "needs_order_id": False,
+            "block_reason": "",
+        }
+        console.print(
+            f"[dim]  ActionExecutor: identifier-only input -> defaulting to check_order_status "
+            f"(order={order_info.get('order_id', '')})[/]"
         )
     else:
         action_intent = detect_action_intent(question, order_info)
@@ -135,7 +165,19 @@ def action_executor_node(state: AgentState) -> dict:
             )
 
     action_result: dict = {}
-    if action != "no_action" and not action_intent.get("needs_order_id") and not action_intent.get("needs_more_info"):
+    if action == "check_order_status" and order_info.get("found"):
+        action_result = {
+            "success": True,
+            "action": action,
+            "message": order_info.get("summary", ""),
+            "ticket_id": None,
+            "updated_fields": {},
+        }
+        console.print(
+            f"[dim]  ActionExecutor: {action} -> OK "
+            f"(order: {order_info.get('order_id', '-')})[/]"
+        )
+    elif action != "no_action" and not action_intent.get("needs_order_id") and not action_intent.get("needs_more_info"):
         action_result = execute_action(action_intent, order_info, shop_context)
         status = "OK" if action_result.get("success") else ("BLOCKED" if action_result.get("blocked") else "FAIL")
         console.print(
@@ -285,6 +327,80 @@ async def inquiry_writer_node(state: AgentState) -> dict:
     }
 
 
+async def order_status_writer_node(state: AgentState) -> dict:
+    """Node: Trả lời trạng thái đơn hàng ngắn gọn, không qua RAG."""
+    t0 = time.time()
+    order_info = state.get("order_info", {}) or {}
+    order_id = order_info.get("order_id", state.get("order_id", ""))
+    status = (order_info.get("status") or "").lower()
+    customer_name = order_info.get("customer_name", "")
+    items = order_info.get("items", []) or []
+    item_names = ", ".join(
+        i.get("name") or i.get("productId", {}).get("name") or "sản phẩm"
+        for i in items[:3]
+    )
+    item_suffix = f" ({item_names})" if item_names else ""
+
+    if not order_info.get("found"):
+        matched_phone = order_info.get("matched_phone", "")
+        answer = (
+            "Mình chưa tìm thấy đơn hàng nào khớp với thông tin bạn gửi."
+            f"{f' Số điện thoại mình tra là {matched_phone}.' if matched_phone else ''} "
+            "Bạn gửi giúp mình mã đơn hàng hoặc email đặt hàng nhé."
+        )
+    elif status == "delivered":
+        answer = (
+            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            "Đơn này đã được giao thành công rồi nè.\n"
+            "Nếu bạn muốn, mình có thể xem tiếp phần hỗ trợ đổi trả hoặc bảo hành cho đơn này."
+        )
+    elif status == "shipping":
+        answer = (
+            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            "Đơn hiện đang trong trạng thái vận chuyển.\n"
+            "Mình có thể giúp bạn theo dõi thêm nếu bạn muốn."
+        )
+    elif status == "processing":
+        answer = (
+            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            "Đơn hiện đang được xử lý / đóng gói.\n"
+            "Khi đơn chuyển sang vận chuyển, mình sẽ báo bạn tiếp nha."
+        )
+    elif status == "cancelled":
+        answer = (
+            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            "Đơn này đã được hủy rồi.\n"
+            "Nếu bạn cần mình xem thêm trạng thái hoàn tiền, mình kiểm tra tiếp cho bạn."
+        )
+    else:
+        answer = (
+            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            f"Trạng thái hiện tại của đơn là: {status or 'không rõ'}."
+        )
+
+    if customer_name and customer_name not in answer:
+        answer = f"Chào {customer_name}! " + answer
+
+    stream_callback = state.get("stream_callback")
+    if stream_callback:
+        for chunk in [line for line in answer.split("\n") if line]:
+            await stream_callback(chunk + "\n")
+
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(f"[dim]  OrderStatusWriter: {len(answer)} chars ({elapsed}ms)[/]")
+
+    return {
+        "answer": answer,
+        "reviewer_triggered": False,
+        "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+        "agent_trace": {
+            **(state.get("agent_trace") or {}),
+            "order_status_answer": answer[:500],
+            "order_status_ms": elapsed,
+        },
+    }
+
+
 async def reviewer_node(state: AgentState) -> dict:
     """Node: Empathy quality check."""
     t0 = time.time()
@@ -340,6 +456,10 @@ async def reviewer_node(state: AgentState) -> dict:
 def route_by_intent(state: AgentState) -> str:
     intent = state.get("intent", "")
     session_id = state.get("session_id", "")
+    question = state.get("question", "")
+    history = state.get("history", [])
+    all_text = question + " " + " ".join(m.get("content", "") for m in history[-5:])
+    has_order_clue = bool(extract_order_id(all_text) or extract_phone_number(all_text))
 
     # Multi-turn override: if session has a pending action waiting for order_id,
     # force complaint path so action_executor can resume it
@@ -348,6 +468,10 @@ def route_by_intent(state: AgentState) -> str:
             f"[dim]  Router: session {session_id} has pending action "
             f"'{_session_pending_actions[session_id].get('action')}' — forcing COMPLAINT path[/]"
         )
+        return "complaint"
+
+    if has_order_clue:
+        console.print("[dim]  Router: detected order clue (order id / phone) — forcing COMPLAINT path[/]")
         return "complaint"
 
     if intent == "CASUAL":
@@ -386,6 +510,7 @@ def build_graph() -> StateGraph:
     graph.add_node("rewrite", rewrite_query_node)
     graph.add_node("empathy_writer", empathy_writer_node)
     graph.add_node("inquiry_writer", inquiry_writer_node)
+    graph.add_node("order_status_writer", order_status_writer_node)
     graph.add_node("reviewer", reviewer_node)
 
     # Entry point
@@ -413,6 +538,9 @@ def build_graph() -> StateGraph:
     # instead of forcing retrieval / rerank. This keeps order-status turns fast.
     def route_after_sentiment(state):
         action_intent = state.get("action_intent") or {}
+        order_info = state.get("order_info", {}) or {}
+        if action_intent.get("action") == "check_order_status" and order_info.get("found"):
+            return "status"
         if action_intent.get("needs_order_id") or action_intent.get("needs_more_info"):
             return "direct"
         return "retrieve"
@@ -421,6 +549,7 @@ def build_graph() -> StateGraph:
         "sentiment",
         route_after_sentiment,
         {
+            "status": "order_status_writer",
             "direct": "empathy_writer",
             "retrieve": "retrieve",
         },
@@ -467,6 +596,7 @@ def build_graph() -> StateGraph:
     graph.add_edge("rewrite", "retrieve")
 
     # Writers -> reviewers / END
+    graph.add_edge("order_status_writer", END)
     graph.add_edge("empathy_writer", "reviewer")
     graph.add_edge("reviewer", END)
     graph.add_edge("inquiry_writer", END)

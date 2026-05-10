@@ -1,5 +1,42 @@
 const Order = require("../models/order.model");
 const User = require("../models/user.model");
+const Address = require("../models/address.model");
+
+const normalizePhone = (value) =>
+    String(value || "").replace(/\D/g, "").trim();
+
+const getOrderItemsForOrders = async (orders) => {
+    if (!orders || orders.length === 0) return orders;
+
+    const OrderItem = require('../models/order-item.model');
+    const orderIds = orders.map(o => o._id);
+
+    const allItems = await OrderItem.find({ orderId: { $in: orderIds } })
+        .populate({
+            path: 'productId',
+            select: 'name imageUrls'
+        })
+        .populate({
+            path: 'variantId',
+            select: 'name imageUrls'
+        })
+        .lean();
+
+    const itemsByOrder = {};
+    allItems.forEach(item => {
+        const orderId = item.orderId.toString();
+        if (!itemsByOrder[orderId]) {
+            itemsByOrder[orderId] = [];
+        }
+        itemsByOrder[orderId].push(item);
+    });
+
+    orders.forEach(order => {
+        order.items = itemsByOrder[order._id.toString()] || [];
+    });
+
+    return orders;
+};
 
 module.exports = {
     create(data) {
@@ -8,6 +45,36 @@ module.exports = {
 
     findById(id) {
         return Order.findById(id).lean();
+    },
+
+    async findByPhone(phone) {
+        const normalizedPhone = normalizePhone(phone);
+        if (!normalizedPhone) return [];
+
+        const [users, addresses] = await Promise.all([
+            User.find({ phone: { $regex: normalizedPhone } }).select('_id').lean(),
+            Address.find({ phone: { $regex: normalizedPhone } }).select('_id').lean(),
+        ]);
+
+        const orConditions = [];
+        if (users.length > 0) {
+            orConditions.push({ userId: { $in: users.map(u => u._id) } });
+        }
+        if (addresses.length > 0) {
+            orConditions.push({ addressId: { $in: addresses.map(a => a._id) } });
+        }
+
+        if (orConditions.length === 0) return [];
+
+        const orders = await Order.find({ $or: orConditions })
+            .populate('userId', 'fullName email username phone')
+            .populate('addressId', 'fullNameOfReceiver phone addressLine city postalCode lat lng')
+            .populate('discountCodeId', 'code value')
+            .populate('voucherId', 'code value type')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        return getOrderItemsForOrders(orders);
     },
 
   findByZaloAppTransId(apptransid) {

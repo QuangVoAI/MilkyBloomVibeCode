@@ -140,7 +140,7 @@ def _build_action_context(action_result: dict, action_intent: dict) -> str:
             f"\nKHÁCH YÊU CẦU: {label}.\n"
             f"HỆ THỐNG CÓ THỂ TỰ ĐỘNG THỰC HIỆN ngay bây giờ.\n"
             f"=> Khách CHƯA CUNG CẤP MÃ ĐƠN HÀNG.\n"
-            f"=> Hãy HỎI KHÁCH MÃ ĐƠN HÀNG (ví dụ: MK001) để tiến hành {label}.\n"
+            f"=> Hãy HỎI KHÁCH MÃ ĐƠN HÀNG (ví dụ: MK001) hoặc SỐ ĐIỆN THOẠI ĐẶT HÀNG để tiến hành {label}.\n"
             f"KHÔNG được nói 'không có quyền' hay 'liên hệ hotline' vì hệ thống làm được.\n"
         )
     elif action_result.get("blocked"):

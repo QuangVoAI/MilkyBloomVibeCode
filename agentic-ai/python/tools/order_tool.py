@@ -19,8 +19,10 @@ RETURN_WINDOW_HOURS = 72
 
 try:
     from tools.shop_client import get_order_detail
+    from tools.shop_client import search_orders_by_phone
 except Exception:
     get_order_detail = None
+    search_orders_by_phone = None
 
 
 _orders_cache: dict | None = None
@@ -82,6 +84,36 @@ def extract_order_id(text: str) -> Optional[str]:
             raw = (match.group(1) if match.lastindex and match.lastindex >= 1 else match.group(0))
             order_id = raw.upper().replace("-", "").replace("_", "").strip()
             return order_id
+
+    return None
+
+
+def extract_phone_number(text: str) -> Optional[str]:
+    """
+    Extract a Vietnamese phone number from free-form text.
+
+    Supports:
+      - 0906364541
+      - +84 906 364 541
+      - 84 906 364 541
+    """
+    normalized = re.sub(r"[^\d+]", "", text)
+
+    patterns = [
+        r'(?<!\d)(0\d{9})(?!\d)',
+        r'(?<!\d)(84\d{9})(?!\d)',
+        r'(?<!\d)(\+84\d{9})(?!\d)',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, normalized)
+        if match:
+            raw = match.group(1)
+            digits = re.sub(r"\D", "", raw)
+            if digits.startswith("84") and len(digits) == 11:
+                digits = "0" + digits[2:]
+            if len(digits) == 10 and digits.startswith("0"):
+                return digits
 
     return None
 
@@ -265,6 +297,100 @@ def get_order_info(order_id: str, context: dict | None = None) -> dict:
         )
 
     return result
+
+
+def _normalize_order_detail(order: dict) -> dict:
+    order_id = str(order.get("order_id") or order.get("_id") or "").upper().strip()
+    if not order_id:
+        return {"found": False, "summary": "Không có mã đơn hàng hợp lệ."}
+
+    address_obj = order.get("addressId") or {}
+    address_line = (
+        address_obj.get("addressLine")
+        or address_obj.get("fullAddress")
+        or address_obj.get("formattedAddress")
+        or order.get("address", "")
+        or ""
+    )
+    items = order.get("items", [])
+    items_str = ", ".join(
+        f"{i.get('productId', {}).get('name') or i.get('name') or 'Item'} (x{i.get('quantity', i.get('qty', 1))})"
+        for i in items
+    ) or "Không có item chi tiết"
+    status = (order.get("status") or "unknown").lower()
+    total_raw = order.get("totalAmount") or order.get("total") or 0
+    try:
+        total = int(float(str(total_raw).replace(",", "")))
+    except Exception:
+        total = 0
+
+    summary = (
+        f"Đơn **{order_id}** — {items_str} — {total:,}đ\n"
+        f"Trạng thái: {status}\n"
+        f"Địa chỉ: {address_line}"
+    )
+
+    return {
+        "found": True,
+        "order_id": order_id,
+        "customer_name": order.get("customerName") or order.get("userId", {}).get("fullName") or "",
+        "status": status,
+        "items": items,
+        "total": total,
+        "address": address_line,
+        "note": order.get("note", ""),
+        "raw": order,
+        "summary": summary,
+        "return_eligible": bool(order.get("return_eligible", False)),
+        "delivered_hours_ago": order.get("delivered_hours_ago", 0),
+        "suggested_actions": order.get("suggested_actions", []),
+    }
+
+
+def get_order_info_by_phone(phone: str, context: dict | None = None) -> dict:
+    """
+    Lookup orders by phone number. If one order is found, normalize it as a
+    regular order_info payload. If multiple orders exist, return an ambiguous
+    response so the assistant can ask for an order id.
+    """
+    normalized_phone = re.sub(r"\D", "", str(phone or ""))
+    if not normalized_phone:
+        return {"found": False, "summary": "Số điện thoại không hợp lệ.", "suggested_actions": ["ask_reconfirm_order_id"]}
+
+    ctx = context or {}
+    if search_orders_by_phone:
+        remote = search_orders_by_phone(normalized_phone, ctx)
+        if remote and remote.get("success"):
+            orders = remote.get("data") or []
+            if len(orders) == 1:
+                return _normalize_order_detail(orders[0])
+            if len(orders) > 1:
+                latest = orders[0]
+                order_lines = [
+                    f"- {o.get('order_id', '')}: {o.get('status', 'unknown')}"
+                    for o in orders[:5]
+                ]
+                return {
+                    "found": False,
+                    "ambiguous": True,
+                    "matched_phone": normalized_phone,
+                    "summary": (
+                        f"Mình tìm thấy {len(orders)} đơn gắn với số điện thoại **{normalized_phone}**.\n"
+                        f"Bạn giúp mình chọn đúng mã đơn nhé:\n" + "\n".join(order_lines)
+                    ),
+                    "suggested_actions": ["ask_reconfirm_order_id"],
+                    "latest_order_id": latest.get("order_id", ""),
+                }
+
+    return {
+        "found": False,
+        "matched_phone": normalized_phone,
+        "summary": (
+            f"Mình chưa tìm thấy đơn hàng nào khớp với số điện thoại **{normalized_phone}**.\n"
+            f"Bạn cho mình mã đơn hàng hoặc email đặt hàng nhé."
+        ),
+        "suggested_actions": ["ask_reconfirm_order_id"],
+    }
 
 
 def determine_suggested_actions(order_info: dict, sentiment: str) -> list[str]:

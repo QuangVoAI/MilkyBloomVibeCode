@@ -90,6 +90,14 @@ def get_order_detail(order_id: str, context: dict | None = None) -> dict:
     return {"success": False, "message": "No auth or guest context available"}
 
 
+def search_orders_by_phone(phone: str, context: dict | None = None) -> dict:
+    """
+    Search guest/user orders by phone number against the real shop backend.
+    """
+    ctx = context or {}
+    return _request_json("GET", "/orders/guest/search", ctx, params={"phone": phone})
+
+
 def get_user(user_id: str, context: dict | None = None) -> dict:
     return _request_json("GET", f"/users/{user_id}", context or {})
 

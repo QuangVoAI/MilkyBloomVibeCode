@@ -489,6 +489,11 @@ module.exports = {
         };
     },
 
+    async getOrdersByPhone(phone) {
+        const orders = await orderRepository.findByPhone(phone);
+        return orders;
+    },
+
     // Lấy đơn của user với pagination và filters
     async getOrdersByUser(userId, options = {}) {
         const Order = require('../models/order.model');

@@ -34,6 +34,7 @@ class AgentState(TypedDict, total=False):
 
     # --- Order Tool Output ---
     order_id: str               # Mã đơn hàng extracted từ tin nhắn
+    phone_number: str          # Số điện thoại extracted từ tin nhắn
     order_info: dict            # {found, status, summary, return_eligible, ...}
     suggested_actions: list     # ["create_ticket", "escalate_to_supervisor", ...]
 

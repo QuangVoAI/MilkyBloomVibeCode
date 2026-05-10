@@ -97,6 +97,28 @@ module.exports = {
         }
     },
 
+    async searchGuestOrdersByPhone(req, res) {
+        try {
+            const { phone } = req.query;
+            if (!phone) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'phone is required',
+                });
+            }
+
+            const orders = await orderService.getOrdersByPhone(phone);
+            return res.json({
+                success: true,
+                count: orders.length,
+                data: orders,
+            });
+        } catch (err) {
+            console.error('searchGuestOrdersByPhone error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    },
+
     async getMyOrders(req, res) {
         const { page = 1, limit = 10, status, search, sortBy } = req.query;
         const result = await orderService.getOrdersByUser(req.user.id, {
