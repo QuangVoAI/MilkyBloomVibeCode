@@ -76,6 +76,10 @@ module.exports = {
                 const provider = String(payload.provider || 'agentic').toLowerCase();
                 const effectiveProvider = provider === 'auto' ? 'agentic' : provider;
 
+                console.log(
+                    `[chat_message] session=${sessionId} provider=${provider} effective=${effectiveProvider} message="${message.slice(0, 80)}"`
+                );
+
                 if (!message) {
                     socket.emit('chat_error', {
                         sessionId,
@@ -130,6 +134,7 @@ module.exports = {
                         },
                     });
                 } catch (error) {
+                    console.error(`[chat_message] session=${sessionId} failed:`, error);
                     socket.emit('chat_error', {
                         sessionId,
                         message: error.message || `${effectiveProvider} AI streaming failed`,

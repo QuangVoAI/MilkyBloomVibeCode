@@ -19,6 +19,8 @@ const QUICK_PROMPTS = [
   'Tôi muốn kiểm tra trạng thái đơn hàng',
 ]
 
+const ORDER_STATUS_PROMPT_RE = /(trạng thái đơn hàng|kiểm tra.*đơn hàng|theo dõi.*đơn|đơn hàng.*đến đâu|bao giờ giao|chưa nhận được hàng|tracking đơn|ship chưa|giao chưa)/i
+
 const getProviderLabel = (providerState) => {
   if (!providerState?.provider) return 'Loading...'
 
@@ -93,7 +95,7 @@ const ChatWidget = () => {
   const streamingSessionIdRef = useRef('')
 
   const normalizeProviderChoice = (value) => {
-    if (value === 'agentic' || value === 'remote' || value === 'auto') {
+    if (value === 'agentic' || value === 'auto') {
       return value
     }
     return 'agentic'
@@ -275,22 +277,25 @@ const ChatWidget = () => {
     messagesRef.current.scrollTop = messagesRef.current.scrollHeight
   }, [messages, open])
 
-  const sendViaWebSocket = (trimmed) => {
+  const sendViaWebSocket = (trimmed, options = {}) => {
     const sessionId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     streamingSessionIdRef.current = sessionId
     setChatPhase('streaming')
     assistantIndexRef.current = messages.length + 1
     setMessages((current) => [...current, { role: 'assistant', content: '' }])
+    const provider = normalizeProviderChoice(
+      options.provider || effectiveProvider,
+    )
     socketService.sendChatMessage({
       message: trimmed,
       history: messages.slice(-MAX_HISTORY),
-      provider: effectiveProvider === 'auto' ? 'agentic' : effectiveProvider,
+      provider: provider === 'auto' ? 'agentic' : provider,
       sessionId,
       authToken: localStorage.getItem('authToken') || '',
     })
   }
 
-  const sendMessage = async (text) => {
+  const sendMessage = async (text, options = {}) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return
 
@@ -298,7 +303,7 @@ const ChatWidget = () => {
     setMessages((current) => [...current, userMessage])
     setInput('')
     setLoading(true)
-    sendViaWebSocket(trimmed)
+    sendViaWebSocket(trimmed, options)
   }
 
   const handleSubmit = async (event) => {
@@ -307,7 +312,13 @@ const ChatWidget = () => {
   }
 
   const handleQuickPrompt = async (prompt) => {
-    await sendMessage(prompt)
+    const shouldForceAgentic = ORDER_STATUS_PROMPT_RE.test(prompt)
+    if (shouldForceAgentic) {
+      handleChangeProvider('agentic')
+    }
+    await sendMessage(prompt, {
+      provider: shouldForceAgentic ? 'agentic' : effectiveProvider,
+    })
   }
 
   const handleClear = () => {
