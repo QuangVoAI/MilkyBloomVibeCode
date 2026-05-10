@@ -70,6 +70,7 @@ Script này sẽ:
 - tạo catalog demo trong MongoDB
 - lưu ảnh demo trực tiếp trong Mongo dưới dạng `data:image/svg+xml` hoặc data URL tương thích
 - demo vẫn có ảnh mà không cần file local
+- dùng file nguồn chuẩn ở `backend/data/popmart-products.json`
 
 Nếu bạn đã có dữ liệu cũ trỏ về `/seed-images/...`, chạy thêm migration này một lần:
 

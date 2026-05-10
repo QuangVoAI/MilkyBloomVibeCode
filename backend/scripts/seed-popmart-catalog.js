@@ -8,13 +8,12 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 const Category = require('../src/models/category.model');
 const Product = require('../src/models/product.model');
 const Variant = require('../src/models/variant.model');
-const { storeImages } = require('../src/utils/image-storage');
 
 const SCRAPED_PRODUCTS_PATH = path.resolve(
     __dirname,
-    '../../popmart-scraper/output/products.json',
+    '../data/popmart-products.json',
 );
-const SCRAPER_ROOT = path.resolve(__dirname, '../../popmart-scraper');
+const CATALOG_SOURCE_NOTE = 'backend/data/popmart-products.json';
 
 const CATEGORY_RULES = [
     { name: 'Plush', patterns: [/plush/i, /doll/i, /stuffed/i] },
@@ -49,23 +48,6 @@ function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function getMimeType(filePath) {
-    const ext = path.extname(filePath).toLowerCase();
-    switch (ext) {
-        case '.jpg':
-        case '.jpeg':
-            return 'image/jpeg';
-        case '.png':
-            return 'image/png';
-        case '.webp':
-            return 'image/webp';
-        case '.gif':
-            return 'image/gif';
-        default:
-            return 'application/octet-stream';
-    }
-}
-
 function parsePrice(value) {
     if (value === null || value === undefined) return 0;
     const digits = String(value).replace(/[^\d]/g, '');
@@ -98,16 +80,21 @@ function extractNameFromUrl(url) {
     return '';
 }
 
-function createUploadFile(absolutePath, originalName) {
-    if (!fs.existsSync(absolutePath)) {
-        return null;
-    }
-
-    return {
-        buffer: fs.readFileSync(absolutePath),
-        mimetype: getMimeType(absolutePath),
-        originalname: originalName || path.basename(absolutePath),
-    };
+function createInlineSvgFallback(productSlug, index) {
+    const colors = ['#f97316', '#ec4899', '#8b5cf6', '#0ea5e9', '#10b981'];
+    const color = colors[index % colors.length];
+    const label = normalizeText(productSlug || `Pop Mart ${index + 1}`);
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+            <rect width="1200" height="1200" fill="${color}" />
+            <circle cx="300" cy="280" r="180" fill="rgba(255,255,255,0.18)" />
+            <circle cx="900" cy="920" r="240" fill="rgba(255,255,255,0.14)" />
+            <rect x="120" y="760" width="960" height="180" rx="32" fill="rgba(255,255,255,0.18)" />
+            <text x="80" y="620" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700">${label}</text>
+            <text x="80" y="700" fill="rgba(255,255,255,0.9)" font-family="Arial, Helvetica, sans-serif" font-size="34">Pop Mart catalog fixture</text>
+        </svg>
+    `;
+    return `data:image/svg+xml;base64,${Buffer.from(svg.trim()).toString('base64')}`;
 }
 
 function inferCategoryName(product) {
@@ -132,42 +119,15 @@ function buildDescription(product, title) {
 }
 
 async function getProductImages(product, productSlug) {
-    const sourceImages = Array.isArray(product.localImages)
-        ? product.localImages
-        : [];
-
-    const uploadFiles = [];
-    for (let i = 0; i < sourceImages.length; i += 1) {
-        const relativeSource = sourceImages[i];
-        const absoluteSource = path.resolve(SCRAPER_ROOT, relativeSource);
-        const ext = path.extname(absoluteSource).toLowerCase() || '.jpg';
-        const fileName = `${productSlug}-image-${i + 1}${ext}`;
-        const file = createUploadFile(absoluteSource, fileName);
-        if (file) {
-            uploadFiles.push(file);
-        }
-    }
-
-    if (uploadFiles.length > 0) {
-        try {
-            const uploadedUrls = await storeImages(
-                uploadFiles,
-                `seed/popmart/${productSlug}`,
-            );
-            if (uploadedUrls.length > 0) {
-                return uploadedUrls;
-            }
-        } catch (error) {
-            console.warn(
-                `Image storage failed for ${productSlug}, falling back to source URLs:`,
-                error.message,
-            );
-        }
-    }
-
-    return (Array.isArray(product.images) ? product.images : [])
+    const sourceUrls = (Array.isArray(product.images) ? product.images : [])
         .filter((imageUrl) => imageUrl && !imageUrl.includes('arrow-rect2.png'))
         .slice(0, 8);
+
+    if (sourceUrls.length > 0) {
+        return sourceUrls;
+    }
+
+    return [createInlineSvgFallback(productSlug, 0)];
 }
 
 function buildProductTitle(product, fallbackTitle) {
@@ -265,7 +225,7 @@ async function main() {
     }
 
     console.log(
-        `Loaded ${normalizedProducts.length} unique products from products.json`,
+        `Loaded ${normalizedProducts.length} unique products from ${CATALOG_SOURCE_NOTE}`,
     );
 
     await mongoose.connect(process.env.MONGO_URI);
