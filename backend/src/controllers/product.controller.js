@@ -125,7 +125,7 @@ const deleteProduct = async (req, res, next) => {
     }
 };
 
-/** Thêm ảnh vào product (lưu data URL trong Mongo) */
+/** Thêm ảnh vào product (lưu trong MongoDB GridFS) */
 const addProductImages = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -158,7 +158,7 @@ const removeProductImages = async (req, res, next) => {
     }
 };
 
-/** Upload ảnh trực tiếp vào Mongo dưới dạng data URL (không cần productId) */
+/** Upload ảnh trực tiếp vào MongoDB GridFS (không cần productId) */
 const uploadProductImagesToMongo = async (req, res, next) => {
     try {
         if (!req.files) {

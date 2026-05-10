@@ -70,7 +70,7 @@ app.use('/api', apiCacheMiddleware); // API responses (no cache)
 // NOTE: This app is STATELESS by design for horizontal scaling:
 // - Authentication uses JWT tokens (stateless)
 // - User data stored in MongoDB Atlas (shared)
-// - Images stored as Mongo-backed data URLs
+// - Images stored in MongoDB GridFS with public stream URLs
 // - Sessions only used temporarily during OAuth redirect flow
 // For production with multiple instances, consider:
 // - Using connect-mongo or connect-redis for session store

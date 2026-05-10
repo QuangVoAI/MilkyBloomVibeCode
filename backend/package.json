@@ -4,7 +4,6 @@
     "main": "index.js",
     "dependencies": {
         "@google/generative-ai": "^0.24.1",
-        "aws-sdk": "^2.1692.0",
         "axios": "^1.13.2",
         "balanced-match": "^1.0.2",
         "bcrypt": "^6.0.0",
@@ -58,7 +57,6 @@
         "mongoose": "^8.19.2",
         "morgan": "^1.10.1",
         "multer": "^2.0.2",
-        "multer-s3": "^3.0.1",
         "node-cron": "^4.2.1",
         "nodemailer": "^7.0.10",
         "nodemon": "^3.1.10",

@@ -154,9 +154,6 @@ const escapeXml = (value) =>
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
-const svgToDataUrl = (svgContent) =>
-    `data:image/svg+xml;base64,${Buffer.from(svgContent, 'utf8').toString('base64')}`;
-
 const rotatePalette = (palette) => [palette[1], palette[2], palette[0]];
 
 const getCharacterSpec = (categoryIndex, productIndex, editionIndex = 0) =>
@@ -182,12 +179,12 @@ const storeSvgAsset = async (svgContent, folder, originalname) => {
         }
     } catch (error) {
         console.warn(
-            `Image storage failed for ${originalname}, using inline SVG data URL instead:`,
+            `Image storage failed for ${originalname}, retrying is required:`,
             error.message,
         );
     }
 
-    return svgToDataUrl(svgContent);
+    throw new Error(`Failed to store demo SVG asset: ${originalname}`);
 };
 
 const renderAccent = (accent, color) => {

@@ -106,7 +106,7 @@ const removeVariantImages = async (req, res, next) => {
     }
 };
 
-/** Upload variant images directly into Mongo as data URLs (no variantId needed) */
+/** Upload variant images directly into MongoDB GridFS (no variantId needed) */
 const uploadVariantImagesToMongo = async (req, res, next) => {
     try {
         if (!req.files) {

@@ -45,7 +45,7 @@ const CommentSchema = new mongoose.Schema(
             maxlength: 1000,
         },
 
-        // Image URLs stored in Mongo as data URLs or normal URLs
+        // Image URLs stored in Mongo as GridFS stream URLs or normal URLs
         imageUrls: {
             type: [String],
             default: [],

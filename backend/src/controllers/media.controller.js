@@ -8,6 +8,12 @@ const PRODUCTS_BANNER_PLACEMENT = 'products-banner';
 const buildStreamUrl = (asset) =>
     `${getBackendUrl()}/api/media/videos/${asset.fileId.toString()}/stream`;
 
+const buildImageStreamUrl = (fileId) => {
+    const backendUrl = getBackendUrl();
+    const path = `/api/media/images/${fileId.toString()}/stream`;
+    return backendUrl ? `${backendUrl}${path}` : path;
+};
+
 const getActiveBannerVideo = async (_req, res, next) => {
     try {
         const asset = await MediaAsset.findOne({
@@ -181,8 +187,44 @@ const streamVideo = async (req, res, next) => {
     }
 };
 
+const streamImage = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid image id',
+            });
+        }
+
+        const file = await findFile(id);
+        if (!file) {
+            return res.status(404).json({
+                success: false,
+                message: 'Image not found',
+            });
+        }
+
+        const bucket = getBucket();
+        const contentType = file.contentType || 'image/jpeg';
+
+        res.set({
+            'Content-Type': contentType,
+            'Content-Length': file.length,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Accept-Ranges': 'bytes',
+        });
+
+        return bucket.openDownloadStream(file._id).on('error', next).pipe(res);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getActiveBannerVideo,
+    buildImageStreamUrl,
     streamVideo,
+    streamImage,
     uploadBannerVideo,
 };

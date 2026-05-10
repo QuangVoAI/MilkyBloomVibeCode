@@ -1,6 +1,6 @@
 const multer = require('multer');
 
-// Lưu file vào RAM để chuyển sang data URL và lưu Mongo
+// Lưu file vào RAM để nén/chuẩn hóa rồi đẩy vào MongoDB GridFS
 const storage = multer.memoryStorage();
 
 // Các định dạng ảnh được cho phép

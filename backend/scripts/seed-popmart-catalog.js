@@ -2,12 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const axios = require('axios');
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const Category = require('../src/models/category.model');
 const Product = require('../src/models/product.model');
 const Variant = require('../src/models/variant.model');
+const { storeImages } = require('../src/utils/image-storage');
 
 const SCRAPED_PRODUCTS_PATH = path.resolve(
     __dirname,
@@ -94,7 +96,53 @@ function createInlineSvgFallback(productSlug, index) {
             <text x="80" y="700" fill="rgba(255,255,255,0.9)" font-family="Arial, Helvetica, sans-serif" font-size="34">Pop Mart catalog fixture</text>
         </svg>
     `;
-    return `data:image/svg+xml;base64,${Buffer.from(svg.trim()).toString('base64')}`;
+    return {
+        buffer: Buffer.from(svg.trim(), 'utf8'),
+        mimetype: 'image/svg+xml',
+        originalname: `${productSlug || `pop-mart-${index + 1}`}.svg`,
+    };
+}
+
+function buildFilenameFromUrl(url, fallbackName) {
+    try {
+        const parsed = new URL(url);
+        const base = path.basename(parsed.pathname);
+        if (base && base !== '/' && !base.includes('undefined')) {
+            return base;
+        }
+    } catch (_error) {
+        // ignore malformed urls
+    }
+
+    return fallbackName;
+}
+
+async function downloadImage(url, fallbackName) {
+    try {
+        const response = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 20000,
+            validateStatus: (status) => status >= 200 && status < 300,
+        });
+
+        const mimetype =
+            response.headers['content-type'] ||
+            (url.endsWith('.png')
+                ? 'image/png'
+                : url.endsWith('.webp')
+                  ? 'image/webp'
+                  : url.endsWith('.gif')
+                    ? 'image/gif'
+                    : 'image/jpeg');
+
+        return {
+            buffer: Buffer.from(response.data),
+            mimetype,
+            originalname: buildFilenameFromUrl(url, fallbackName),
+        };
+    } catch (_error) {
+        return null;
+    }
 }
 
 function inferCategoryName(product) {
@@ -123,11 +171,41 @@ async function getProductImages(product, productSlug) {
         .filter((imageUrl) => imageUrl && !imageUrl.includes('arrow-rect2.png'))
         .slice(0, 8);
 
-    if (sourceUrls.length > 0) {
-        return sourceUrls;
+    const downloadedFiles = [];
+    for (let i = 0; i < sourceUrls.length; i += 1) {
+        const url = sourceUrls[i];
+        const file = await downloadImage(
+            url,
+            `${productSlug}-image-${i + 1}.jpg`,
+        );
+        if (file) {
+            downloadedFiles.push(file);
+        }
     }
 
-    return [createInlineSvgFallback(productSlug, 0)];
+    if (downloadedFiles.length > 0) {
+        try {
+            const uploadedUrls = await storeImages(
+                downloadedFiles,
+                `seed/popmart/${productSlug}`,
+            );
+            if (uploadedUrls.length > 0) {
+                return uploadedUrls;
+            }
+        } catch (error) {
+            console.warn(
+                `GridFS upload failed for ${productSlug}, falling back to inline fixture image:`,
+                error.message,
+            );
+        }
+    }
+
+    const fallbackFile = createInlineSvgFallback(productSlug, 0);
+    const [fallbackUrl] = await storeImages(
+        [fallbackFile],
+        `seed/popmart/${productSlug}`,
+    );
+    return fallbackUrl ? [fallbackUrl] : [];
 }
 
 function buildProductTitle(product, fallbackTitle) {

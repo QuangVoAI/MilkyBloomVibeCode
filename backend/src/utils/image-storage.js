@@ -1,9 +1,11 @@
 /**
- * Optimize image before storing it in Mongo as a data URL.
- * - Resize large images when sharp is available
- * - Convert raster images to WebP to keep Mongo payload smaller
- * - Keep SVG / GIF / unsupported inputs untouched
+ * Store images in MongoDB GridFS and return public stream URLs.
+ * This keeps image binaries fully inside Mongo while exposing a stable
+ * backend URL that the frontend can render directly.
  */
+const { uploadBuffer, deleteFile } = require('../libs/gridfs');
+const { getBackendUrl } = require('../config/runtime');
+
 const optimizeImage = async (buffer, mimetype, folder) => {
     if (!mimetype || !mimetype.startsWith('image/')) {
         return { buffer, mimetype: mimetype || 'application/octet-stream' };
@@ -39,27 +41,57 @@ const optimizeImage = async (buffer, mimetype, folder) => {
     }
 };
 
-const bufferToDataUrl = (buffer, mimetype) =>
-    `data:${mimetype};base64,${buffer.toString('base64')}`;
+const buildImageStreamUrl = (fileId) => {
+    const backendUrl = getBackendUrl();
+    const path = `/api/media/images/${fileId.toString()}/stream`;
+    return backendUrl ? `${backendUrl}${path}` : path;
+};
 
 const storeImages = async (files, folder = 'Uncategorized') => {
-    const uploadPromises = files.map(async (file) => {
+    const uploadPromises = files.map(async (file, index) => {
         const { buffer, mimetype } = await optimizeImage(
             file.buffer,
             file.mimetype,
             folder,
         );
-        return bufferToDataUrl(buffer, mimetype);
+        const uploaded = await uploadBuffer({
+            buffer,
+            filename: file.originalname || `${folder}-${index + 1}`,
+            contentType: mimetype,
+            metadata: {
+                folder,
+                originalname: file.originalname || '',
+            },
+        });
+
+        return buildImageStreamUrl(uploaded._id);
     });
 
     return Promise.all(uploadPromises);
 };
 
-const removeImages = async (_urls) => undefined;
+const removeImages = async (urls = []) => {
+    const list = Array.isArray(urls) ? urls : [urls];
+    const tasks = list.map(async (url) => {
+        const match = String(url || '').match(
+            /\/api\/media\/images\/([a-fA-F0-9]{24})\/stream/,
+        );
+        if (!match?.[1]) return null;
+        try {
+            await deleteFile(match[1]);
+            return match[1];
+        } catch (error) {
+            console.warn('[image-storage] Failed to delete image:', error.message);
+            return null;
+        }
+    });
+
+    return Promise.all(tasks);
+};
 
 module.exports = {
     storeImages,
     removeImages,
     optimizeImage,
-    bufferToDataUrl,
+    buildImageStreamUrl,
 };

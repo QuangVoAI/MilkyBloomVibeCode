@@ -5,6 +5,7 @@ const { strictApiLimiter } = require('../middlewares/rateLimit.middleware');
 const { uploadBannerVideoFile } = require('../middlewares/upload.middleware');
 const {
     getActiveBannerVideo,
+    streamImage,
     streamVideo,
     uploadBannerVideo,
 } = require('../controllers/media.controller');
@@ -12,6 +13,7 @@ const {
 const router = express.Router();
 
 router.get('/banner-video', getActiveBannerVideo);
+router.get('/images/:id/stream', streamImage);
 router.get('/videos/:id/stream', streamVideo);
 
 router.use(authMiddleware);

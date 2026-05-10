@@ -1,7 +1,8 @@
 const crypto = require('crypto');
 
 const LOCAL_FRONTEND_URL = 'http://localhost:5173';
-const LOCAL_BACKEND_URL = 'http://localhost:5000';
+const getLocalBackendUrl = () =>
+    `http://localhost:${process.env.PORT || 5000}`;
 
 const normalizeUrl = (value) => {
     if (!value || typeof value !== 'string') return '';
@@ -26,7 +27,7 @@ const getBackendUrl = () =>
         process.env.BACKEND_URL ||
             process.env.BACKEND_BASE_URL ||
             process.env.BASE_URL,
-    ) || (isDevelopment() ? LOCAL_BACKEND_URL : '');
+    ) || (isDevelopment() ? getLocalBackendUrl() : '');
 
 const getApiBaseUrl = () => {
     const backendUrl = getBackendUrl();
@@ -94,7 +95,6 @@ const hasEnvValues = (...keys) =>
     });
 
 module.exports = {
-    LOCAL_BACKEND_URL,
     LOCAL_FRONTEND_URL,
     getAllowedCorsOrigins,
     getApiBaseUrl,
@@ -107,4 +107,5 @@ module.exports = {
     isProduction,
     isProviderEnabled,
     normalizeUrl,
+    getLocalBackendUrl,
 };

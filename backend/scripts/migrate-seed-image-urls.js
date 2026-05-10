@@ -10,6 +10,7 @@ const Product = require('../src/models/product.model');
 const Variant = require('../src/models/variant.model');
 const Review = require('../src/models/review.model');
 const Comment = require('../src/models/comment.model');
+const { storeImages } = require('../src/utils/image-storage');
 
 const LEGACY_SEED_PREFIX = '/seed-images/';
 const FALLBACK_PALETTE = ['#F78FB3', '#FDE2E4', '#C44569'];
@@ -24,10 +25,6 @@ function toAbsoluteLegacyPath(seedUrl) {
         '../../frontend/public',
         seedUrl.replace(LEGACY_SEED_PREFIX, ''),
     );
-}
-
-function toDataUrl(buffer, mimeType) {
-    return `data:${mimeType};base64,${buffer.toString('base64')}`;
 }
 
 function getMimeType(filePath) {
@@ -96,8 +93,22 @@ async function resolveMigratedUrl(seedUrl) {
         ? fs.readFileSync(absolutePath)
         : Buffer.from(buildFallbackSvg(seedUrl), 'utf8');
     const mimeType = hasLocalFile ? getMimeType(absolutePath) : 'image/svg+xml';
+    const [uploadedUrl] = await storeImages(
+        [
+            {
+                buffer,
+                mimetype: mimeType,
+                originalname: path.basename(absolutePath) || 'legacy-seed-asset.svg',
+            },
+        ],
+        'seed/migration',
+    );
 
-    return toDataUrl(buffer, mimeType);
+    if (!uploadedUrl) {
+        throw new Error(`Failed to migrate legacy seed asset: ${seedUrl}`);
+    }
+
+    return uploadedUrl;
 }
 
 async function migrateArrayUrls(urls) {

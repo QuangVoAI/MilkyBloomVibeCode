@@ -68,9 +68,10 @@ npm run seed:catalog
 
 Script này sẽ:
 - tạo catalog demo trong MongoDB
-- lưu ảnh demo trực tiếp trong Mongo dưới dạng `data:image/svg+xml` hoặc data URL tương thích
+- lưu ảnh demo trực tiếp trong MongoDB GridFS, frontend đọc qua URL stream của backend
 - demo vẫn có ảnh mà không cần file local
 - dùng file nguồn chuẩn ở `backend/data/popmart-products.json`
+- với Pop Mart seed, ảnh nguồn được tải vào GridFS rồi phục vụ từ backend, không phụ thuộc CDN ngoài
 
 Nếu bạn đã có dữ liệu cũ trỏ về `/seed-images/...`, chạy thêm migration này một lần:
 
@@ -81,7 +82,7 @@ npm run migrate:seed-images
 
 Script migrate sẽ:
 - quét `categories`, `products`, `variants`, `reviews`, `comments`
-- đổi URL local cũ sang `data:` URL để Mongo-only
+- đổi URL local cũ sang URL stream được phục vụ từ MongoDB GridFS
 
 ### 3. EmpathAI
 
@@ -119,7 +120,7 @@ conda activate deeplearning
 - `MONGO_URI` trỏ tới MongoDB Atlas đã deploy
 - `CHAT_PROVIDER=agentic`
 - `AGENTIC_AI_WS_URL=ws://127.0.0.1:8788`
-- Ảnh sản phẩm, biến thể, category, review, comment, avatar đều được lưu dưới dạng URL/data URL trong Mongo, không cần dịch vụ lưu ảnh ngoài
+- Ảnh sản phẩm, biến thể, category, review, comment, avatar đều được lưu dưới dạng URL stream từ MongoDB GridFS, không cần dịch vụ lưu ảnh ngoài
 
 ### EmpathAI
 
