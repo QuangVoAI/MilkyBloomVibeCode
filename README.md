@@ -1,11 +1,26 @@
 # MilkyBloom x EmpathAI
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="Frontend" />
+  <img src="https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Backend" />
+  <img src="https://img.shields.io/badge/Database-MongoDB%20Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="Database" />
+  <img src="https://img.shields.io/badge/Chat-Streaming%20Only-7C3AED?style=for-the-badge&logo=socket.io&logoColor=white" alt="Chat" />
+  <img src="https://img.shields.io/badge/AI-EmpathAI%20%2B%20Featherless-0F766E?style=for-the-badge" alt="AI" />
+</p>
+
 MilkyBloom x EmpathAI là một nền tảng thương mại điện tử đồ chơi trẻ em tích hợp lớp CSKH agentic thời gian thực.
 
 - **MilkyBloom**: storefront e-commerce, product catalog, cart, checkout, orders, profile
 - **EmpathAI**: agentic customer service, xử lý hội thoại thấu cảm, tra cứu ngữ cảnh, và thực thi action hỗ trợ khách hàng
 
 Mục tiêu của dự án là giữ trải nghiệm mua sắm mượt cho khách hàng, đồng thời để AI hỗ trợ khách hàng theo cách tự nhiên, có ngữ cảnh, và phản hồi realtime.
+
+## Project Highlights
+
+- **Streaming-only chat**: UI chat luôn phản hồi theo thời gian thực, không còn chế độ public trả lời cuối
+- **Mongo-only media**: ảnh demo và ảnh nghiệp vụ được phục vụ qua MongoDB GridFS, không phụ thuộc local assets
+- **Agentic support flow**: EmpathAI có thể hiểu ngữ cảnh, tra cứu, và thực thi hành động hỗ trợ khách hàng
+- **Clone-and-run friendly**: seed catalog, env mẫu, và hướng dẫn chạy đã được chuẩn hóa để dễ triển khai lại
 
 ## Mục Lục
 
