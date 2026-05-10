@@ -24,7 +24,7 @@ export const ENDPOINTS = {
   USERS: '/users',
   AUTH: '/auth',
   ORDERS: '/orders',
-  CART: '/cart',
+  CART: '/carts',
   CATEGORIES: '/categories',
 };
 

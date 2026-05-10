@@ -105,38 +105,14 @@ export const useProfile = () => {
         return false;
       }
 
-      let response;
       try {
-        response = await fetch(`${API_BASE_URL}/users/set-password?id=${user._id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ 
-            password: newPassword, 
-            confirmPassword: newPassword, 
-            currentPassword 
-          }),
+        await usersService.setUserPassword(user._id, {
+          password: newPassword,
+          confirmPassword: newPassword,
+          currentPassword,
         });
-      } catch (fetchErr) {
-        toast.error('Network error. Please try again.');
-        return false;
-      }
-
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseErr) {
-        toast.error('Invalid server response');
-        return false;
-      }
-
-      if (!response.ok || !data.success) {
-        const errorMessage = data.message || 'Failed to change password';
-        // DO NOT setError - that causes Profile to show error page
-        // setError(errorMessage);
-        toast.error(errorMessage);
+      } catch (err) {
+        toast.error(err.message || 'Failed to change password');
         return false;
       }
 
@@ -161,4 +137,3 @@ export const useProfile = () => {
     refetch: refreshUser,
   };
 };
-import { API_BASE_URL } from '@/services/config';

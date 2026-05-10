@@ -159,7 +159,10 @@ const Users = () => {
       // If password was provided, update it separately using setUserPassword endpoint
       if (password) {
         const usersService = await import('@/services/users.service')
-        await usersService.setUserPassword(selectedUser._id, { password, confirmPassword })
+        await usersService.setUserPassword(selectedUser._id, {
+          password,
+          confirmPassword,
+        })
       }
     }
   }

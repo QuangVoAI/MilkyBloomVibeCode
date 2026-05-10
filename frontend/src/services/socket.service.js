@@ -56,9 +56,10 @@ class SocketService {
     }
   }
 
-  connect(userId) {
+  connect(userId, options = {}) {
     // Store userId for rejoining on reconnect
     this.userId = userId;
+    this.authToken = options.token || localStorage.getItem('authToken') || null;
     
     // If already connected, just join the room
     if (this.socket?.connected) {
@@ -80,10 +81,12 @@ class SocketService {
       reconnectionDelay: 1000,
       reconnectionAttempts: 10,
       timeout: 20000,
+      auth: this.authToken ? { token: this.authToken } : undefined,
     });
 
     this.socket.on('connect', () => {
       this.connected = true;
+      this._dispatchEvent('connect', { connected: true });
 
       // Join user room
       if (this.userId) {
@@ -98,9 +101,11 @@ class SocketService {
 
     this.socket.on('disconnect', () => {
       this.connected = false;
+      this._dispatchEvent('disconnect', { connected: false });
     });
 
     this.socket.on('reconnect', () => {
+      this._dispatchEvent('reconnect', { connected: true });
       // Rejoin user room on reconnect
       if (this.userId) {
         this.socket.emit('join_user_room', this.userId);
@@ -112,6 +117,7 @@ class SocketService {
     });
 
     this.socket.on('connect_error', () => {
+      this._dispatchEvent('connect_error', { connected: false });
       // Connection error - socket.io will auto-retry
     });
 
@@ -139,6 +145,22 @@ class SocketService {
 
     this.socket.on('stats_updated', (data) => {
       this._dispatchEvent('stats_updated', data);
+    });
+
+    this.socket.on('chat_status', (data) => {
+      this._dispatchEvent('chat_status', data);
+    });
+
+    this.socket.on('chat_token', (data) => {
+      this._dispatchEvent('chat_token', data);
+    });
+
+    this.socket.on('chat_final', (data) => {
+      this._dispatchEvent('chat_final', data);
+    });
+
+    this.socket.on('chat_error', (data) => {
+      this._dispatchEvent('chat_error', data);
     });
 
     return this.socket;
@@ -189,6 +211,10 @@ class SocketService {
     } else {
       console.warn(`⚠️ [Socket] Cannot emit ${event} - not connected`);
     }
+  }
+
+  sendChatMessage(data) {
+    this.emit('chat_message', data);
   }
 
   // Join a product room for real-time review/comment updates
