@@ -56,8 +56,7 @@ export const prefetchOnHover = (fetchFn, delay = 200) => {
 
 // Initialize API preconnection on app load
 export const initAPIPreconnect = () => {
-  const apiUrl = import.meta.env.VITE_API_URL || 'https://api.milkybloomtoystore.id.vn';
-  const apiDomain = new URL(apiUrl).origin;
+  const apiDomain = new URL(APP_BASE_URL).origin;
   
   // Preconnect to API domain
   preconnectAPI(apiDomain);
@@ -65,3 +64,4 @@ export const initAPIPreconnect = () => {
   // Also prefetch DNS for common CDN/image hosts
   prefetchDNS('https://cdn.jsdelivr.net');
 };
+import { APP_BASE_URL } from '@/services/config'

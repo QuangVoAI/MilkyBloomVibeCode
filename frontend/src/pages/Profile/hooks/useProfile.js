@@ -107,7 +107,7 @@ export const useProfile = () => {
 
       let response;
       try {
-        response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/users/set-password?id=${user._id}`, {
+        response = await fetch(`${API_BASE_URL}/users/set-password?id=${user._id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -161,3 +161,4 @@ export const useProfile = () => {
     refetch: refreshUser,
   };
 };
+import { API_BASE_URL } from '@/services/config';

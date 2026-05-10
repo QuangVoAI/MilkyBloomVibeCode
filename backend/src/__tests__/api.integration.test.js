@@ -5,9 +5,10 @@
 
 const request = require('supertest');
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = process.env.TEST_API_BASE_URL;
+const describeIfApiTarget = BASE_URL ? describe : describe.skip;
 
-describe('Products API Integration', () => {
+describeIfApiTarget('Products API Integration', () => {
   describe('GET /api/products', () => {
     it('should return products list', async () => {
       const response = await request(BASE_URL)
@@ -51,7 +52,7 @@ describe('Products API Integration', () => {
   });
 });
 
-describe('Categories API Integration', () => {
+describeIfApiTarget('Categories API Integration', () => {
   describe('GET /api/categories', () => {
     it('should return categories list', async () => {
       const response = await request(BASE_URL)
@@ -66,7 +67,7 @@ describe('Categories API Integration', () => {
   });
 });
 
-describe('Auth API Integration', () => {
+describeIfApiTarget('Auth API Integration', () => {
   describe('POST /api/auth/login', () => {
     it('should reject invalid credentials', async () => {
       const response = await request(BASE_URL)
@@ -104,7 +105,7 @@ describe('Auth API Integration', () => {
   });
 });
 
-describe('Cart API Integration', () => {
+describeIfApiTarget('Cart API Integration', () => {
   describe('GET /api/carts', () => {
     it('should accept guest session header', async () => {
       const sessionId = `test-session-${Date.now()}`;
@@ -127,7 +128,7 @@ describe('Cart API Integration', () => {
   });
 });
 
-describe('Orders API Integration', () => {
+describeIfApiTarget('Orders API Integration', () => {
   describe('GET /api/orders', () => {
     it('should require authentication', async () => {
       const response = await request(BASE_URL)
@@ -138,7 +139,7 @@ describe('Orders API Integration', () => {
   });
 });
 
-describe('Reviews API Integration', () => {
+describeIfApiTarget('Reviews API Integration', () => {
   describe('GET /api/reviews/product/:id', () => {
     it('should return reviews or 404 for product', async () => {
       const response = await request(BASE_URL)
@@ -150,7 +151,7 @@ describe('Reviews API Integration', () => {
   });
 });
 
-describe('Discount Codes API Integration', () => {
+describeIfApiTarget('Discount Codes API Integration', () => {
   describe('POST /api/discount-codes/validate', () => {
     it('should reject invalid discount code', async () => {
       const response = await request(BASE_URL)
@@ -162,7 +163,7 @@ describe('Discount Codes API Integration', () => {
   });
 });
 
-describe('Health Check', () => {
+describeIfApiTarget('Health Check', () => {
   it('API should be reachable', async () => {
     const response = await request(BASE_URL)
       .get('/api/products?limit=1');

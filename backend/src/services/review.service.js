@@ -8,8 +8,8 @@ const AIService = require('./ai-moderation.service.js');
 const { Types } = require('mongoose');
 const { getIO } = require('../socket');
 
-// Import helper upload S3
-const { uploadToS3, deleteFromS3 } = require('../utils/s3.helper.js');
+// Import image storage helper
+const { storeImages, removeImages } = require('../utils/image-storage.js');
 
 // --- Internal Utility Function ---
 const _generateVariantName = (attributes) => {
@@ -183,15 +183,15 @@ const updateReview = async ({
         );
     }
 
-    // 4. Xóa ảnh cũ trên S3
+    // 4. Xóa ảnh cũ nếu có
     if (imagesToDelete.length > 0) {
-        await deleteFromS3(imagesToDelete);
+        await removeImages(imagesToDelete);
     }
 
-    // 5. Upload ảnh mới lên S3
+    // 5. Upload ảnh mới
     let newUploadedUrls = [];
     if (imgFiles && imgFiles.length > 0) {
-        newUploadedUrls = await uploadToS3(imgFiles, 'reviewImages');
+        newUploadedUrls = await storeImages(imgFiles, 'reviewImages');
     }
 
     // 6. Gộp ảnh
@@ -228,9 +228,9 @@ const deleteReview = async ({ userId, reviewId, isAdmin }) => {
 
     const productId = review.productId;
 
-    // 1. Xóa ảnh trên S3 trước (nếu có)
+    // 1. Xóa ảnh trước (nếu có)
     if (review.imageUrls && review.imageUrls.length > 0) {
-        await deleteFromS3(review.imageUrls);
+        await removeImages(review.imageUrls);
     }
 
     // 2. Xóa trong DB
@@ -363,4 +363,3 @@ module.exports = {
     checkReviewEligibility,
     getReviewStats,
 };
-

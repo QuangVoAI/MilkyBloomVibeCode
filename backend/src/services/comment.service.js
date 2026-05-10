@@ -2,7 +2,7 @@ const commentRepo = require('../repositories/comment.repository');
 const Comment = require('../models/comment.model');
 const AIService = require('./ai-moderation.service');
 const { getIO } = require('../socket');
-const { uploadToS3 } = require('../utils/s3.helper');
+const { storeImages } = require('../utils/image-storage');
 
 /**
  * Create a new comment
@@ -22,12 +22,12 @@ const createComment = async ({
         throw new Error('Product ID and content are required');
     }
 
-    // Upload images to S3 if any
+    // Upload images if any
     let imageUrls = [];
     if (imgFiles && imgFiles.length > 0) {
         const maxImages = 3;
         const filesToUpload = imgFiles.slice(0, maxImages);
-        imageUrls = await uploadToS3(filesToUpload, 'comments');
+        imageUrls = await storeImages(filesToUpload, 'comments');
     }
 
     // AI moderation

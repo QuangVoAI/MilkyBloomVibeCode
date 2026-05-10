@@ -1,9 +1,7 @@
 import { io } from 'socket.io-client';
+import { APP_BASE_URL } from './config';
 
-// Socket.io connects to the base URL, not /api
-const API_URL = import.meta.env.VITE_API_URL || 'https://api.milkybloomtoystore.id.vn/api';
-// Remove trailing /api to get base URL
-const SOCKET_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+const SOCKET_URL = APP_BASE_URL;
 
 // BroadcastChannel for cross-tab communication (same browser, instant)
 const CART_CHANNEL_NAME = 'cart_updates';

@@ -45,7 +45,7 @@ const CommentSchema = new mongoose.Schema(
             maxlength: 1000,
         },
 
-        // Image URLs (uploaded to S3)
+        // Image URLs stored in Mongo as data URLs or normal URLs
         imageUrls: {
             type: [String],
             default: [],

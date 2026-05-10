@@ -1,6 +1,7 @@
 const passportFacebook = require("passport");
 const FacebookStrategy = require("passport-facebook").Strategy;
 const User = require("../models/user.model");
+const { getDefaultAvatar } = require('../utils/defaultAvatar.js');
 
 module.exports = function setupFacebookPassport() {
     passportFacebook.use(
@@ -19,8 +20,12 @@ module.exports = function setupFacebookPassport() {
             async (accessToken, refreshToken, profile, done) => {
                 try {
                     const socialId = profile.id;
-                    const email =
+                    const emailFromProfile =
                         profile.emails?.[0]?.value?.toLowerCase() || null;
+                    // Facebook may not return an email for some accounts.
+                    // Our User schema requires email, so generate a stable fallback.
+                    const email =
+                        emailFromProfile || `facebook_${socialId}@facebook.local`;
                     const fullName = profile.displayName || 'Facebook User';
 
                     // Trích xuất ảnh và kiểm tra có phải ảnh mặc định không
@@ -33,7 +38,7 @@ module.exports = function setupFacebookPassport() {
                         !isSilhouette && facebookAvatar
                             ? facebookAvatar
                             : process.env.DEFAULT_AVATAR_URL ||
-                              'https://toy-store-project-of-springwang.s3.ap-southeast-2.amazonaws.com/defaults/unknownAvatar.png';
+                              getDefaultAvatar(socialId);
 
                     // Kiểm tra user
                     let user = await User.findOne({

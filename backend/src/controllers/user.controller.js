@@ -1,6 +1,6 @@
 const userService = require('../services/user.service.js');
 const userRepository = require('../repositories/user.repository.js');
-const { uploadToS3 } = require('../utils/s3.helper.js');
+const { storeImages } = require('../utils/image-storage.js');
 
 // GET USERS (GỘP PARAM)
 const getAllUsers = async (req, res, next) => {
@@ -116,7 +116,10 @@ const setUserPassword = async (req, res, next) => {
             });
         }
 
-        if (!currentPassword) {
+        const isSelfChange = req.user.id === id;
+        const isAdminReset = req.user.role === 'admin' && !isSelfChange;
+
+        if (!currentPassword && !isAdminReset) {
             return res.status(400).json({
                 success: false,
                 message: 'Current password is required',
@@ -221,7 +224,7 @@ const uploadAvatar = async (req, res, next) => {
             });
         }
 
-        const [url] = await uploadToS3([req.file], 'avatarImages');
+        const [url] = await storeImages([req.file], 'avatarImages');
         const updated = await userRepository.update(id, { avatar: url });
 
         res.json({
@@ -253,7 +256,7 @@ const updateAvatar = async (req, res, next) => {
             });
         }
 
-        const [url] = await uploadToS3([req.file], 'avatars');
+        const [url] = await storeImages([req.file], 'avatars');
         const updatedUser = await userRepository.update(id, { avatar: url });
 
         res.json({

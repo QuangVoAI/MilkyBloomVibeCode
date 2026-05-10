@@ -2,7 +2,7 @@ const axios = require("axios");
 const orderRepository = require("../repositories/order.repository");
 const paymentRepository = require("../repositories/payment.repository");
 const {
-  createMomoPayment,
+  createMomoPayment: createMomoPaymentService,
   createZaloPayOrderService,
   verifyZaloPayCallback,
   handleZaloCallback,
@@ -13,6 +13,7 @@ const {
     createMomoSignatureForCreatePayment,
     createMomoSignatureForIpn,
 } = require('../utils/momo.helper');
+const { getFrontendUrl, hasEnvValues } = require('../config/runtime.js');
 
 function isExpired(order) {
     const now = Date.now(); // timestamp VN hay UTC đều giống nhau
@@ -374,69 +375,12 @@ exports.payByCash = async (req, res) => {
 //momo
 exports.createMomoPayment = async (req, res) => {
     try {
-        const orderIdParam = req.params.orderId;
-        const order = await orderRepository.findById(orderIdParam);
-
-        if (!order) throw new Error('Order not found');
-
-        // TẠM THỜI: ép amount đúng số mà MoMo đang báo trong lỗi
-        const amount = 210000;
-
-        const partnerCode = MOMO_CONFIG.partnerCode;
-        const accessKey = MOMO_CONFIG.accessKey;
-        const redirectUrl = MOMO_CONFIG.redirectUrl;
-        const ipnUrl = MOMO_CONFIG.ipnUrl;
-
-        // TẠM THỜI: ép requestId bằng đúng cái trong message lỗi
-        const requestId = '1763538270486';
-
-        // TẠM THỜI: ép orderId giống trong message lỗi
-        const orderId = '691bcfc87e543228bd3bc06e';
-
-        const requestType = 'payWithMethod';
-        const extraData = '';
-
-        const orderInfo = `Thanh toan don hang ${orderId}`
-            .normalize('NFKD')
-            .replace(/[\u0300-\u036f]/g, '');
-
-        // HARD-CODE RAW SIGNATURE VÀ SIGNATURE
-        const rawSignature =
-            'accessKey=8BLEw6zEZ0Svdvx5' +
-            '&amount=210000' +
-            '&extraData=' +
-            '&ipnUrl=https://milkybloomtoystore.id.vn/api/payments/momo/ipn' +
-            '&orderId=691bcfc87e543228bd3bc06e' +
-            '&orderInfo=Thanh toan don hang 691bcfc87e543228bd3bc06e' +
-            '&partnerCode=MOMOGEXT20251119_TEST' +
-            '&redirectUrl=https://milkybloomtoystore.id.vn/api/payments/momo/return' +
-            '&requestId=1763538270486' +
-            '&requestType=payWithMethod';
-
-        const signature =
-            'efc0e887b15b27b39746decb1538a6f04e330f549ac5afbe454ef5894ea39cc1';
-
-        const payload = {
-            partnerCode,
-            accessKey,
-            requestId,
-            amount,
-            orderId,
-            orderInfo,
-            redirectUrl,
-            ipnUrl,
-            requestType,
-            extraData,
-            lang: 'vi',
-            signature,
-        };
-
-        const response = await axios.post(MOMO_CONFIG.endpoint, payload);
+        const response = await createMomoPaymentService(req.params.orderId);
 
         return res.json({
             success: true,
-            orderId,
-            momo: response.data,
+            orderId: response.orderId,
+            momo: response,
         });
     } catch (err) {
         console.error('MoMo ERROR:', err.response?.data || err.message);
@@ -662,7 +606,7 @@ exports.paymentSuccess = async (req, res) => {
     }
 
     // Redirect to payment page with order ID so user sees payment result
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = getFrontendUrl();
     const redirectUrl = new URL(`${frontendUrl}/payment/${oid || 'unknown'}`);
     redirectUrl.searchParams.set("status", code === 1 ? "1" : "-1");
     if (amount) redirectUrl.searchParams.set("amount", amount);

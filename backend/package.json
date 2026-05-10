@@ -119,8 +119,11 @@
         "test:coverage": "jest --coverage",
         "test:unit": "jest --testPathPattern=__tests__/.*\\.test\\.js$",
         "test:integration": "jest --testPathPattern=integration",
+        "seed:catalog": "node scripts/seed-demo-catalog.js",
+        "seed:popmart": "node scripts/seed-popmart-catalog.js",
+        "migrate:seed-images": "node scripts/migrate-seed-image-urls.js",
         "start": "node src/server.js",
-        "dev": "nodemon src/server.js"
+        "dev": "nodemon --watch src --watch scripts --watch .env --ignore package-lock.json src/server.js"
     },
     "author": "",
     "license": "ISC",
