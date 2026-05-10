@@ -54,7 +54,7 @@ flowchart LR
     B -->|Realtime response| F
 
     B --> M[(MongoDB Atlas\nGridFS + Collections)]
-    A --> L[Featherless\nOpenAI-compatible LLM]
+    A --> L[Groq / Featherless\nOpenAI-compatible LLM]
 
     style F fill:#f97316,color:#fff
     style B fill:#2563eb,color:#fff
@@ -69,7 +69,7 @@ flowchart LR
 - **Backend** là trung tâm điều phối, xử lý dữ liệu sản phẩm, đơn hàng, auth, ảnh, và bridge qua EmpathAI
 - **EmpathAI** là lớp CSKH agentic, gồm router, retrieval, action execution, reviewer, và writer
 - **MongoDB Atlas** lưu toàn bộ dữ liệu nghiệp vụ và ảnh demo qua GridFS
-- **Featherless** cung cấp LLM backend cho EmpathAI
+- **Groq** và **Featherless** là hai backend LLM OpenAI-compatible cho EmpathAI
 
 ## Luồng Hoạt Động Chi Tiết
 
@@ -206,7 +206,7 @@ agentic-ai/
 | Backend | Node.js, Express, MongoDB, GridFS | API, auth, data, media |
 | Chat Streaming | WebSocket | Stream token realtime |
 | Agentic AI | Python, LangGraph | Router, retrieval, action, writer |
-| LLM Backend | Featherless | Sinh phản hồi cho EmpathAI |
+| LLM Backend | Groq / Featherless | Sinh phản hồi cho EmpathAI |
 
 ## Chạy Dự Án
 
@@ -280,9 +280,11 @@ python ws_server.py
 
 ### EmpathAI
 
+- `EMPATHY_MODE=groq` hoặc `EMPATHY_MODE=featherless`
+- `GROQ_API_KEY`
+- `GROQ_BASE_URL=https://api.groq.com/openai/v1`
 - `FEATHERLESS_API_KEY`
 - `FEATHERLESS_BASE_URL=https://api.featherless.ai/v1`
-- `EMPATHY_MODE=featherless`
 
 ## Tài Liệu Liên Quan
 

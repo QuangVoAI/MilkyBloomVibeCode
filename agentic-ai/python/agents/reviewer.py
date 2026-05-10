@@ -3,14 +3,15 @@ Reviewer Agent — Response Quality Checker.
 Kiểm tra phản hồi bằng fast checks (không LLM):
 1. Banned phrases (văn mẫu cấm / thái độ tệ với khách)
 2. Câu trả lời bị lặp lại
-Chỉ rewrite khi phát hiện vấn đề thực sự; phần rewrite đi qua adapter Featherless.
+Chỉ rewrite khi phát hiện vấn đề thực sự; phần rewrite đi qua Groq hoặc Featherless tùy cấu hình.
 """
 import re
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from agents.llm_client import groq_complete, GROQ_MODEL_FAST
+from agents.llm_client import groq_complete, featherless_complete, GROQ_MODEL_FAST, FEATHERLESS_MODEL_FAST
+from config import EMPATHY_MODE
 from utils.console import console
 
 # Banned phrases: tuple (pattern, is_regex)
@@ -106,18 +107,35 @@ async def review_with_retry(question, answer, evidence, sentiment="", action_con
         )
 
         try:
-            current_answer = await groq_complete(
-                prompt=retry_prompt,
-                system_prompt=(
-                    "Bạn là EmpathAI - trợ lý CSKH MyKingdom. "
-                    "Viết phản hồi thấu cảm, tự nhiên, ngắn gọn. Dùng 'bạn/mình'."
-                ),
-                model=GROQ_MODEL_FAST,
-                max_tokens=400,
-                temperature=0.7,
-            )
+            if EMPATHY_MODE == "featherless":
+                current_answer = await featherless_complete(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "Bạn là EmpathAI - trợ lý CSKH MyKingdom. "
+                                "Viết phản hồi thấu cảm, tự nhiên, ngắn gọn. Dùng 'bạn/mình'."
+                            ),
+                        },
+                        {"role": "user", "content": retry_prompt},
+                    ],
+                    model=FEATHERLESS_MODEL_FAST,
+                    max_tokens=400,
+                    temperature=0.7,
+                )
+            else:
+                current_answer = await groq_complete(
+                    prompt=retry_prompt,
+                    system_prompt=(
+                        "Bạn là EmpathAI - trợ lý CSKH MyKingdom. "
+                        "Viết phản hồi thấu cảm, tự nhiên, ngắn gọn. Dùng 'bạn/mình'."
+                    ),
+                    model=GROQ_MODEL_FAST,
+                    max_tokens=400,
+                    temperature=0.7,
+                )
         except Exception as e:
-            console.print(f"[red]  Reviewer rewrite error via Featherless adapter: {e}[/]")
+            console.print(f"[red]  Reviewer rewrite error via LLM backend: {e}[/]")
             break
         retry_count += 1
 

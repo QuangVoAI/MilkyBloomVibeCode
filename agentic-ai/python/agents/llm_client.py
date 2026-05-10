@@ -1,9 +1,9 @@
 """
-Featherless LLM Client — OpenAI-compatible wrapper cho non-stream + streaming.
+LLM client for EmpathAI.
 
-Giữ nguyên tên hàm legacy (`groq_*`, `vertex_custom_complete`) để không phải
-đụng vào phần agentic pipeline, nhưng toàn bộ sinh text được chuyển sang
-Featherless API.
+- Groq is the real production provider for the legacy `groq_*` entrypoints.
+- Featherless stays available as a first-class OpenAI-compatible backend.
+- Vertex helpers remain for compatibility with older branches.
 """
 import asyncio
 import aiohttp
@@ -15,6 +15,13 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from config import (
+    GROQ_API_KEY,
+    GROQ_BASE_URL,
+    GROQ_MODEL,
+    GROQ_MODEL_FAST,
+    GROQ_MODEL_SMART,
+    GROQ_HTTP_REFERER,
+    GROQ_X_TITLE,
     FEATHERLESS_API_KEY,
     FEATHERLESS_BASE_URL,
     FEATHERLESS_MODEL,
@@ -40,14 +47,12 @@ except ImportError:
 
 
 # ─── Constants ───────────────────────────────────────────
+GROQ_CHAT_API_URL = GROQ_BASE_URL.rstrip("/") + "/chat/completions"
 FEATHERLESS_CHAT_API_URL = FEATHERLESS_BASE_URL.rstrip("/") + "/chat/completions"
-
-# Backward-compatible aliases used by the rest of the agentic codebase.
-GROQ_MODEL_SMART = FEATHERLESS_MODEL_SMART or FEATHERLESS_MODEL
-GROQ_MODEL_FAST = FEATHERLESS_MODEL_FAST or FEATHERLESS_MODEL
 
 # Token limits
 FEATHERLESS_MAX_INPUT_TOKENS = 12000
+GROQ_MAX_INPUT_TOKENS = 12000
 
 # Tokenizer
 try:
@@ -104,19 +109,19 @@ def _truncate_messages(
     }
     return truncated
 
-def _build_featherless_headers() -> dict:
+def _build_openai_headers(api_key: str, referer: str = "", title: str = "") -> dict:
     headers = {
-        "Authorization": f"Bearer {FEATHERLESS_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    if FEATHERLESS_HTTP_REFERER:
-        headers["HTTP-Referer"] = FEATHERLESS_HTTP_REFERER
-    if FEATHERLESS_X_TITLE:
-        headers["X-Title"] = FEATHERLESS_X_TITLE
+    if referer:
+        headers["HTTP-Referer"] = referer
+    if title:
+        headers["X-Title"] = title
     return headers
 
 
-def _build_featherless_payload(
+def _build_openai_payload(
     messages: list[dict],
     model: str,
     max_tokens: int,
@@ -134,23 +139,30 @@ def _build_featherless_payload(
     return payload
 
 
-async def _featherless_chat_complete(
+async def _openai_chat_complete(
+    *,
     messages: list[dict],
-    model: str = GROQ_MODEL_SMART,
+    model: str,
+    api_key: str,
+    base_url: str,
+    referer: str = "",
+    title: str = "",
     max_tokens: int = 4096,
     temperature: float = 0.1,
+    provider_name: str = "provider",
+    max_input_tokens: int = 12000,
 ) -> str:
-    if not FEATHERLESS_API_KEY:
+    if not api_key:
         raise RuntimeError(
-            "FEATHERLESS_API_KEY is not configured. "
-            "Set it in agentic-ai/.env or export it before running."
+            f"{provider_name.upper()}_API_KEY is not configured. "
+            f"Set it in agentic-ai/.env or export it before running."
         )
 
-    if model == GROQ_MODEL_FAST:
-        messages = _truncate_messages(messages)
+    if model == GROQ_MODEL_FAST or model == FEATHERLESS_MODEL_FAST:
+        messages = _truncate_messages(messages, max_input_tokens)
         max_tokens = min(max_tokens, 1500)
 
-    payload = _build_featherless_payload(
+    payload = _build_openai_payload(
         messages=messages,
         model=model,
         max_tokens=max_tokens,
@@ -160,15 +172,15 @@ async def _featherless_chat_complete(
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            FEATHERLESS_CHAT_API_URL,
+            base_url.rstrip("/") + "/chat/completions",
             json=payload,
-            headers=_build_featherless_headers(),
+            headers=_build_openai_headers(api_key, referer=referer, title=title),
             timeout=aiohttp.ClientTimeout(total=120),
         ) as resp:
             if resp.status != 200:
                 error_text = await resp.text()
                 raise RuntimeError(
-                    f"Featherless API error ({resp.status}): {error_text[:500]}"
+                    f"{provider_name.title()} API error ({resp.status}): {error_text[:500]}"
                 )
 
             result = await resp.json()
@@ -178,23 +190,30 @@ async def _featherless_chat_complete(
             return ""
 
 
-async def _featherless_stream_complete(
+async def _openai_stream_complete(
+    *,
     messages: list[dict],
-    model: str = GROQ_MODEL_SMART,
+    model: str,
+    api_key: str,
+    base_url: str,
+    referer: str = "",
+    title: str = "",
     max_tokens: int = 4096,
     temperature: float = 0.1,
+    provider_name: str = "provider",
+    max_input_tokens: int = 12000,
 ) -> AsyncGenerator[str, None]:
-    if not FEATHERLESS_API_KEY:
+    if not api_key:
         raise RuntimeError(
-            "FEATHERLESS_API_KEY is not configured. "
-            "Set it in agentic-ai/.env or export it before running."
+            f"{provider_name.upper()}_API_KEY is not configured. "
+            f"Set it in agentic-ai/.env or export it before running."
         )
 
-    if model == GROQ_MODEL_FAST:
-        messages = _truncate_messages(messages)
+    if model == GROQ_MODEL_FAST or model == FEATHERLESS_MODEL_FAST:
+        messages = _truncate_messages(messages, max_input_tokens)
         max_tokens = min(max_tokens, 1500)
 
-    payload = _build_featherless_payload(
+    payload = _build_openai_payload(
         messages=messages,
         model=model,
         max_tokens=max_tokens,
@@ -204,15 +223,15 @@ async def _featherless_stream_complete(
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            FEATHERLESS_CHAT_API_URL,
+            base_url.rstrip("/") + "/chat/completions",
             json=payload,
-            headers=_build_featherless_headers(),
+            headers=_build_openai_headers(api_key, referer=referer, title=title),
             timeout=aiohttp.ClientTimeout(total=90),
         ) as resp:
             if resp.status != 200:
                 error_text = await resp.text()
                 raise RuntimeError(
-                    f"Featherless stream error ({resp.status}): {error_text[:500]}"
+                    f"{provider_name.title()} stream error ({resp.status}): {error_text[:500]}"
                 )
 
             async for raw_line in resp.content:
@@ -322,9 +341,9 @@ async def vertex_custom_complete(
     Legacy compatibility wrapper.
     Kept for older call sites, but now routes to Featherless.
     """
-    return await _featherless_chat_complete(
+    return await featherless_complete(
         messages=messages,
-        model=GROQ_MODEL_SMART,
+        model=FEATHERLESS_MODEL_SMART,
         max_tokens=max_tokens,
         temperature=temperature,
     )
@@ -364,7 +383,7 @@ async def groq_complete(
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> str:
-    """Featherless completion (non-streaming), giữ tên legacy cho compat."""
+    """Groq completion (non-streaming), giữ tên legacy cho compat."""
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -386,11 +405,38 @@ async def groq_chat_complete(
     temperature: float = 0.1,
 ) -> str:
     """Featherless completion with the legacy chat-complete name."""
-    return await _featherless_chat_complete(
+    return await _openai_chat_complete(
         messages=messages,
         model=model,
+        api_key=GROQ_API_KEY,
+        base_url=GROQ_BASE_URL,
+        referer=GROQ_HTTP_REFERER,
+        title=GROQ_X_TITLE,
         max_tokens=max_tokens,
         temperature=temperature,
+        provider_name="groq",
+        max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+    )
+
+
+async def featherless_complete(
+    messages: list[dict],
+    model: str = FEATHERLESS_MODEL_SMART,
+    max_tokens: int = 4096,
+    temperature: float = 0.1,
+) -> str:
+    """Featherless completion (non-streaming)."""
+    return await _openai_chat_complete(
+        messages=messages,
+        model=model,
+        api_key=FEATHERLESS_API_KEY,
+        base_url=FEATHERLESS_BASE_URL,
+        referer=FEATHERLESS_HTTP_REFERER,
+        title=FEATHERLESS_X_TITLE,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        provider_name="featherless",
+        max_input_tokens=FEATHERLESS_MAX_INPUT_TOKENS,
     )
 
 
@@ -403,7 +449,7 @@ async def groq_stream_complete(
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> AsyncGenerator[str, None]:
-    """Featherless streaming completion — yield từng token chunk."""
+    """Groq streaming completion — yield từng token chunk."""
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -425,11 +471,39 @@ async def groq_stream_chat_complete(
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> AsyncGenerator[str, None]:
-    """Streaming chat completion via Featherless SSE, giữ tên legacy."""
-    async for token in _featherless_stream_complete(
+    """Groq streaming chat completion via OpenAI-compatible SSE."""
+    async for token in _openai_stream_complete(
         messages=messages,
         model=model,
+        api_key=GROQ_API_KEY,
+        base_url=GROQ_BASE_URL,
+        referer=GROQ_HTTP_REFERER,
+        title=GROQ_X_TITLE,
         max_tokens=max_tokens,
         temperature=temperature,
+        provider_name="groq",
+        max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+    ):
+        yield token
+
+
+async def featherless_stream_complete(
+    messages: list[dict],
+    model: str = FEATHERLESS_MODEL_SMART,
+    max_tokens: int = 4096,
+    temperature: float = 0.1,
+) -> AsyncGenerator[str, None]:
+    """Streaming chat completion via Featherless SSE."""
+    async for token in _openai_stream_complete(
+        messages=messages,
+        model=model,
+        api_key=FEATHERLESS_API_KEY,
+        base_url=FEATHERLESS_BASE_URL,
+        referer=FEATHERLESS_HTTP_REFERER,
+        title=FEATHERLESS_X_TITLE,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        provider_name="featherless",
+        max_input_tokens=FEATHERLESS_MAX_INPUT_TOKENS,
     ):
         yield token

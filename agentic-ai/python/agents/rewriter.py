@@ -1,6 +1,6 @@
 """
 Rewriter Agent — Viết lại query khi policy search không đủ.
-Phần sinh text đi qua Featherless adapter, giữ nguyên pipeline agentic.
+Phần sinh text có thể đi qua Groq hoặc Featherless tùy EMPATHY_MODE.
 """
 import time
 import sys
@@ -8,7 +8,13 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from agents.state import AgentState
-from agents.llm_client import groq_complete, vertex_custom_complete, GROQ_MODEL_FAST
+from agents.llm_client import (
+    groq_complete,
+    featherless_complete,
+    vertex_custom_complete,
+    GROQ_MODEL_FAST,
+    FEATHERLESS_MODEL_FAST,
+)
 from config import EMPATHY_MODE
 from utils.console import console
 
@@ -67,7 +73,7 @@ async def rewrite_query_node(state: AgentState) -> dict:
                 temperature=0.3,
             )
         except Exception as e:
-            print(f"Legacy rewrite error: {e}, falling back to Featherless adapter")
+            print(f"Legacy rewrite error: {e}, falling back to primary LLM backend")
             rewritten = await groq_complete(
                 prompt=prompt,
                 system_prompt=REWRITE_SYSTEM_PROMPT,
@@ -75,6 +81,13 @@ async def rewrite_query_node(state: AgentState) -> dict:
                 max_tokens=128,
                 temperature=0.3,
             )
+    elif EMPATHY_MODE == "featherless":
+        rewritten = await featherless_complete(
+            messages=messages,
+            model=FEATHERLESS_MODEL_FAST,
+            max_tokens=128,
+            temperature=0.3,
+        )
     else:
         rewritten = await groq_complete(
             prompt=prompt,

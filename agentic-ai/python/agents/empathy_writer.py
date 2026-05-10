@@ -11,8 +11,10 @@ from typing import AsyncGenerator, Callable, Awaitable, Optional
 
 from agents.llm_client import (
     groq_complete, groq_stream_complete,
+    featherless_complete, featherless_stream_complete,
     vertex_custom_complete,
     GROQ_MODEL_FAST,
+    FEATHERLESS_MODEL_FAST,
 )
 from config import EMPATHY_MODE
 
@@ -261,15 +263,23 @@ async def generate_empathy_response(question, evidence_text, sentiment="", score
                 temperature=0.7,
             ))
         except Exception as e:
-            print(f"Legacy mode error: {e}, falling back to Featherless adapter")
+            print(f"Legacy mode error: {e}, falling back to primary LLM backend")
 
-    return await groq_complete(
+    if EMPATHY_MODE == "featherless":
+        return _deduplicate_response(await featherless_complete(
+            messages=messages,
+            model=FEATHERLESS_MODEL_FAST,
+            max_tokens=512,
+            temperature=0.7,
+        ))
+
+    return _deduplicate_response(await groq_complete(
         prompt=prompt,
         system_prompt=EMPATHY_SYSTEM_PROMPT,
         model=GROQ_MODEL_FAST,
         max_tokens=512,
         temperature=0.7,
-    )
+    ))
 
 
 async def generate_empathy_streaming(
@@ -309,13 +319,14 @@ async def generate_empathy_streaming(
                     await stream_callback(token)
             return full_answer
         except Exception as e:
-            print(f"Legacy streaming error: {e}, falling back to Featherless adapter")
+            print(f"Legacy streaming error: {e}, falling back to primary LLM backend")
 
-    # Featherless streaming path via the legacy groq_stream_complete wrapper.
-    async for token in groq_stream_complete(
+    stream_fn = featherless_stream_complete if EMPATHY_MODE == "featherless" else groq_stream_complete
+
+    async for token in stream_fn(
         prompt=prompt,
         system_prompt=EMPATHY_SYSTEM_PROMPT,
-        model=GROQ_MODEL_FAST,
+        model=FEATHERLESS_MODEL_FAST if EMPATHY_MODE == "featherless" else GROQ_MODEL_FAST,
         max_tokens=350,
         temperature=0.7,
     ):
@@ -347,8 +358,19 @@ async def generate_casual(question):
                 temperature=0.7,
             )
         except Exception as e:
-            print(f"Legacy mode error: {e}, falling back to Featherless adapter")
+            print(f"Legacy mode error: {e}, falling back to primary LLM backend")
     
+    if EMPATHY_MODE == "featherless":
+        return await featherless_complete(
+            messages=[
+                {"role": "system", "content": CASUAL_SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+            ],
+            model=FEATHERLESS_MODEL_FAST,
+            max_tokens=256,
+            temperature=0.7,
+        )
+
     return await groq_complete(
         prompt=question,
         system_prompt=CASUAL_SYSTEM_PROMPT,
@@ -380,8 +402,19 @@ async def generate_inquiry(question, evidence_text, order_info=None):
                 temperature=0.3,
             )
         except Exception as e:
-            print(f"Legacy mode error: {e}, falling back to Featherless adapter")
+            print(f"Legacy mode error: {e}, falling back to primary LLM backend")
     
+    if EMPATHY_MODE == "featherless":
+        return await featherless_complete(
+            messages=[
+                {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            model=FEATHERLESS_MODEL_FAST,
+            max_tokens=512,
+            temperature=0.3,
+        )
+
     return await groq_complete(
         prompt=prompt,
         system_prompt=INQUIRY_SYSTEM_PROMPT,

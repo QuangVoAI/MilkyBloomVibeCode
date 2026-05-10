@@ -28,6 +28,15 @@ if HF_TOKEN:
         pass
 
 # --- API Keys ---
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEYS = [k.strip() for k in os.getenv("GROQ_API_KEYS", GROQ_API_KEY).split(",") if k.strip()]
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL_FAST = os.getenv("GROQ_MODEL_FAST", GROQ_MODEL)
+GROQ_MODEL_SMART = os.getenv("GROQ_MODEL_SMART", GROQ_MODEL)
+GROQ_HTTP_REFERER = os.getenv("GROQ_HTTP_REFERER", "")
+GROQ_X_TITLE = os.getenv("GROQ_X_TITLE", "")
+
 FEATHERLESS_API_KEY = os.getenv("FEATHERLESS_API_KEY", "")
 FEATHERLESS_BASE_URL = os.getenv(
     "FEATHERLESS_BASE_URL",
@@ -39,9 +48,6 @@ FEATHERLESS_MODEL_SMART = os.getenv("FEATHERLESS_MODEL_SMART", FEATHERLESS_MODEL
 FEATHERLESS_HTTP_REFERER = os.getenv("FEATHERLESS_HTTP_REFERER", "")
 FEATHERLESS_X_TITLE = os.getenv("FEATHERLESS_X_TITLE", "")
 
-# Legacy compatibility keys kept for older imports / configs.
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_API_KEYS = [k.strip() for k in os.getenv("GROQ_API_KEYS", GROQ_API_KEY).split(",") if k.strip()]
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 VERTEX_PROJECT_ID = os.getenv("VERTEX_PROJECT_ID", "empathai-494308")

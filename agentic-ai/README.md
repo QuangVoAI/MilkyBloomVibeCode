@@ -211,8 +211,10 @@ cd python && pip install -r requirements.txt
 
 ```env
 # LLM Backend
-EMPATHY_MODE=groq               # "groq" hoặc "vertex"
+EMPATHY_MODE=groq               # "groq", "featherless" hoặc "vertex"
 GROQ_API_KEY=your-groq-key
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+FEATHERLESS_API_KEY=your-featherless-key
 
 # Vertex AI (nếu dùng fine-tuned model)
 VERTEX_PROJECT_ID=your-project-id
@@ -255,7 +257,7 @@ cd python
 # Test order tool (không cần API key)
 python test_agent.py l1
 
-# Test full pipeline (cần GROQ_API_KEY)
+# Test full pipeline (cần GROQ_API_KEY hoặc FEATHERLESS_API_KEY tùy mode)
 python test_agent.py l2
 ```
 
