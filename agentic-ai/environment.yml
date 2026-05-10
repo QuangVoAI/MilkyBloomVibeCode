@@ -1,0 +1,39 @@
+name: deeplearning
+
+channels:
+  - pytorch
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - pip
+  - ca-certificates
+  - certifi
+  - openssl
+  - pip:
+      - --extra-index-url
+      - https://download.pytorch.org/whl/cpu
+      - torch>=2.1.0
+      - torchvision>=0.16.0
+      - torchaudio>=2.1.0
+      - sentence-transformers>=2.7.0
+      - qdrant-client>=1.8.0
+      - confluent-kafka>=2.3.0
+      - aiohttp>=3.9.0
+      - tiktoken>=0.6.0
+      - tenacity>=8.2.3
+      - pymupdf>=1.23.0
+      - pandas>=2.2.0
+      - scikit-learn>=1.4.0
+      - tqdm>=4.66.0
+      - langgraph>=0.2.0
+      - langchain-core>=0.2.0
+      - langfuse>=2.0.0
+      - rich>=13.7.0
+      - python-dotenv>=1.0.0
+      - websockets>=12.0.0
+      - upstash-redis>=1.0.0
+      - datasets>=2.18.0
+      - huggingface_hub>=0.22.0
+      - google-cloud-aiplatform>=1.50.0
+      - google-auth>=2.28.0
