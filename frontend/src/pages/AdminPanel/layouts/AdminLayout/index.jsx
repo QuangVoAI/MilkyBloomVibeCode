@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SearchBar, LoadingSpinner } from '@/components/common';
+import ChatWidget from '@/components/ChatWidget';
 
 /**
  * Reusable Admin Panel Layout with sticky header behavior
@@ -72,6 +73,7 @@ const AdminLayout = ({
           )}
         </div>
       </div>
+      <ChatWidget />
     </div>
   );
 };

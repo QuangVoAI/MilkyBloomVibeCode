@@ -3,12 +3,13 @@ const router = express.Router();
 const orderController = require("../controllers/order.controller");
 const auth = require("../middlewares/auth.middleware");
 const adminOnly = require("../middlewares/admin.middleware");
+const { strictApiLimiter } = require('../middlewares/rateLimit.middleware');
 
 // User tạo đơn
-router.post('/', orderController.create);
+router.post('/', strictApiLimiter, orderController.create);
 
 // Admin thay đổi trạng thái đơn
-router.put('/:id/status', auth, adminOnly, orderController.updateStatus);
+router.put('/:id/status', strictApiLimiter, auth, adminOnly, orderController.updateStatus);
 
 // Admin lấy orders theo discount code
 router.get("/discount/:discountCodeId", auth, adminOnly, orderController.getOrdersByDiscountCode);
@@ -26,12 +27,12 @@ router.get("/:id", auth, orderController.getDetail);
 router.get("/", auth, orderController.getMyOrders);
 
 // User hủy đơn của mình
-router.put("/:id/cancel", auth, orderController.cancelOrder);
+router.put("/:id/cancel", strictApiLimiter, auth, orderController.cancelOrder);
 
 // Checkout cart: User
-router.post("/checkout/cart", auth, orderController.checkoutFromCartForUser); //tạo đơn
+router.post("/checkout/cart", strictApiLimiter, auth, orderController.checkoutFromCartForUser); //tạo đơn
 
 // Checkout cart: Guest
-router.post("/checkout/cart/guest", orderController.checkoutFromCartForGuest); //tạo đơn
+router.post("/checkout/cart/guest", strictApiLimiter, orderController.checkoutFromCartForGuest); //tạo đơn
 
 module.exports = router;

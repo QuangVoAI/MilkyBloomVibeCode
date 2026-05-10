@@ -4,6 +4,7 @@ import { Minus, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/utils/formatPrice';
 import { parsePrice } from '@/utils/priceUtils';
+import { normalizeImageUrl } from '@/utils/imageOptimizer';
 import './CartItem.css';
 
 const CartItem = ({ item, onUpdateQuantity, onRemove }) => {
@@ -21,7 +22,9 @@ const CartItem = ({ item, onUpdateQuantity, onRemove }) => {
   
   // Priority: variant images > product images > placeholder
   // Variants may have specific images (e.g., different colors)
-  const imageUrl = variant?.imageUrls?.[0] || product?.imageUrls?.[0] || '/placeholder.png';
+  const imageUrl = normalizeImageUrl(
+    variant?.imageUrls?.[0] || product?.imageUrls?.[0],
+  );
   
   const stock = variant?.stockQuantity || product?.stockQuantity || 999;
   const total = price * item.quantity;

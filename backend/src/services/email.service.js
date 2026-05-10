@@ -1,6 +1,7 @@
 const { sendMail } = require('../libs/mailer.js');
+const { getFrontendUrl } = require('../config/runtime.js');
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://milkybloomtoystore.id.vn';
+const FRONTEND_URL = getFrontendUrl();
 
 /**
  * Format price to VND

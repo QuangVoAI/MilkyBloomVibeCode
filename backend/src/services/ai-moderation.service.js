@@ -1,10 +1,21 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { hasEnvValues, isProviderEnabled } = require('../config/runtime.js');
 
-// Khởi tạo Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const geminiEnabled = isProviderEnabled('GEMINI_ENABLED', true);
+const geminiConfigured = hasEnvValues('GEMINI_API_KEY');
 
 const analyzeReviewContent = async (text) => {
     try {
+        if (!geminiEnabled || !geminiConfigured) {
+            return {
+                isSafe: false,
+                toxicScore: 0,
+                flaggedCategories: ['moderation_unavailable'],
+                autoApprove: false,
+            };
+        }
+
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         // Sử dụng model flash cho tốc độ nhanh
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 

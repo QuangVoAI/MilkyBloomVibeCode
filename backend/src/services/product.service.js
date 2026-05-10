@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const productRepository = require('../repositories/product.repository.js');
 const variantRepository = require('../repositories/variant.repository.js');
-const { uploadToS3, deleteFromS3 } = require('../utils/s3.helper.js');
+const { storeImages, removeImages } = require('../utils/image-storage.js');
 const { default: slugify } = require('slugify');
 const { searchProducts } = require('./atlas.search.service.js');
 
@@ -236,7 +236,7 @@ const createProduct = async (productData, imgFiles) => {
             imageUrls = productData.imageUrls;
         } else if (imgFiles && imgFiles.length > 0) {
             // Upload từ server (legacy support)
-            imageUrls = await uploadToS3(imgFiles, 'productImages');
+            imageUrls = await storeImages(imgFiles, 'productImages');
         }
 
         // 4. Parse dữ liệu Variants
@@ -379,7 +379,7 @@ const createProduct = async (productData, imgFiles) => {
         // 9. Rollback (Hủy tất cả thao tác DB)
         await session.abortTransaction();
 
-        // Nếu đã lỡ upload ảnh lên S3 thì xóa đi (dọn rác)
+        // Nếu có ảnh cũ thì xóa đi (dọn rác)
         // (Bạn cần implement logic lấy array url vừa upload để xóa tại đây)
 
         throw error;
@@ -393,7 +393,7 @@ const deleteProduct = async (id) => {
     if (!product) throw new Error('Product not found');
 
     if (product.imageUrls?.length) {
-        await deleteFromS3(product.imageUrls);
+        await removeImages(product.imageUrls);
     }
 
     // Delete all variants (deleteMany doesn't trigger middleware per document)
@@ -417,12 +417,12 @@ const updateProduct = async (id, updateData, retryCount = 0) => {
     const session = await mongoose.startSession();
     
     try {
-        // 1. Delete images from S3 if specified
+        // 1. Delete images if specified
         if (updateData.deletedImageUrls && Array.isArray(updateData.deletedImageUrls) && updateData.deletedImageUrls.length > 0) {
             try {
-                await deleteFromS3(updateData.deletedImageUrls);
+                await removeImages(updateData.deletedImageUrls);
             } catch (err) {
-                console.error('❌ S3 deletion failed:', err.message);
+                console.error('❌ Image deletion failed:', err.message);
             }
         }
         
@@ -581,10 +581,10 @@ const updateProduct = async (id, updateData, retryCount = 0) => {
 };
 
 /**
- * Thêm ảnh mới vào product (upload lên S3)
+ * Thêm ảnh mới vào product
  */
 const addImagesToProduct = async (id, files) => {
-    const uploadedUrls = await uploadToS3(files, 'productImages');
+    const uploadedUrls = await storeImages(files, 'productImages');
 
     const updated = await productRepository.update(id, {
         $push: { imageUrls: { $each: uploadedUrls } },
@@ -595,10 +595,10 @@ const addImagesToProduct = async (id, files) => {
 };
 
 /**
- * Xóa ảnh khỏi product (xóa cả trên S3)
+ * Xóa ảnh khỏi product
  */
 const removeImagesFromProduct = async (id, urlsToRemove) => {
-    await deleteFromS3(urlsToRemove);
+    await removeImages(urlsToRemove);
 
     const updated = await productRepository.update(id, {
         $pull: { imageUrls: { $in: urlsToRemove } },

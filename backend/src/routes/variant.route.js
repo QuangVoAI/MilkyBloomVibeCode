@@ -7,12 +7,12 @@ const {
     deleteVariant,
     addVariantImages,
     removeVariantImages,
-    uploadVariantImagesToS3,
+    uploadVariantImagesToMongo,
 } = require('../controllers/variant.controller');
 const { uploadVariantImages } = require('../middlewares/upload.middleware');
 
-// Upload variant images lên S3 mà không cần truyền variant ID 
-router.post('/images/upload', uploadVariantImages, uploadVariantImagesToS3);
+// Upload variant images vào Mongo mà không cần truyền variant ID
+router.post('/images/upload', uploadVariantImages, uploadVariantImagesToMongo);
 
 // CRUD cơ bản
 router.get('/:id', getVariantById);

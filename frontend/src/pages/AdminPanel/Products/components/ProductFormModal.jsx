@@ -131,7 +131,7 @@ const ProductFormModal = ({ product, isOpen, onClose, onSave, mode = 'create' })
   const removeImage = (index) => {
     const imageUrl = formData.imageUrls[index];
     
-    // Track deleted image URL for S3 cleanup
+    // Track deleted image URL for backend cleanup
     if (imageUrl && mode === 'edit') {
       setDeletedImageUrls(prev => [...prev, imageUrl]);
     }
@@ -144,7 +144,7 @@ const ProductFormModal = ({ product, isOpen, onClose, onSave, mode = 'create' })
 
   // File upload handlers
   const addPendingFiles = async (files) => {
-    // Upload immediately to S3
+    // Upload immediately to backend storage
     setUploading(true);
     try {
       const formDataUpload = new FormData();
@@ -152,7 +152,7 @@ const ProductFormModal = ({ product, isOpen, onClose, onSave, mode = 'create' })
         formDataUpload.append('productImages', file);
       });
       
-      const result = await productsService.uploadImagesToS3(formDataUpload);
+      const result = await productsService.uploadImages(formDataUpload);
       
       // Add URLs to imageUrls
       if (result.imageUrls && result.imageUrls.length > 0) {
@@ -304,13 +304,13 @@ const ProductFormModal = ({ product, isOpen, onClose, onSave, mode = 'create' })
     }
     
     if (imageData.file) {
-      // Upload file to S3 immediately
+      // Upload file immediately to backend storage
       setUploading(true);
       try {
         const formDataUpload = new FormData();
         formDataUpload.append('variantImages', imageData.file);
         
-        const result = await productsService.uploadVariantImagesToS3(formDataUpload);
+        const result = await productsService.uploadVariantImages(formDataUpload);
         
         if (result.imageUrls && result.imageUrls.length > 0) {
           const uploadedUrl = result.imageUrls[0];
@@ -327,7 +327,7 @@ const ProductFormModal = ({ product, isOpen, onClose, onSave, mode = 'create' })
               };
             }),
           }));
-          toast.success('Variant image uploaded to S3');
+          toast.success('Variant image uploaded successfully');
         }
       } catch (error) {
         console.error('Failed to upload variant image:', error);

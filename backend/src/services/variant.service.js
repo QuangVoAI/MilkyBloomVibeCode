@@ -1,6 +1,6 @@
 const variantRepository = require('../repositories/variant.repository');
 const productRepository = require('../repositories/product.repository');
-const { uploadToS3, deleteFromS3 } = require('../utils/s3.helper');
+const { storeImages, removeImages } = require('../utils/image-storage');
 
 const updateProductPriceRange = async (productId) => {
     const variants = await variantRepository.findByProductId(productId);
@@ -69,7 +69,7 @@ const createVariant = async (productId, variantData, imgFiles) => {
 
     let imageUrls = [];
     if (imgFiles && imgFiles.length > 0) {
-        imageUrls = await uploadToS3(imgFiles, 'variantImages');
+        imageUrls = await storeImages(imgFiles, 'variantImages');
     }
 
     const newVariant = {
@@ -103,7 +103,7 @@ const deleteVariant = async (id) => {
     if (!variant) throw new Error('Variant not found');
 
     if (variant.imageUrls?.length) {
-        await deleteFromS3(variant.imageUrls);
+        await removeImages(variant.imageUrls);
     }
 
     await variantRepository.deleteById(id);
@@ -118,7 +118,7 @@ const deleteVariant = async (id) => {
 };
 
 const addVariantImages = async (id, files) => {
-    const uploadedUrls = await uploadToS3(files, 'variantImages');
+    const uploadedUrls = await storeImages(files, 'variantImages');
 
     const updated = await variantRepository.update(id, {
         $push: { imageUrls: { $each: uploadedUrls } },
@@ -129,7 +129,7 @@ const addVariantImages = async (id, files) => {
 };
 
 const removeVariantImages = async (id, urlsToRemove) => {
-    await deleteFromS3(urlsToRemove);
+    await removeImages(urlsToRemove);
 
     const updated = await variantRepository.update(id, {
         $pull: { imageUrls: { $in: urlsToRemove } },

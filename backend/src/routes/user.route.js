@@ -4,6 +4,7 @@ const adminOnly = require('../middlewares/admin.middleware.js');
 const {
     uploadAvatar: uploadAvatarMiddleware,
 } = require('../middlewares/upload.middleware.js');
+const { strictApiLimiter } = require('../middlewares/rateLimit.middleware.js');
 
 const {
     getAllUsers,
@@ -41,25 +42,26 @@ router.get("/", adminOnly, getAllUsers);
 router.get("/:userId", auth, getUserById);
 
 // Admin tạo user
-router.post("/", adminOnly, createUser);
+router.post("/", strictApiLimiter, adminOnly, createUser);
 
 // Admin update user
-router.put("/", adminOnly, updateUser);
+router.put("/", strictApiLimiter, adminOnly, updateUser);
 
 // Admin delete user
-router.delete("/", adminOnly, deleteUser);
+router.delete("/", strictApiLimiter, adminOnly, deleteUser);
 
 // ============ USER ROUTES ============
 
 // Verify user
-router.patch("/verify", verifyUser);
+router.patch("/verify", strictApiLimiter, verifyUser);
 
 // Set password
-router.patch("/set-password", setUserPassword);
+router.patch("/set-password", strictApiLimiter, setUserPassword);
 
 // Upload avatar
 router.post(
     "/avatar",
+    strictApiLimiter,
     uploadAvatarMiddleware,
     uploadAvatarController,
 );
@@ -67,6 +69,7 @@ router.post(
 // Update avatar
 router.patch(
     "/avatar",
+    strictApiLimiter,
     uploadAvatarMiddleware,
     updateAvatarController,
 );

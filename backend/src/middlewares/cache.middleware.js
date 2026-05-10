@@ -19,30 +19,28 @@ const CACHE_DURATIONS = {
 };
 
 /**
- * S3 Image Cache Middleware
- * Add cache headers for S3 images proxied through backend
- * Images have UUID in filename so they're immutable
+ * Image Cache Middleware
+ * Add cache headers for image URLs served by the app
  */
-const s3ImageCacheMiddleware = (req, res, next) => {
+const imageCacheMiddleware = (req, res, next) => {
   if (req.method !== 'GET') {
     return next();
   }
 
   const url = req.url.toLowerCase();
-  
-  // Check if URL is S3 image (productImages, categoryImages, etc.)
-  const isS3Image = url.includes('/productimages/') || 
-                    url.includes('/categoryimages/') ||
-                    url.includes('/userimages/');
-  
-  if (isS3Image) {
-    // Images with UUID are immutable - cache forever
-    res.setHeader('Cache-Control', `public, max-age=${CACHE_DURATIONS.IMMUTABLE}, immutable`);
+
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg'];
+  const isImage = imageExtensions.some((ext) => url.includes(ext));
+
+  if (isImage) {
+    res.setHeader(
+      'Cache-Control',
+      `public, max-age=${CACHE_DURATIONS.STATIC}, immutable`,
+    );
     res.setHeader('Vary', 'Accept-Encoding');
-    // Add other performance headers
     res.setHeader('X-Content-Type-Options', 'nosniff');
   }
-  
+
   next();
 };
 
@@ -104,7 +102,7 @@ const etagMiddleware = (req, res, next) => {
 
 module.exports = {
   staticCacheMiddleware,
-  s3ImageCacheMiddleware,
+  imageCacheMiddleware,
   apiCacheMiddleware,
   compressionHintsMiddleware,
   etagMiddleware,

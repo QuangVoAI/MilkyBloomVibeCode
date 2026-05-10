@@ -44,6 +44,20 @@ function createMomoSignatureForCreatePayment({
     return { rawSignature, signature };
 }
 
+function buildRawSignature(params) {
+    return createMomoSignatureForCreatePayment({
+        ...params,
+        secretKey: '',
+    }).rawSignature;
+}
+
+function generateSignature(rawSignature, secretKey) {
+    return crypto
+        .createHmac("sha256", secretKey)
+        .update(rawSignature, "utf8")
+        .digest("hex");
+}
+
 // IPN: ở dev mình có thể bỏ verify, nhưng vẫn chuẩn bị hàm sẵn
 function createMomoSignatureForIpn(params, secretKey) {
     const {
@@ -99,6 +113,8 @@ function createMomoSignatureForIpn(params, secretKey) {
 }
 
 module.exports = {
+    buildRawSignature,
     createMomoSignatureForCreatePayment,
     createMomoSignatureForIpn,
+    generateSignature,
 };

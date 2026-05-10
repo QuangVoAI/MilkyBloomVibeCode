@@ -4,13 +4,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import './Contact.css'
 
+const buildAvatarDataUrl = (label, background = '#f472b6', foreground = '#ffffff') => {
+  const safeLabel = String(label || '').trim().slice(0, 2).toUpperCase() || 'MB';
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="${safeLabel}">
+      <defs>
+        <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="${background}" />
+          <stop offset="100%" stop-color="#fb7185" />
+        </linearGradient>
+      </defs>
+      <rect width="240" height="240" rx="120" fill="url(#g)" />
+      <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" font-family="Inter, Arial, sans-serif" font-size="86" font-weight="700" fill="${foreground}">
+        ${safeLabel}
+      </text>
+    </svg>
+  `;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
+
 const CONTRIBUTORS = [
   {
     name: 'Võ Xuân Quang',
-    role: 'Backend + Amazon Web Services',
+    role: 'Backend + Infrastructure',
     github: 'QuangVoAI',
     email: 'vxq123@icloud.com',
-    avatar: 'https://toy-store-project-of-springwang.s3.ap-southeast-2.amazonaws.com/contact/IMG_0253.jpeg',
+    avatar: buildAvatarDataUrl('VQ'),
     bio: 'Develops backend services and manages AWS infrastructure.'
   },
   {
@@ -18,7 +37,7 @@ const CONTRIBUTORS = [
     role: 'zzz',
     github: 'cuchim123123',
     email: 'randomemail123@email.ok',
-    avatar: 'https://ui-avatars.com/api/?name=N+G+B&background=random&size=240',
+    avatar: buildAvatarDataUrl('NB', '#60a5fa'),
     bio: '... '
   }
 ]

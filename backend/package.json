@@ -4,7 +4,6 @@
     "main": "index.js",
     "dependencies": {
         "@google/generative-ai": "^0.24.1",
-        "aws-sdk": "^2.1692.0",
         "axios": "^1.13.2",
         "balanced-match": "^1.0.2",
         "bcrypt": "^6.0.0",
@@ -58,7 +57,6 @@
         "mongoose": "^8.19.2",
         "morgan": "^1.10.1",
         "multer": "^2.0.2",
-        "multer-s3": "^3.0.1",
         "node-cron": "^4.2.1",
         "nodemailer": "^7.0.10",
         "nodemon": "^3.1.10",
@@ -119,8 +117,11 @@
         "test:coverage": "jest --coverage",
         "test:unit": "jest --testPathPattern=__tests__/.*\\.test\\.js$",
         "test:integration": "jest --testPathPattern=integration",
+        "seed:catalog": "node scripts/seed-demo-catalog.js",
+        "seed:popmart": "node scripts/seed-popmart-catalog.js",
+        "migrate:seed-images": "node scripts/migrate-seed-image-urls.js",
         "start": "node src/server.js",
-        "dev": "nodemon src/server.js"
+        "dev": "nodemon --watch src --watch scripts --watch .env --ignore package-lock.json src/server.js"
     },
     "author": "",
     "license": "ISC",

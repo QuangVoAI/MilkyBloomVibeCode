@@ -10,15 +10,16 @@ const express = require('express');
 const compression = require('compression');
 const http = require('http');
 const session = require('express-session');
-const connectDB = require('./config/db.js');
-const passportGoogle = require('./config/passportGoogle.js');
-const socket = require('./socket/index');
-const { 
+const passport = require('passport');
+const {
+  getAllowedCorsOrigins,
+  getSessionSecret,
+} = require('./config/runtime.js');
+const {
   apiCacheMiddleware, 
   staticCacheMiddleware,
-  s3ImageCacheMiddleware 
+  imageCacheMiddleware 
 } = require('./middlewares/cache.middleware.js');
-const { apiLimiter } = require('./middlewares/rateLimit.middleware.js');
 
 const app = express(); // Tạo app
 
@@ -44,16 +45,14 @@ app.use(compression({
 }));
 
 
+const allowedOrigins = getAllowedCorsOrigins();
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    process.env.FRONTEND_URL,
-    'https://www.milkybloomtoystore.id.vn',
-    'https://milkybloomtoystore.id.vn',
-    'https://d1qc4bz6yrxl8k.cloudfront.net',
-    'https://api.milkybloomtoystore.id.vn',
-  ],
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS origin not allowed: ${origin}`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Session-Id'],
@@ -62,11 +61,8 @@ app.use(cors({
 
 // Cache headers for better PageSpeed scores
 app.use(staticCacheMiddleware); // Static files (.jpg, .png, .woff, etc.)
-app.use(s3ImageCacheMiddleware); // S3 images proxied through backend
+app.use(imageCacheMiddleware); // Image responses cached by extension
 app.use('/api', apiCacheMiddleware); // API responses (no cache)
-
-// Rate limiting for API endpoints (100 req/min per IP)
-app.use('/api', apiLimiter);
 
 // ============================================
 // SESSION CONFIGURATION (For OAuth flow only)
@@ -74,14 +70,14 @@ app.use('/api', apiLimiter);
 // NOTE: This app is STATELESS by design for horizontal scaling:
 // - Authentication uses JWT tokens (stateless)
 // - User data stored in MongoDB Atlas (shared)
-// - Images stored in Cloudinary/S3 (shared)
+// - Images stored in MongoDB GridFS with public stream URLs
 // - Sessions only used temporarily during OAuth redirect flow
 // For production with multiple instances, consider:
 // - Using connect-mongo or connect-redis for session store
 // - Or keep session: false in passport (already done)
 app.use(
     session({
-        secret: process.env.SESSION_SECRET || 'milkybloom_secret',
+        secret: getSessionSecret(),
         resave: false,
         saveUninitialized: false,
         cookie: {
@@ -92,8 +88,8 @@ app.use(
 );
 
 //thêm passportFacebook
-app.use(passportGoogle.initialize());
-app.use(passportGoogle.session());
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Body parsers - skip for multipart/form-data (let multer handle it)
 app.use((req, res, next) => {
@@ -124,58 +120,7 @@ app.get('/verify-email', (req, res) => {
     res.redirect(302, `/api/auth/verify-email?${qs}`);
 });
 
-// Import routes
-// Cần bao nhiêu routes thì import bấy nhiêu
-const productRoutes = require('./routes/product.route.js');
-const variantRoutes = require('./routes/variant.route.js');
-const userRoutes = require('./routes/user.route.js');
-const authRoutes = require('./routes/auth.route.js');
-const addressRoutes = require('./routes/address.route.js');
-const shippingRoutes = require('./routes/shipping.route.js');
-const paymentRoutes = require('./routes/payment.route.js');
-const cartRoutes = require('./routes/cart.route.js');
-const categoryRoutes = require('./routes/category.route.js');
-const orderRoutes = require('./routes/order.route.js');
-const reviewRoutes = require('./routes/review.route.js');
-const commentRoutes = require('./routes/comment.route.js');
-const loyaltyRoutes = require('./routes/loyalty.route.js');
-const discountRoutes = require('./routes/discount-code.routes.js');
-const monthlyJob = require('./utils/montly-loyalty.js');
-const voucherRoutes = require('./routes/voucher.route.js');
-const badgeRoutes = require("./routes/badge.route.js");
-const dashboardRoutes = require('./routes/dashboard.routes.js');
-const chatRoutes = require("./routes/chat.route.js");
-
-const errorHandler = require('./middlewares/error.middleware');
-
-require('./utils/event.cron.js');
-monthlyJob();
-
-// Gán các routes vào đường dẫn
-app.use(passportGoogle.initialize());
-app.use('/api/products', productRoutes);
-app.use('/api/variants', variantRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/addresses', addressRoutes);
-app.use('/api/shipping', shippingRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/carts', cartRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/comments', commentRoutes);
-app.use('/api/loyalty', loyaltyRoutes);
-app.use('/api/discount', discountRoutes);
-app.use('/api/vouchers', voucherRoutes);
-app.use("/api/badges", badgeRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use("/api/chat", chatRoutes);
-
 const server = http.createServer(app);
-socket.init(server);
-
-app.use(errorHandler);
 
 // Health check endpoint for load balancer
 app.get('/health', (req, res) => {
@@ -189,7 +134,7 @@ app.get('/health', (req, res) => {
 
 app.get('/', (req, res) => {
     res.status(200).json({
-        message: 'MilkyBloom backend is running on AWS 🚀',
+        message: 'MilkyBloom backend is running 🚀',
         instance: INSTANCE_ID,
         scalingReady: true,
     });
@@ -215,17 +160,90 @@ app.get('/delete-data', (req, res) => {
     );
 });
 
+const registerRoutes = () => {
+    // Import routes only after the server is already listening.
+    const productRoutes = require('./routes/product.route.js');
+    const variantRoutes = require('./routes/variant.route.js');
+    const userRoutes = require('./routes/user.route.js');
+    const authRoutes = require('./routes/auth.route.js');
+    const addressRoutes = require('./routes/address.route.js');
+    const shippingRoutes = require('./routes/shipping.route.js');
+    const paymentRoutes = require('./routes/payment.route.js');
+    const cartRoutes = require('./routes/cart.route.js');
+    const categoryRoutes = require('./routes/category.route.js');
+    const orderRoutes = require('./routes/order.route.js');
+    const reviewRoutes = require('./routes/review.route.js');
+    const commentRoutes = require('./routes/comment.route.js');
+    const loyaltyRoutes = require('./routes/loyalty.route.js');
+    const discountRoutes = require('./routes/discount-code.routes.js');
+    const voucherRoutes = require('./routes/voucher.route.js');
+    const badgeRoutes = require("./routes/badge.route.js");
+    const dashboardRoutes = require('./routes/dashboard.routes.js');
+    const chatRoutes = require("./routes/chat.route.js");
+    const mediaRoutes = require('./routes/media.route.js');
+    const errorHandler = require('./middlewares/error.middleware');
+
+    app.use('/api/products', productRoutes);
+    app.use('/api/variants', variantRoutes);
+    app.use('/api/users', userRoutes);
+    app.use('/api/auth', authRoutes);
+    app.use('/api/addresses', addressRoutes);
+    app.use('/api/shipping', shippingRoutes);
+    app.use('/api/payments', paymentRoutes);
+    app.use('/api/carts', cartRoutes);
+    app.use('/api/categories', categoryRoutes);
+    app.use('/api/orders', orderRoutes);
+    app.use('/api/reviews', reviewRoutes);
+    app.use('/api/comments', commentRoutes);
+    app.use('/api/loyalty', loyaltyRoutes);
+    app.use('/api/discount', discountRoutes);
+    app.use('/api/vouchers', voucherRoutes);
+    app.use("/api/badges", badgeRoutes);
+    app.use('/api/dashboard', dashboardRoutes);
+    app.use("/api/chat", chatRoutes);
+    app.use('/api/media', mediaRoutes);
+    app.use(errorHandler);
+};
+
+const bootstrapBackgroundJobs = () => {
+    try {
+        require('./utils/event.cron.js');
+        const monthlyJob = require('./utils/montly-loyalty.js');
+        monthlyJob().catch((err) => {
+            console.error('Monthly loyalty bootstrap failed:', err.message);
+        });
+    } catch (err) {
+        console.error('Background job bootstrap failed:', err.message);
+    }
+};
+
 // Kết nối db
 const startServer = async () => {
-    // Chờ kết nối db trước
-    await connectDB();
+    const PORT = process.env.PORT || 6969;
+    server.listen(PORT, '0.0.0.0', async () => {
+        console.log(`Backend listening on http://0.0.0.0:${PORT}`);
 
-    // MongoDB Atlas Search is ready once connected to MongoDB
-    
-    // Sau đó, chỉ start server khi đã kết nối được db
-    const PORT = process.env.PORT || 8080;
-    server.listen(PORT, '0.0.0.0', () => {
-        // Server is running
+        setTimeout(() => {
+            try {
+                const socket = require('./socket/index');
+                socket.init(server);
+            } catch (err) {
+                console.error('Socket bootstrap failed:', err.message);
+            }
+        }, 0);
+
+        try {
+            console.log('Connecting to MongoDB...');
+            const connectDB = require('./config/db.js');
+            await connectDB();
+            console.log('MongoDB connected');
+
+            registerRoutes();
+            bootstrapBackgroundJobs();
+        } catch (err) {
+            console.error('MongoDB bootstrap failed:', err.message);
+            process.exit(1);
+        }
     });
 };
 

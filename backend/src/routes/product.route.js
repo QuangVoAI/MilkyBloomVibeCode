@@ -10,7 +10,7 @@ const {
     deleteProduct,
     addProductImages,
     removeProductImages,
-    uploadImagesToS3,
+    uploadProductImagesToMongo,
     autocompleteProducts,
 } = require('../controllers/product.controller.js');
 
@@ -22,6 +22,7 @@ const { uploadProductImages } = require('../middlewares/upload.middleware.js');
 const authMiddleware = require('../middlewares/auth.middleware.js');
 const adminOnly = require('../middlewares/admin.middleware.js');
 const optionalAuth = require('../middlewares/optionalAuth.middleware.js');
+const { strictApiLimiter } = require('../middlewares/rateLimit.middleware.js');
 const router = express.Router();
 
 router.get("/", optionalAuth, getAllProducts);
@@ -33,10 +34,10 @@ router.get("/:id", getProductById);
 
 router.use(authMiddleware);
 router.use(adminOnly);
-router.post("/images/upload", uploadProductImages, uploadImagesToS3);
-router.post("/", uploadProductImages, createProduct);
-router.delete("/:id", deleteProduct);
-router.patch("/:id", updateProduct);
+router.post("/images/upload", strictApiLimiter, uploadProductImages, uploadProductImagesToMongo);
+router.post("/", strictApiLimiter, uploadProductImages, createProduct);
+router.delete("/:id", strictApiLimiter, deleteProduct);
+router.patch("/:id", strictApiLimiter, updateProduct);
 // router.post("/:id/images", uploadProductImages, addProductImages);
 // router.delete("/:id/images", removeProductImages);
 

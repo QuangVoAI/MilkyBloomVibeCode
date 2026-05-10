@@ -114,7 +114,7 @@ const updateProduct = async (req, res, next) => {
     }
 };
 
-/** Xóa sản phẩm (và ảnh S3) */
+/** Xóa sản phẩm (và ảnh liên quan) */
 const deleteProduct = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -125,7 +125,7 @@ const deleteProduct = async (req, res, next) => {
     }
 };
 
-/** Thêm ảnh (upload lên S3) */
+/** Thêm ảnh vào product (lưu trong MongoDB GridFS) */
 const addProductImages = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -158,8 +158,8 @@ const removeProductImages = async (req, res, next) => {
     }
 };
 
-/** Upload ảnh trực tiếp lên S3 (không cần productId) */
-const uploadImagesToS3 = async (req, res, next) => {
+/** Upload ảnh trực tiếp vào MongoDB GridFS (không cần productId) */
+const uploadProductImagesToMongo = async (req, res, next) => {
     try {
         if (!req.files) {
             return res.status(400).json({ 
@@ -176,8 +176,8 @@ const uploadImagesToS3 = async (req, res, next) => {
             });
         }
 
-        const { uploadToS3 } = require('../utils/s3.helper.js');
-        const uploadedUrls = await uploadToS3(files, 'productImages');
+        const { storeImages } = require('../utils/image-storage.js');
+        const uploadedUrls = await storeImages(files, 'productImages');
         
         res.json({ 
             success: true, 
@@ -219,6 +219,6 @@ module.exports = {
     deleteProduct,
     addProductImages,
     removeProductImages,
-    uploadImagesToS3,
+    uploadProductImagesToMongo,
     autocompleteProducts,
 };

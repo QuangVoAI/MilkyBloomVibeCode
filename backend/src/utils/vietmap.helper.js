@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { hasEnvValues, isProviderEnabled } = require('../config/runtime.js');
 
 const VIETMAP_API_KEY = process.env.VIETMAP_API_KEY;
 const NODE_ENV = process.env.NODE_ENV || "development";
@@ -101,6 +102,17 @@ const vietMapRequest = async (endpoint, params = {}) => {
 // --- Verify address using VietMap ---
 const verifyAddress = async (addressLine) => {
     try {
+        if (!isProviderEnabled('VIETMAP_ENABLED', true)) {
+            return {
+                valid: true,
+                userInput: addressLine,
+                formatted: addressLine,
+                lat: null,
+                lng: null,
+                corrected: false,
+            };
+        }
+
         if (!addressLine || !VIETMAP_API_KEY) {
             throw new Error("Missing address or API key");
         }
@@ -178,6 +190,13 @@ const verifyAddress = async (addressLine) => {
 // --- Suggest addresses ---
 const suggestAddress = async (keyword) => {
     try {
+        if (
+            !isProviderEnabled('VIETMAP_ENABLED', true) ||
+            !hasEnvValues('VIETMAP_API_KEY')
+        ) {
+            return [];
+        }
+
         if (!keyword || !VIETMAP_API_KEY)
             throw new Error("Missing keyword or API key");
         const suggestions = await vietMapRequest("autocomplete", {

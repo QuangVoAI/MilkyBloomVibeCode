@@ -169,11 +169,11 @@ export const uploadProductImages = async (productId, formData) => {
 };
 
 /**
- * Upload images directly to S3 (no productId needed)
+ * Upload images to the backend image store (no productId needed)
  * @param {FormData} formData - Form data containing images
  * @returns {Promise<Object>} Object with imageUrls array
  */
-export const uploadImagesToS3 = async (formData) => {
+export const uploadImages = async (formData) => {
   // Get auth token without Content-Type (let browser set multipart boundary)
   const token = localStorage.getItem('authToken');
   const headers = {};
@@ -191,11 +191,11 @@ export const uploadImagesToS3 = async (formData) => {
 };
 
 /**
- * Upload variant images directly to S3 (no variantId needed)
+ * Upload variant images to the backend image store (no variantId needed)
  * @param {FormData} formData - Form data containing variant images
  * @returns {Promise<Object>} Object with imageUrls array
  */
-export const uploadVariantImagesToS3 = async (formData) => {
+export const uploadVariantImages = async (formData) => {
   const token = localStorage.getItem('authToken');
   const headers = {};
   if (token) {
@@ -348,12 +348,12 @@ export const deleteVariant = async (variantId) => {
 };
 
 /**
- * Upload variant images
+ * Upload images for an existing variant
  * @param {string} variantId - Variant ID
  * @param {FormData} formData - Form data containing images
  * @returns {Promise<Object>}
  */
-export const uploadVariantImages = async (variantId, formData) => {
+export const uploadVariantImagesForVariant = async (variantId, formData) => {
   // Get auth token without Content-Type (let browser set multipart boundary)
   const token = localStorage.getItem('authToken');
   const headers = {};

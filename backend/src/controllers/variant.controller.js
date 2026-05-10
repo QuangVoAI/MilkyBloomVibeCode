@@ -106,8 +106,8 @@ const removeVariantImages = async (req, res, next) => {
     }
 };
 
-/** Upload variant images directly to S3 (no variantId needed) */
-const uploadVariantImagesToS3 = async (req, res, next) => {
+/** Upload variant images directly into MongoDB GridFS (no variantId needed) */
+const uploadVariantImagesToMongo = async (req, res, next) => {
     try {
         if (!req.files) {
             return res.status(400).json({ 
@@ -124,8 +124,8 @@ const uploadVariantImagesToS3 = async (req, res, next) => {
             });
         }
 
-        const { uploadToS3 } = require('../utils/s3.helper.js');
-        const uploadedUrls = await uploadToS3(files, 'variantImages');
+        const { storeImages } = require('../utils/image-storage.js');
+        const uploadedUrls = await storeImages(files, 'variantImages');
         
         res.json({ 
             success: true, 
@@ -150,5 +150,5 @@ module.exports = {
     deleteVariant,
     addVariantImages,
     removeVariantImages,
-    uploadVariantImagesToS3,
+    uploadVariantImagesToMongo,
 };

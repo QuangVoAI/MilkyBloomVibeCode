@@ -21,12 +21,10 @@ const voucherRepository = require("../repositories/voucher.repository");
 const userVoucherRepository = require("../repositories/user-voucher.repository");
 const Product = require("../models/product.model");
 const { sendOrderConfirmationEmail, sendGuestOrderConfirmationEmail, sendOrderStatusUpdateEmail } = require("./email.service");
+const { getBackendUrl } = require('../config/runtime.js');
 
 const VERIFY_TTL_MINUTES = Number(process.env.VERIFY_TTL_MINUTES || 15);
-const BACKEND_URL =
-    process.env.BACKEND_URL ||
-    process.env.BASE_URL ||
-    "https://api.milkybloomtoystore.id.vn";
+const BACKEND_URL = getBackendUrl();
 
 async function sendVerifyEmail(user) {
     const token = generateToken();

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { cn } from '@/utils/cn';
+import { normalizeImageUrl } from '@/utils/imageOptimizer';
 
 /**
  * Enterprise-grade Progressive Image Component
@@ -34,7 +35,6 @@ const OptimizedImage = memo(({
   priority = false, // Load immediately without lazy loading
   placeholder = 'blur', // 'blur' | 'empty'
   placeholderColor = '#f3f4f6',
-  quality = 85,
   objectFit = 'cover',
   onLoad,
   onError,
@@ -76,16 +76,14 @@ const OptimizedImage = memo(({
 
   // Generate srcset for responsive images
   const generateSrcSet = (url) => {
-    if (!url || url.includes('placeholder') || url.startsWith('data:')) {
+    const normalized = normalizeImageUrl(url);
+    if (!normalized || normalized.includes('placeholder') || normalized.startsWith('data:')) {
       return undefined;
     }
 
-    // For S3/CloudFront URLs, prepare for future image optimization
-    // Current: return same URL (no resize on S3)
-    // Future: use CloudFront + Lambda@Edge for on-the-fly resize
     return DEFAULT_SIZES
       .filter(size => !width || size <= width * 2) // Don't generate sizes larger than 2x original
-      .map(size => `${url} ${size}w`)
+      .map(size => `${normalized} ${size}w`)
       .join(', ');
   };
 
@@ -104,7 +102,8 @@ const OptimizedImage = memo(({
     ? generateBlurPlaceholder(placeholderColor) 
     : PLACEHOLDER;
 
-  const imageSrc = isInView ? (src || placeholderSrc) : placeholderSrc;
+  const safeSrc = normalizeImageUrl(src, placeholderSrc);
+  const imageSrc = isInView ? safeSrc : placeholderSrc;
 
   // Calculate aspect ratio style
   const aspectRatioStyle = aspectRatio ? { aspectRatio } : {};

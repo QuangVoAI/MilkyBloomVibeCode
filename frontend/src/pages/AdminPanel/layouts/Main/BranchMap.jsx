@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -6,33 +6,32 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 const BranchMap = ({ branches = [] }) => {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
+  const fallbackStyleUrl = 'https://demotiles.maplibre.org/style.json';
 
   // Build GeoJSON from branches
-  const buildGeoJson = () => ({
-    type: 'FeatureCollection',
-    features: branches.map((b) => ({
-      type: 'Feature',
-      properties: {
-        name: b.province,
-        orderCount: b.orderCount || 0,
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [b.lng, b.lat],
-      },
-    })),
-  });
+  const buildGeoJson = useCallback(
+    () => ({
+      type: 'FeatureCollection',
+      features: branches.map((b) => ({
+        type: 'Feature',
+        properties: {
+          name: b.province,
+          orderCount: b.orderCount || 0,
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [b.lng, b.lat],
+        },
+      })),
+    }),
+    [branches],
+  );
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    const apiKey = import.meta.env.VITE_VIETMAP_API_KEY;
     const customStyle = (import.meta.env.VITE_VIETMAP_STYLE_URL || '').trim();
-    const styleUrl = customStyle
-      ? customStyle
-      : apiKey
-        ? `https://maps.vietmap.vn/api/maps/streets/styles.json?apikey=${apiKey}`
-        : 'https://demotiles.maplibre.org/style.json';
+    const styleUrl = customStyle || fallbackStyleUrl;
 
     mapRef.current = new maplibregl.Map({
       container: mapContainer.current,
@@ -150,7 +149,7 @@ const BranchMap = ({ branches = [] }) => {
     if (source && source.setData) {
       source.setData(buildGeoJson());
     }
-  }, [branches]);
+  }, [buildGeoJson]);
 
   return (
     <div className="relative">

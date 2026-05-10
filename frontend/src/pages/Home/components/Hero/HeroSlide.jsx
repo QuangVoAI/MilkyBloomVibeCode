@@ -1,10 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { normalizeImageUrl } from '@/utils/imageOptimizer';
 
 const HeroSlide = ({ product, isFirst = false }) => {
   const navigate = useNavigate();
   
-  const productImage = product.imageUrls?.[0] || '/placeholder.png';
+  const productImage = normalizeImageUrl(product.imageUrls?.[0]);
   const description = product.description?.length > 100
     ? product.description.substring(0, 100) + '...'
     : product.description;

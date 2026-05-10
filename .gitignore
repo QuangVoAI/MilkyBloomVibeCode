@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+!agentic-ai/.env.example
+backend/.env
+frontend/.env
+node_modules/
+dist/
+coverage/
+popmart-scraper/

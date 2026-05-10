@@ -8,7 +8,7 @@
 const https = require('https');
 const http = require('http');
 
-const API_URL = process.argv[2] || 'https://api.milkybloomtoystore.id.vn';
+const API_URL = process.argv[2] || process.env.BACKEND_URL || 'http://localhost:6969';
 const REQUEST_COUNT = 10;
 
 // Colors
