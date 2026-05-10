@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Backend" />
   <img src="https://img.shields.io/badge/Database-MongoDB%20Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="Database" />
   <img src="https://img.shields.io/badge/Chat-Streaming%20Only-7C3AED?style=for-the-badge&logo=socket.io&logoColor=white" alt="Chat" />
-  <img src="https://img.shields.io/badge/AI-EmpathAI%20%2B%20Featherless-0F766E?style=for-the-badge" alt="AI" />
+  <img src="https://img.shields.io/badge/AI-EmpathAI%20%2B%20Groq-0F766E?style=for-the-badge" alt="AI" />
 </p>
 
 MilkyBloom x EmpathAI là một nền tảng thương mại điện tử đồ chơi trẻ em tích hợp lớp CSKH agentic thời gian thực.
@@ -69,7 +69,7 @@ flowchart LR
 - **Backend** là trung tâm điều phối, xử lý dữ liệu sản phẩm, đơn hàng, auth, ảnh, và bridge qua EmpathAI
 - **EmpathAI** là lớp CSKH agentic, gồm router, retrieval, action execution, reviewer, và writer
 - **MongoDB Atlas** lưu toàn bộ dữ liệu nghiệp vụ và ảnh demo qua GridFS
-- **Groq** và **Featherless** là hai backend LLM OpenAI-compatible cho EmpathAI
+- **Groq** là backend LLM chính cho EmpathAI, **Featherless** là fallback và mode thay thế
 
 ## Luồng Hoạt Động Chi Tiết
 
@@ -104,7 +104,7 @@ sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
     participant AI as EmpathAI
-    participant LLM as Featherless
+    participant LLM as Groq / Featherless
 
     U->>FE: Nhập câu hỏi trong chat widget
     FE->>BE: Gửi message qua WebSocket
@@ -206,7 +206,7 @@ agentic-ai/
 | Backend | Node.js, Express, MongoDB, GridFS | API, auth, data, media |
 | Chat Streaming | WebSocket | Stream token realtime |
 | Agentic AI | Python, LangGraph | Router, retrieval, action, writer |
-| LLM Backend | Groq / Featherless | Sinh phản hồi cho EmpathAI |
+| LLM Backend | Groq / Featherless | Sinh phản hồi cho EmpathAI, Groq là mặc định |
 
 ## Chạy Dự Án
 
@@ -280,7 +280,7 @@ python ws_server.py
 
 ### EmpathAI
 
-- `EMPATHY_MODE=groq` hoặc `EMPATHY_MODE=featherless`
+- `EMPATHY_MODE=groq` là mặc định; nếu Groq lỗi, hệ thống sẽ fallback sang Featherless
 - `GROQ_API_KEY`
 - `GROQ_BASE_URL=https://api.groq.com/openai/v1`
 - `FEATHERLESS_API_KEY`

@@ -404,19 +404,35 @@ async def groq_chat_complete(
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> str:
-    """Featherless completion with the legacy chat-complete name."""
-    return await _openai_chat_complete(
-        messages=messages,
-        model=model,
-        api_key=GROQ_API_KEY,
-        base_url=GROQ_BASE_URL,
-        referer=GROQ_HTTP_REFERER,
-        title=GROQ_X_TITLE,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        provider_name="groq",
-        max_input_tokens=GROQ_MAX_INPUT_TOKENS,
-    )
+    """Groq completion with automatic Featherless fallback."""
+    try:
+        return await _openai_chat_complete(
+            messages=messages,
+            model=model,
+            api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL,
+            referer=GROQ_HTTP_REFERER,
+            title=GROQ_X_TITLE,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            provider_name="groq",
+            max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+        )
+    except Exception as groq_error:
+        if not FEATHERLESS_API_KEY:
+            raise
+        fallback_model = (
+            FEATHERLESS_MODEL_SMART
+            if model in {GROQ_MODEL_SMART, GROQ_MODEL}
+            else FEATHERLESS_MODEL_FAST
+        )
+        print(f"[llm] Groq failed ({groq_error}); falling back to Featherless.")
+        return await featherless_complete(
+            messages=messages,
+            model=fallback_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
 
 
 async def featherless_complete(
@@ -471,20 +487,42 @@ async def groq_stream_chat_complete(
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> AsyncGenerator[str, None]:
-    """Groq streaming chat completion via OpenAI-compatible SSE."""
-    async for token in _openai_stream_complete(
-        messages=messages,
-        model=model,
-        api_key=GROQ_API_KEY,
-        base_url=GROQ_BASE_URL,
-        referer=GROQ_HTTP_REFERER,
-        title=GROQ_X_TITLE,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        provider_name="groq",
-        max_input_tokens=GROQ_MAX_INPUT_TOKENS,
-    ):
-        yield token
+    """Groq streaming chat completion via OpenAI-compatible SSE.
+
+    If Groq fails before any token is emitted, fall back to Featherless.
+    """
+    yielded_any = False
+    try:
+        async for token in _openai_stream_complete(
+            messages=messages,
+            model=model,
+            api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL,
+            referer=GROQ_HTTP_REFERER,
+            title=GROQ_X_TITLE,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            provider_name="groq",
+            max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+        ):
+            yielded_any = True
+            yield token
+    except Exception as groq_error:
+        if yielded_any or not FEATHERLESS_API_KEY:
+            raise
+        print(f"[llm] Groq stream failed ({groq_error}); falling back to Featherless.")
+        fallback_model = (
+            FEATHERLESS_MODEL_SMART
+            if model in {GROQ_MODEL_SMART, GROQ_MODEL}
+            else FEATHERLESS_MODEL_FAST
+        )
+        async for token in featherless_stream_complete(
+            messages=messages,
+            model=fallback_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        ):
+            yield token
 
 
 async def featherless_stream_complete(

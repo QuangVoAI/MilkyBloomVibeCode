@@ -26,12 +26,7 @@ from config import (
     FEATHERLESS_API_KEY,
     FEATHERLESS_MODEL_FAST,
 )
-from agents.llm_client import (
-    groq_complete,
-    groq_stream_complete,
-    featherless_complete,
-    featherless_stream_complete,
-)
+from agents.llm_client import _openai_chat_complete, _openai_stream_complete
 
 
 PROMPT = "Viết một câu chào hỗ trợ khách hàng ngắn gọn bằng tiếng Việt."
@@ -39,13 +34,24 @@ SYSTEM_PROMPT = "Bạn là trợ lý CSKH thân thiện, trả lời ngắn gọ
 RUNS = 3
 
 
-async def bench_non_stream(name, fn, prompt_args, model):
+async def bench_non_stream_strict(provider):
     results = []
     errors = []
     for _ in range(RUNS):
         start = time.perf_counter()
         try:
-            text = await fn(**prompt_args, model=model, max_tokens=80, temperature=0.2)
+            text = await _openai_chat_complete(
+                messages=provider["messages"],
+                model=provider["model"],
+                api_key=provider["api_key"],
+                base_url=provider["base_url"],
+                referer=provider["referer"],
+                title=provider["title"],
+                max_tokens=80,
+                temperature=0.2,
+                provider_name=provider["name"].lower(),
+                max_input_tokens=12000,
+            )
             results.append(
                 {
                     "seconds": time.perf_counter() - start,
@@ -55,10 +61,10 @@ async def bench_non_stream(name, fn, prompt_args, model):
             )
         except Exception as exc:
             errors.append(str(exc))
-    return {"name": name, "results": results, "errors": errors}
+    return {"name": provider["name"], "results": results, "errors": errors}
 
 
-async def bench_stream(name, fn, prompt_args, model):
+async def bench_stream_strict(provider):
     results = []
     errors = []
     for _ in range(RUNS):
@@ -66,7 +72,18 @@ async def bench_stream(name, fn, prompt_args, model):
         first_chunk_at = None
         chunk_count = 0
         try:
-            async for chunk in fn(**prompt_args, model=model, max_tokens=80, temperature=0.2):
+            async for chunk in _openai_stream_complete(
+                messages=provider["messages"],
+                model=provider["model"],
+                api_key=provider["api_key"],
+                base_url=provider["base_url"],
+                referer=provider["referer"],
+                title=provider["title"],
+                max_tokens=80,
+                temperature=0.2,
+                provider_name=provider["name"].lower(),
+                max_input_tokens=12000,
+            ):
                 chunk_count += 1
                 if first_chunk_at is None:
                     first_chunk_at = time.perf_counter() - start
@@ -79,7 +96,7 @@ async def bench_stream(name, fn, prompt_args, model):
             )
         except Exception as exc:
             errors.append(str(exc))
-    return {"name": name, "results": results, "errors": errors}
+    return {"name": provider["name"], "results": results, "errors": errors}
 
 
 def summarize_block(title, block):
@@ -115,35 +132,45 @@ async def main():
     providers = []
     if GROQ_API_KEY:
         providers.append(
-            (
-                "Groq",
-                groq_complete,
-                groq_stream_complete,
-                {"prompt": PROMPT, "system_prompt": SYSTEM_PROMPT},
-                GROQ_MODEL_FAST,
-            )
+            {
+                "name": "Groq",
+                "api_key": GROQ_API_KEY,
+                "base_url": "https://api.groq.com/openai/v1",
+                "referer": "",
+                "title": "",
+                "model": GROQ_MODEL_FAST,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": PROMPT},
+                ],
+            }
         )
     if FEATHERLESS_API_KEY:
         providers.append(
-            (
-                "Featherless",
-                featherless_complete,
-                featherless_stream_complete,
-                {"messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": PROMPT}]},
-                FEATHERLESS_MODEL_FAST,
-            )
+            {
+                "name": "Featherless",
+                "api_key": FEATHERLESS_API_KEY,
+                "base_url": "https://api.featherless.ai/v1",
+                "referer": "",
+                "title": "",
+                "model": FEATHERLESS_MODEL_FAST,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": PROMPT},
+                ],
+            }
         )
 
     if not providers:
         print("No provider keys found in agentic-ai/.env. Add GROQ_API_KEY or FEATHERLESS_API_KEY.")
         return 1
 
-    for name, complete_fn, stream_fn, prompt_args, model in providers:
-        non_stream = await bench_non_stream(name, complete_fn, prompt_args, model)
-        summarize_block(f"{name} non-stream", non_stream)
+    for provider in providers:
+        non_stream = await bench_non_stream_strict(provider)
+        summarize_block(f'{provider["name"]} non-stream', non_stream)
 
-        stream = await bench_stream(name, stream_fn, prompt_args, model)
-        summarize_block(f"{name} stream", stream)
+        stream = await bench_stream_strict(provider)
+        summarize_block(f'{provider["name"]} stream', stream)
 
     return 0
 

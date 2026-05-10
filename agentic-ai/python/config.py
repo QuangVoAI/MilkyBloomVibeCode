@@ -58,8 +58,8 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 
 # --- EmpathAI Configuration ---
-# Default backend is Featherless; legacy labels are kept only for compatibility.
-EMPATHY_MODE = os.getenv("EMPATHY_MODE", "featherless")
+# Default backend is Groq; Featherless stays available as fallback or alternate mode.
+EMPATHY_MODE = os.getenv("EMPATHY_MODE", "groq")
 
 # Sentiment labels
 SENTIMENT_LABELS = ["toxic", "frustrated", "disappointed", "neutral"]

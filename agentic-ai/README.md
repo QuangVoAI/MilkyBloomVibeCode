@@ -178,7 +178,7 @@ Confirm hành động đã xử lý]
 | **Gateway** | **Rust (Axum + Tokio)** | WebSocket server, Kafka producer/consumer, HTTP API |
 | **Message Queue** | **Redpanda (Kafka-compatible)** | Tách biệt gateway và AI worker, hỗ trợ streaming |
 | **AI Pipeline** | **LangGraph (Python)** | Điều phối stateful multi-node workflow |
-| **LLM Backends** | **Vertex AI**, **Groq** | Fine-tuned Llama-3.1-8B và fallback |
+| **LLM Backends** | **Groq**, **Featherless**, **Vertex AI** | Groq mặc định, Featherless fallback, Vertex legacy compatibility |
 | **Embedding** | **BGE-M3** | Dense embedding đa ngôn ngữ |
 | **Vector DB** | **Qdrant** | Hybrid Search: Dense + Sparse + RRF fusion |
 | **Reranker** | **BGE-Reranker-v2-M3** | Cross-encoder reranking |
@@ -211,7 +211,7 @@ cd python && pip install -r requirements.txt
 
 ```env
 # LLM Backend
-EMPATHY_MODE=groq               # "groq", "featherless" hoặc "vertex"
+EMPATHY_MODE=groq               # mặc định: Groq, fallback sang Featherless khi cần
 GROQ_API_KEY=your-groq-key
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 FEATHERLESS_API_KEY=your-featherless-key
@@ -257,7 +257,7 @@ cd python
 # Test order tool (không cần API key)
 python test_agent.py l1
 
-# Test full pipeline (cần GROQ_API_KEY hoặc FEATHERLESS_API_KEY tùy mode)
+# Test full pipeline (ưu tiên GROQ_API_KEY; Featherless là fallback / mode thay thế)
 python test_agent.py l2
 ```
 
