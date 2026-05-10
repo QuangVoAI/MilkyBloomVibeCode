@@ -32,9 +32,9 @@ const {
 } = require("../middlewares/rateLimit.middleware.js");
 const { getCookieDomain, getFrontendUrl, isProduction } = require('../config/runtime.js');
 
-setupFacebookPassport();
-
 const router = express.Router();
+
+setupFacebookPassport();
 
 //google login flow
 router.get(
@@ -64,7 +64,6 @@ router.get(
             { expiresIn: "7d" },
         );
 
-        // Support both production and local development
         const target = new URL(getFrontendUrl());
         target.searchParams.set("token", token);
 
@@ -81,7 +80,6 @@ router.get(
         }
 
         res.cookie("token", token, cookieOptions);
-        
         res.redirect(target.toString());
     },
 );
@@ -108,7 +106,6 @@ router.get(
             { expiresIn: "7d" },
         );
 
-        // Support both production and local development
         const target = new URL(getFrontendUrl());
         target.searchParams.set("token", token);
 
@@ -125,7 +122,6 @@ router.get(
         }
 
         res.cookie("token", token, cookieOptions);
-        
         res.redirect(target.toString());
     },
 );

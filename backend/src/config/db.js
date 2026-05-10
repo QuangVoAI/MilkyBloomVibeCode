@@ -5,6 +5,19 @@ dotenv.config();
 const CONNECTION_URL = process.env.MONGO_URI;
 
 const connectDB = async () => {
+    const tryConnect = async (uri, label) => {
+        console.log(`Attempting MongoDB connection (${label})...`);
+        const conn = await mongoose.connect(uri, {
+            // Những option này giúp Beanstalk tự động reconnect khi mạng AWS delay nhẹ
+            serverSelectionTimeoutMS: 10000, // timeout sau 10s
+            socketTimeoutMS: 45000, // giữ socket mở 45s
+            family: 4, // Force IPv4 to avoid some IPv6/TLS handshake issues
+            tls: uri.startsWith("mongodb+srv://"), // SRV connections use TLS by default
+        });
+        console.log(`Connected to MongoDB: ${conn.connection.host} (${label})`);
+        return conn;
+    };
+
     try {
         if (!CONNECTION_URL) {
             console.error(
@@ -13,13 +26,7 @@ const connectDB = async () => {
             process.exit(1);
         }
 
-        const conn = await mongoose.connect(CONNECTION_URL, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            // Những option này giúp Beanstalk tự động reconnect khi mạng AWS delay nhẹ
-            serverSelectionTimeoutMS: 10000, // timeout sau 10s
-            socketTimeoutMS: 45000, // giữ socket mở 45s
-        });
+        await tryConnect(CONNECTION_URL, "primary");
 
         // Nếu mất kết nối
         mongoose.connection.on("disconnected", () => {
