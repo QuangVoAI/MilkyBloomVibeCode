@@ -2,7 +2,7 @@ const crypto = require('crypto');
 
 const LOCAL_FRONTEND_URL = 'http://localhost:5173';
 const getLocalBackendUrl = () =>
-    `http://localhost:${process.env.PORT || 5000}`;
+    `http://localhost:${process.env.PORT || 6969}`;
 
 const normalizeUrl = (value) => {
     if (!value || typeof value !== 'string') return '';

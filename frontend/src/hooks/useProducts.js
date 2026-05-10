@@ -103,10 +103,10 @@ export const useProducts = (options = {}) => {
       setLoading(true);
       setError(null);
 
-      // 1. Get product images (already uploaded to S3 by ProductFormModal)
+      // 1. Get product images (already uploaded to backend storage by ProductFormModal)
       const uploadedImageUrls = productData.imageUrls || [];
 
-      // 2. Upload variant images to S3 FIRST (if any)
+      // 2. Upload variant images first (if any)
       const processedVariants = [];
       if (productData.variants && productData.variants.length > 0) {
         for (const variant of productData.variants) {
@@ -115,8 +115,10 @@ export const useProducts = (options = {}) => {
           // Upload variant image if pending
           if (variant.pendingImageFile) {
             try {
-              const uploadResult = await productsService.uploadVariantImagesToS3([variant.pendingImageFile]);
-              variantImageUrls = uploadResult.urls || [];
+              const formDataUpload = new FormData();
+              formDataUpload.append('variantImages', variant.pendingImageFile);
+              const uploadResult = await productsService.uploadVariantImages(formDataUpload);
+              variantImageUrls = uploadResult.imageUrls || uploadResult.urls || [];
             } catch (imgErr) {
               console.error('Error uploading variant image:', imgErr);
             }
@@ -143,14 +145,14 @@ export const useProducts = (options = {}) => {
       }
 
       // 3. Create product with variants in one call (backend handles transaction)
-      const { pendingImageFiles, variants, ...productWithoutFiles } = productData;
-      
       const productPayload = {
-        ...productWithoutFiles,
+        ...productData,
         categoryId: Array.isArray(productData.categoryId) ? productData.categoryId : [],
         imageUrls: uploadedImageUrls,
-        variants: processedVariants, // Include all variants with their S3 image URLs
+        variants: processedVariants, // Include all variants with uploaded image URLs
       };
+
+      delete productPayload.pendingImageFiles;
 
       const newProduct = await productsService.createProduct(productPayload);
       

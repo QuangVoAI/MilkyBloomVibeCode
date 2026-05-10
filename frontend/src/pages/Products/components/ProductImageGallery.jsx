@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronUp, ChevronDown, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { normalizeImageUrl } from '@/utils/imageOptimizer';
 import './ProductImageGallery.css';
 
 const ProductImageGallery = ({ images = [], selectedVariantImageIndex = 0, productName }) => {
@@ -14,7 +15,11 @@ const ProductImageGallery = ({ images = [], selectedVariantImageIndex = 0, produ
 
   // Ensure we have at least one image (fallback to placeholder)
   const imageList = useMemo(() => {
-    return images.length > 0 ? images : ['/placeholder.png'];
+    const safeImages = (images || [])
+      .map((image) => normalizeImageUrl(image))
+      .filter(Boolean);
+
+    return safeImages.length > 0 ? safeImages : ['/placeholder.png'];
   }, [images]);
 
   // Auto-scroll to selected variant's image when variant changes

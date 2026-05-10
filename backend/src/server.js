@@ -219,7 +219,7 @@ const bootstrapBackgroundJobs = () => {
 
 // Kết nối db
 const startServer = async () => {
-    const PORT = process.env.PORT || 8080;
+    const PORT = process.env.PORT || 6969;
     server.listen(PORT, '0.0.0.0', async () => {
         console.log(`Backend listening on http://0.0.0.0:${PORT}`);
 

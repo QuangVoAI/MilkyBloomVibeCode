@@ -176,7 +176,7 @@ src/pages/PageName/
 ```env
 # .env.local
 VITE_USE_MOCK_DATA=true           # Enable MSW for development
-VITE_API_URL=http://localhost:3000  # Backend API URL
+VITE_API_URL=http://localhost:6969/api  # Backend API URL
 ```
 
 ## 📦 Available Scripts

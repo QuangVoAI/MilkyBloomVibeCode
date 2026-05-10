@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useProducts } from '@/hooks'; // Using global hook
 import { formatPrice } from '@/utils/formatPrice';
+import { normalizeImageUrl } from '@/utils/imageOptimizer';
 import './ProductCarousel.css';
 
 const ProductCarousel = () => {
@@ -101,7 +102,12 @@ const ProductCarousel = () => {
       <div className="list">
         {displayProducts.map((product) => (
           <div className="item" key={product._id}>
-            <img src={product.imageUrls?.[0] || '/placeholder.png'} alt={product.name} loading="lazy" decoding="async" />
+            <img
+              src={normalizeImageUrl(product.imageUrls?.[0])}
+              alt={product.name}
+              loading="lazy"
+              decoding="async"
+            />
             <div className="introduce">
               <div className="title">FEATURED</div>
               <div className="topic">{product.name}</div>

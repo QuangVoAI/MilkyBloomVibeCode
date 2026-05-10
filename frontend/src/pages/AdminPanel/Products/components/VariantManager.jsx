@@ -163,7 +163,7 @@ const VariantManager = ({ productId, variants: initialVariants = [], onUpdate })
           try {
             const formData = new FormData();
             formData.append('variantImages', variant.pendingImageFile);
-            await productsService.uploadVariantImages(created._id, formData);
+            await productsService.uploadVariantImagesForVariant(created._id, formData);
           } catch (uploadError) {
             console.error('Failed to upload variant image:', uploadError);
             // Continue even if image upload fails
@@ -224,11 +224,11 @@ const VariantManager = ({ productId, variants: initialVariants = [], onUpdate })
     
     setUploadingImage(true);
     try {
-      // Upload to S3 immediately
+      // Upload to backend storage immediately
       const formData = new FormData();
       formData.append('variantImages', file);
       
-      const result = await productsService.uploadVariantImagesToS3(formData);
+      const result = await productsService.uploadVariantImages(formData);
       
       if (!result.imageUrls || result.imageUrls.length === 0) {
         throw new Error('No image URLs returned from upload');
@@ -243,7 +243,7 @@ const VariantManager = ({ productId, variants: initialVariants = [], onUpdate })
           : v
       ));
       
-      toast.success('Image uploaded to S3 - save the product to persist changes');
+      toast.success('Image uploaded - save the product to persist changes');
       
       // Trigger parent update if needed
       if (onUpdate) onUpdate();
@@ -638,19 +638,19 @@ const VariantManager = ({ productId, variants: initialVariants = [], onUpdate })
                                 onChange={async (e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
-                                    // Upload to S3 immediately
+                                    // Upload to backend storage immediately
                                     setUploadingImage(true);
                                     try {
                                       const formData = new FormData();
                                       formData.append('variantImages', file);
                                       
-                                      const result = await productsService.uploadVariantImagesToS3(formData);
+                                      const result = await productsService.uploadVariantImages(formData);
                                       
                                       if (result.imageUrls && result.imageUrls.length > 0) {
                                         const uploadedUrl = result.imageUrls[0];
                                         updateGeneratedVariant(index, 'imageUrls', [uploadedUrl]);
                                         updateGeneratedVariant(index, 'imagePreview', uploadedUrl);
-                                        toast.success('Image uploaded to S3');
+                                        toast.success('Image uploaded successfully');
                                       }
                                     } catch (error) {
                                       console.error('Failed to upload:', error);

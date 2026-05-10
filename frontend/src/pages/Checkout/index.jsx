@@ -9,6 +9,7 @@ import ShippingForm from './components/ShippingForm';
 import PaymentMethodSelector from './components/PaymentMethodSelector';
 import DeliveryTypeSelector from './components/DeliveryTypeSelector';
 import { useCheckout } from './hooks/useCheckout';
+import { normalizeImageUrl } from '@/utils/imageOptimizer';
 import './Checkout.css';
 
 /**
@@ -34,10 +35,10 @@ const transformCartItem = (item) => {
   // Priority: variant.imageUrls[0] > product.imageUrls[0] > placeholder
   const getImageUrl = () => {
     if (variant?.imageUrls?.length > 0) {
-      return variant.imageUrls[0];
+      return normalizeImageUrl(variant.imageUrls[0]);
     }
     if (product?.imageUrls?.length > 0) {
-      return product.imageUrls[0];
+      return normalizeImageUrl(product.imageUrls[0]);
     }
     return '/placeholder.png';
   };

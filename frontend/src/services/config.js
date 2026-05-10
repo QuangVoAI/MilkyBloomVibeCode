@@ -7,7 +7,7 @@ const resolveApiBaseUrl = () => {
   }
 
   if (import.meta.env.DEV) {
-    return 'http://localhost:5000/api';
+    return 'http://localhost:6969/api';
   }
 
   return `${window.location.origin}/api`;

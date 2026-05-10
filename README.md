@@ -117,6 +117,7 @@ conda activate deeplearning
 
 ### Backend
 
+- Backend local mặc định chạy trên `http://localhost:6969`
 - `MONGO_URI` trỏ tới MongoDB Atlas đã deploy
 - `CHAT_PROVIDER=agentic`
 - `AGENTIC_AI_WS_URL=ws://127.0.0.1:8788`
