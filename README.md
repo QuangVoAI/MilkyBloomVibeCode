@@ -1,43 +1,197 @@
 # MilkyBloom x EmpathAI
 
-MilkyBloom là ứng dụng thương mại điện tử đồ chơi trẻ em, và EmpathAI là lớp CSKH agentic được tích hợp vào bên trong để xử lý chat thấu cảm, tra cứu đơn hàng, và thực thi các hành động như đổi địa chỉ, hủy đơn, hoàn tiền, hoặc đổi trả.
+MilkyBloom x EmpathAI là một nền tảng thương mại điện tử đồ chơi trẻ em tích hợp lớp CSKH agentic thời gian thực.
 
-## Tích Hợp Nhanh
+- **MilkyBloom**: storefront e-commerce, product catalog, cart, checkout, orders, profile
+- **EmpathAI**: agentic customer service, xử lý hội thoại thấu cảm, tra cứu ngữ cảnh, và thực thi action hỗ trợ khách hàng
 
-- `frontend/` là giao diện người dùng
-- `backend/` là API trung tâm cho sản phẩm, đơn hàng, auth, và điều phối chat
-- `agentic-ai/` là dịch vụ CSKH agentic chạy riêng, xử lý streaming token qua WebSocket
+Mục tiêu của dự án là giữ trải nghiệm mua sắm mượt cho khách hàng, đồng thời để AI hỗ trợ khách hàng theo cách tự nhiên, có ngữ cảnh, và phản hồi realtime.
 
-Luồng chat hiện tại là **streaming only**:
+## Mục Lục
 
-`Frontend -> Backend -> WebSocket -> EmpathAI -> Stream token về UI`
+- [Tổng Quan](#tổng-quan)
+- [Kiến Trúc Hệ Thống](#kiến-trúc-hệ-thống)
+- [Luồng Hoạt Động Chi Tiết](#luồng-hoạt-động-chi-tiết)
+- [Cấu Trúc Repository](#cấu-trúc-repository)
+- [Công Nghệ Chính](#công-nghệ-chính)
+- [Chạy Dự Án](#chạy-dự-án)
+- [Cấu Hình Quan Trọng](#cấu-hình-quan-trọng)
+- [Thành Viên](#thành-viên)
 
-## Kiến Trúc
+## Tổng Quan
 
-### MilkyBloom
+Repository này gồm 3 lớp chính:
 
-- Hiển thị sản phẩm, giỏ hàng, thanh toán, tài khoản, đơn hàng
-- Lưu dữ liệu vào MongoDB Atlas
-- Gọi EmpathAI khi người dùng mở chat support
+- `frontend/` để hiển thị UI cho người dùng và admin
+- `backend/` để xử lý API, database, auth, ảnh, đơn hàng, và bridge chat
+- `agentic-ai/` để chạy pipeline CSKH agentic riêng, stream phản hồi qua WebSocket
+
+Luồng chat hiện tại là **streaming only**. Người dùng gửi tin nhắn từ frontend, backend chuyển sang EmpathAI, EmpathAI xử lý pipeline agentic, rồi stream token ngược về UI.
+
+## Kiến Trúc Hệ Thống
+
+```mermaid
+flowchart LR
+    U([Người dùng]) --> F[Frontend\nReact + Vite]
+    F -->|REST API| B[Backend\nExpress + MongoDB]
+    B -->|WebSocket chat| A[EmpathAI\nPython + LangGraph]
+    A -->|Stream token| B
+    B -->|Realtime response| F
+
+    B --> M[(MongoDB Atlas\nGridFS + Collections)]
+    A --> L[Featherless\nOpenAI-compatible LLM]
+
+    style F fill:#f97316,color:#fff
+    style B fill:#2563eb,color:#fff
+    style A fill:#7c3aed,color:#fff
+    style M fill:#16a34a,color:#fff
+    style L fill:#0f766e,color:#fff
+```
+
+### Vai trò từng lớp
+
+- **Frontend** là lớp trình bày, gọi API, hiển thị catalog, checkout, profile, và chat support
+- **Backend** là trung tâm điều phối, xử lý dữ liệu sản phẩm, đơn hàng, auth, ảnh, và bridge qua EmpathAI
+- **EmpathAI** là lớp CSKH agentic, gồm router, retrieval, action execution, reviewer, và writer
+- **MongoDB Atlas** lưu toàn bộ dữ liệu nghiệp vụ và ảnh demo qua GridFS
+- **Featherless** cung cấp LLM backend cho EmpathAI
+
+## Luồng Hoạt Động Chi Tiết
+
+### 1. Luồng duyệt sản phẩm
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant DB as MongoDB
+
+    U->>FE: Mở trang home / shop / product detail
+    FE->>BE: GET /api/products, /api/categories, /api/orders...
+    BE->>DB: Query dữ liệu + populate relations
+    DB-->>BE: JSON products, variants, categories
+    BE-->>FE: Dữ liệu đã chuẩn hóa
+    FE-->>U: Render catalog, card, gallery, cart
+```
+
+Điểm đáng chú ý:
+
+- Ảnh sản phẩm, biến thể, category, review, comment, avatar được lưu dưới dạng URL stream từ MongoDB GridFS
+- Frontend không phụ thuộc ảnh local trong repo
+- Demo vẫn có ảnh ngay sau khi seed lại database
+
+### 2. Luồng chat streaming
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant AI as EmpathAI
+    participant LLM as Featherless
+
+    U->>FE: Nhập câu hỏi trong chat widget
+    FE->>BE: Gửi message qua WebSocket
+    BE->>AI: Forward request sang agentic-ai
+    AI->>AI: Router -> Retrieval -> Action -> Review
+    AI->>LLM: Sinh phản hồi thấu cảm
+    LLM-->>AI: Token stream
+    AI-->>BE: Stream token từng phần
+    BE-->>FE: Đẩy token realtime về UI
+    FE-->>U: Hiển thị chữ chạy dần
+```
+
+Chat UI hiện chỉ dùng streaming, không còn chế độ trả lời cuối trong public UI.
+
+### 3. Luồng ảnh demo và seed data
+
+```mermaid
+flowchart TD
+    S[Seed script] --> P[Load catalog source]
+    P --> G[Upload ảnh vào MongoDB GridFS]
+    G --> U[Store stream URL trong MongoDB documents]
+    U --> F[Frontend đọc imageUrls từ API]
+    F --> R[Render ảnh trực tiếp từ backend stream]
+```
+
+Ý nghĩa của luồng này:
+
+- không cần `frontend/public/seed-images`
+- không cần S3 hay CDN ngoài cho demo
+- clone về là có thể seed và chạy ngay
+
+## Luồng Chi Tiết Theo Chức Năng
+
+### Frontend
+
+- Nhận dữ liệu từ backend qua REST API
+- Render product cards, gallery, cart, checkout, profile, admin panel
+- Kết nối WebSocket để chat streaming
+- Tự fallback ảnh khi URL cũ hoặc URL lỗi
+
+### Backend
+
+- Đóng vai trò API gateway cho app
+- Kết nối MongoDB Atlas
+- Quản lý ảnh qua GridFS
+- Điều phối chat sang EmpathAI
+- Giữ các HTTP chat cũ ở trạng thái internal diagnostics
 
 ### EmpathAI
 
-- Router intent bằng embedding
-- Tra cứu đơn hàng và chính sách
-- Thực thi action khi phù hợp
-- Viết phản hồi thấu cảm bằng LLM qua Featherless
-- Stream token realtime về UI
+- Router intent
+- Hybrid retrieval / policy lookup
+- Action execution cho các tác vụ hỗ trợ khách hàng
+- Writer / reviewer tạo phản hồi cuối cùng
+- Stream token realtime về backend
 
-## Chat Flow
+## Cấu Trúc Repository
 
-Chat UI của MilkyBloom hiện chỉ dùng streaming:
+```text
+MilkyBloomVibeCode/
+├── frontend/              # UI React + Vite
+├── backend/               # API Express + MongoDB + GridFS
+├── agentic-ai/            # EmpathAI service
+├── docs/                  # Tài liệu tích hợp và vận hành
+└── README.md              # Tài liệu tổng quan của toàn bộ hệ thống
+```
 
-1. Người dùng gửi tin nhắn từ frontend
-2. Backend nhận yêu cầu chat và đẩy qua WebSocket
-3. EmpathAI xử lý pipeline agentic
-4. Token được stream về UI từng phần
+### Backend
 
-Các endpoint HTTP chat cũ đã bị khóa cho public use và chỉ còn tồn tại như internal diagnostics.
+```text
+backend/
+├── src/
+│   ├── controllers/
+│   ├── routes/
+│   ├── services/
+│   ├── utils/
+│   └── libs/
+├── scripts/
+├── data/
+└── .env.example
+```
+
+### EmpathAI
+
+```text
+agentic-ai/
+├── python/
+├── data/
+├── server.py
+├── ws_server.py
+└── environment.yml
+```
+
+## Công Nghệ Chính
+
+| Lớp | Công nghệ | Vai trò |
+|---|---|---|
+| Frontend | React, Vite, Tailwind, Radix | Giao diện người dùng và admin |
+| Backend | Node.js, Express, MongoDB, GridFS | API, auth, data, media |
+| Chat Streaming | WebSocket | Stream token realtime |
+| Agentic AI | Python, LangGraph | Router, retrieval, action, writer |
+| LLM Backend | Featherless | Sinh phản hồi cho EmpathAI |
 
 ## Chạy Dự Án
 
@@ -57,36 +211,30 @@ npm install
 npm run dev
 ```
 
-### 2b. Seed Demo Catalog
+Backend local mặc định chạy trên `http://localhost:6969`.
 
-Để có dữ liệu mẫu và ảnh demo ngay sau khi clone, chạy script seed catalog:
+### 3. Seed Demo Catalog
 
 ```bash
 cd backend
 npm run seed:catalog
 ```
 
-Script này sẽ:
-- tạo catalog demo trong MongoDB
-- lưu ảnh demo trực tiếp trong MongoDB GridFS, frontend đọc qua URL stream của backend
-- demo vẫn có ảnh mà không cần file local
-- dùng file nguồn chuẩn ở `backend/data/popmart-products.json`
-- với Pop Mart seed, ảnh nguồn được tải vào GridFS rồi phục vụ từ backend, không phụ thuộc CDN ngoài
+Script này:
 
-Nếu bạn đã có dữ liệu cũ trỏ về `/seed-images/...`, chạy thêm migration này một lần:
+- tạo dữ liệu mẫu trong MongoDB
+- lưu ảnh demo vào MongoDB GridFS
+- phát ảnh qua URL stream của backend
+- không cần ảnh local trong repo
+
+Nếu bạn có dữ liệu cũ trỏ về `/seed-images/...`, chạy thêm:
 
 ```bash
 cd backend
 npm run migrate:seed-images
 ```
 
-Script migrate sẽ:
-- quét `categories`, `products`, `variants`, `reviews`, `comments`
-- đổi URL local cũ sang URL stream được phục vụ từ MongoDB GridFS
-
-### 3. EmpathAI
-
-Khuyến nghị dùng Conda env `deeplearning`:
+### 4. EmpathAI
 
 ```bash
 cd agentic-ai
@@ -94,7 +242,7 @@ conda activate deeplearning
 ./run_agentic.sh
 ```
 
-Hoặc chạy thủ công:
+Hoặc chạy riêng:
 
 ```bash
 cd agentic-ai
@@ -102,26 +250,18 @@ python server.py
 python ws_server.py
 ```
 
-## Môi Trường EmpathAI
-
-Nếu clone sang máy khác:
-
-```bash
-cd agentic-ai
-conda env create -f environment.yml
-conda activate deeplearning
-./run_agentic.sh
-```
-
 ## Cấu Hình Quan Trọng
 
 ### Backend
 
-- Backend local mặc định chạy trên `http://localhost:6969`
+- `PORT=6969`
 - `MONGO_URI` trỏ tới MongoDB Atlas đã deploy
 - `CHAT_PROVIDER=agentic`
 - `AGENTIC_AI_WS_URL=ws://127.0.0.1:8788`
-- Ảnh sản phẩm, biến thể, category, review, comment, avatar đều được lưu dưới dạng URL stream từ MongoDB GridFS, không cần dịch vụ lưu ảnh ngoài
+
+### Frontend
+
+- `VITE_API_URL=http://localhost:6969/api`
 
 ### EmpathAI
 
@@ -129,14 +269,20 @@ conda activate deeplearning
 - `FEATHERLESS_BASE_URL=https://api.featherless.ai/v1`
 - `EMPATHY_MODE=featherless`
 
-## Tài Liệu Chi Tiết
+## Tài Liệu Liên Quan
 
-- [MilkyBloom frontend docs](frontend/README.md)
-- [EmpathAI subsystem docs](agentic-ai/README.md)
+- [Frontend README](frontend/README.md)
+- [EmpathAI README](agentic-ai/README.md)
 - [EmpathAI local run guide](agentic-ai/README.local.md)
+
+## Thành Viên
+
+- `523H0173` - Võ Xuân Quang
+- `523H0178` - Hoàng Xuân Thành
 
 ## Ghi Chú
 
 - Chat UI hiện là **streaming only**
-- `GET /providers` chỉ còn là snapshot nội bộ cho monitoring/debug
-- `POST /chat/message`, `POST /chat/agentic`, `POST /chat/gemini` đã bị khóa cho public use
+- `GET /providers` chỉ là snapshot nội bộ cho monitoring/debug
+- Các endpoint HTTP chat cũ chỉ còn dùng cho internal diagnostics
+- Ảnh demo và ảnh nghiệp vụ đều đi qua MongoDB GridFS, không cần ảnh local trong repo
