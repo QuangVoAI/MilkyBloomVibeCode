@@ -9,6 +9,7 @@ node_modules/
 # Environment variables / secrets
 .env
 .env.*
+!.env.example
 .env.local
 .env.*.local
 
