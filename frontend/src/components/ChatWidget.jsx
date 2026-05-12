@@ -1,262 +1,346 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { MessageCircle, Send, Sparkles, Trash2, X } from 'lucide-react'
-import { socketService } from '@/services/socket.service'
-import { getChatProviderStatus } from '@/services'
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { MessageCircle, Send, Sparkles, Ticket, Trash2, X } from "lucide-react";
+import { socketService } from "@/services/socket.service";
+import "./ChatWidget.css";
 
-const STORAGE_KEY = 'milkybloom-chat-session-v2'
-const PROVIDER_STORAGE_KEY = 'milkybloom-chat-provider-v1'
-const MAX_HISTORY = 20
+const STORAGE_KEY = "milkybloom-chat-session-v2";
+const SESSION_ID_KEY = "milkybloom-chat-session-id-v1";
+const PROVIDER_STORAGE_KEY = "milkybloom-chat-provider-v1";
+const MAX_HISTORY = 20;
 
 const WELCOME_MESSAGE = {
-  role: 'assistant',
+  role: "assistant",
   content:
-    'Xin chào, mình là trợ lý MilkyBloom. Bạn cần hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hay chính sách nào?',
-}
+    "Xin chào, mình là trợ lý MilkyBloom. Bạn cần hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hay chính sách nào?",
+};
 
-const QUICK_PROMPTS = [
-  'Tôi muốn xem sản phẩm phù hợp cho bé 3 tuổi',
-  'Phí ship và thời gian giao hàng thế nào?',
-  'Tôi muốn kiểm tra trạng thái đơn hàng',
-]
-
-const ORDER_STATUS_PROMPT_RE = /(trạng thái đơn hàng|kiểm tra.*đơn hàng|theo dõi.*đơn|đơn hàng.*đến đâu|bao giờ giao|chưa nhận được hàng|tracking đơn|ship chưa|giao chưa)/i
-
-const getProviderLabel = (providerState) => {
-  if (!providerState?.provider) return 'Loading...'
-
-  switch (providerState.provider) {
-    case 'remote':
-      return 'Featherless'
-    case 'agentic':
-      return 'Agentic AI'
-    case 'gemini':
-      return 'Gemini'
-    case 'auto':
-      return 'Auto'
-    default:
-      return providerState.provider
-  }
-}
-
-const getProviderDisplayName = (provider) => {
-  switch (provider) {
-    case 'agentic':
-      return 'Agentic AI'
-    case 'remote':
-      return 'Featherless'
-    case 'gemini':
-      return 'Gemini'
-    case 'auto':
-      return 'Auto'
-    default:
-      return provider || 'Auto'
-  }
-}
+const LAUNCH_SLOGANS = [
+  "Gọn, nhanh, rõ.",
+  "Chạm để mở chat.",
+  "Một câu là đủ bắt đầu.",
+  "Trợ lý mềm mại, trả lời sắc nét.",
+  "Hỏi gì cũng có lối trả lời.",
+  "Mở chat nhẹ nhàng, hỏi ngay điều bạn cần.",
+  "Đơn hàng, sản phẩm, đổi trả đều sẵn sàng.",
+  "Cần hỗ trợ, cứ để mình lo.",
+  "Tối giản để bạn tập trung vào điều quan trọng.",
+  "Trả lời ngắn gọn, dễ hiểu, đúng trọng tâm.",
+  "Mọi câu hỏi đều bắt đầu bằng một chạm.",
+  "Hỗ trợ nhanh, không làm bạn chờ lâu.",
+  "Hỏi xong, có câu trả lời ngay.",
+  "Mềm mại như glass, rõ ràng như lời nhắc.",
+  "Tập trung vào câu hỏi, bỏ qua nhiễu.",
+  "Một trợ lý nhỏ, một trải nghiệm mượt.",
+  "Mở chat là có trợ giúp.",
+  "Cần kiểm tra đơn, mình hỗ trợ ngay.",
+  "Cần đổi trả, mình hướng dẫn từng bước.",
+  "Cần tư vấn, mình nói ngắn gọn cho dễ chọn.",
+  "Đặt câu hỏi, phần còn lại để mình xử lý.",
+  "Nhanh hơn một tab, gọn hơn một cuộc gọi.",
+  "Lịch sự, rõ ràng, đúng việc.",
+  "Một nơi cho mọi câu hỏi của bạn.",
+  "Mở nhẹ, hỏi nhanh, hiểu liền.",
+  "Hỗ trợ như một người trợ lý thật sự.",
+  "Bắt đầu bằng một câu, kết thúc bằng câu trả lời.",
+  "Tìm đơn, hỏi chính sách, tra sản phẩm đều tiện.",
+  "Không cần vòng vo, cứ hỏi thẳng.",
+  "Giữ nhịp chat gọn gàng và dễ theo dõi.",
+  "Giải đáp nhanh, trình bày sạch.",
+  "Tất cả những gì bạn cần, ở ngay đây.",
+  "Mở chat để đi thẳng vào việc.",
+  "Ít nhiễu hơn, nhiều câu trả lời hơn.",
+  "Chạm nhẹ, vào việc ngay.",
+  "Luôn sẵn sàng khi bạn cần.",
+  "Tinh gọn, sáng rõ, dễ dùng.",
+  "Đơn hàng đang ở đâu? Mình kiểm tra giúp.",
+  "Muốn xem sản phẩm nào? Hỏi mình nhé.",
+  "Cần thông tin rõ ràng, mình sẽ nói gọn.",
+  "Giữ mọi thứ nhẹ tay, cho bạn dễ tập trung.",
+  "Hỗ trợ dịu dàng, kết quả rõ ràng.",
+  "Một giao diện nhỏ, nhiều giá trị.",
+  "Mở chat, mọi thứ trở nên đơn giản hơn.",
+  "Bạn hỏi, mình tìm câu trả lời.",
+  "Nhanh gọn như một cú chạm.",
+  "Trợ lý đồng hành cho mọi thắc mắc.",
+  "Một chạm để bắt đầu hỗ trợ.",
+  "Gọn gàng, thân thiện, đúng lúc.",
+  "Càng hỏi nhiều, càng tiện hơn.",
+  "Chat nhẹ thôi, phần còn lại để mình lo.",
+];
 
 const getChatPhaseLabel = (phase) => {
   switch (phase) {
-    case 'connected':
-      return 'Connected'
-    case 'streaming':
-      return 'Streaming'
-    case 'done':
-      return 'Done'
-    case 'error':
-      return 'Error'
-    case 'offline':
-      return 'Offline'
+    case "connected":
+      return "Connected";
+    case "streaming":
+      return "Streaming";
+    case "done":
+      return "Done";
+    case "error":
+      return "Error";
+    case "offline":
+      return "Offline";
     default:
-      return 'Idle'
+      return "";
   }
-}
+};
 
 const getUserIdFromStorage = () => {
   try {
-    const raw = localStorage.getItem('user')
-    if (!raw) return ''
-    const parsed = JSON.parse(raw)
-    return parsed?.id || parsed?._id || ''
+    const raw = localStorage.getItem("user");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return parsed?.id || parsed?._id || "";
   } catch {
-    return ''
+    return "";
   }
-}
+};
+
+const getUserRoleFromStorage = () => {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return parsed?.role || "";
+  } catch {
+    return "";
+  }
+};
 
 const ChatWidget = () => {
-  const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState([WELCOME_MESSAGE])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [providerState, setProviderState] = useState(null)
-  const [selectedProvider, setSelectedProvider] = useState('')
-  const [hydrated, setHydrated] = useState(false)
-  const [chatPhase, setChatPhase] = useState('idle')
-  const messagesRef = useRef(null)
-  const assistantIndexRef = useRef(null)
-  const streamingSessionIdRef = useRef('')
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [isPresented, setIsPresented] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+  const [chatPhase, setChatPhase] = useState("idle");
+  const [launchSloganIndex, setLaunchSloganIndex] = useState(0);
+  const messagesRef = useRef(null);
+  const sheetRef = useRef(null);
+  const assistantIndexRef = useRef(null);
+  const streamingSessionIdRef = useRef("");
+  const chatSessionIdRef = useRef("");
+  const closeTimerRef = useRef(null);
+
+  const openChat = () => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setIsClosing(false);
+    setIsPresented(true);
+    setOpen(true);
+  };
+
+  const closeChat = () => {
+    if (!isPresented || isClosing) return;
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+      setIsPresented(false);
+      setIsClosing(false);
+      closeTimerRef.current = null;
+    }, 320);
+  };
 
   const normalizeProviderChoice = (value) => {
-    if (value === 'agentic' || value === 'auto') {
-      return value
+    if (value === "agentic" || value === "auto") {
+      return value;
     }
-    return 'agentic'
-  }
+    return "agentic";
+  };
 
   const effectiveProvider = normalizeProviderChoice(
-    selectedProvider || 'agentic',
-  )
-  const providerLabel = useMemo(
-    () => getProviderDisplayName(effectiveProvider),
-    [effectiveProvider],
-  )
+    selectedProvider || "agentic",
+  );
 
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY)
+      const storedSessionId = sessionStorage.getItem(SESSION_ID_KEY);
+      if (storedSessionId) {
+        chatSessionIdRef.current = storedSessionId;
+      } else {
+        const nextSessionId = `chat_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        chatSessionIdRef.current = nextSessionId;
+        sessionStorage.setItem(SESSION_ID_KEY, nextSessionId);
+      }
+    } catch {
+      chatSessionIdRef.current = `chat_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+    }
+
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw)
+        const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
-          setMessages(parsed.messages)
+          setMessages(parsed.messages);
         }
-        if (typeof parsed.open === 'boolean') {
-          setOpen(parsed.open)
+        if (typeof parsed.open === "boolean") {
+          setOpen(parsed.open);
+          setIsPresented(parsed.open);
         }
       }
     } catch {
       // ignore invalid cache
     } finally {
-      setHydrated(true)
+      setHydrated(true);
     }
 
     try {
-      const storedProvider = localStorage.getItem(PROVIDER_STORAGE_KEY)
+      const storedProvider = localStorage.getItem(PROVIDER_STORAGE_KEY);
       if (storedProvider) {
-        setSelectedProvider(storedProvider === 'remote' ? 'agentic' : storedProvider)
+        setSelectedProvider(
+          storedProvider === "remote" ? "agentic" : storedProvider,
+        );
       }
     } catch {
       // ignore storage read failures
     }
 
-    ;(async () => {
-      try {
-        const response = await getChatProviderStatus()
-        if (response?.success) {
-          setProviderState(response.data)
-          setSelectedProvider((current) => normalizeProviderChoice(current || 'agentic'))
-        }
-      } catch {
-        setProviderState({ provider: 'unavailable' })
-        setSelectedProvider((current) => normalizeProviderChoice(current || 'agentic'))
-      }
-    })()
-
-    const userId = getUserIdFromStorage()
-    socketService.connect(userId, { token: localStorage.getItem('authToken') || '' })
+    const userId = getUserIdFromStorage();
+    socketService.connect(userId, {
+      token: localStorage.getItem("authToken") || "",
+    });
 
     const handleSocketConnect = () => {
-      setChatPhase('connected')
-    }
+      setChatPhase("connected");
+    };
 
     const handleSocketDisconnect = () => {
-      setChatPhase('offline')
-    }
+      setChatPhase("offline");
+    };
 
     const handleSocketReconnect = () => {
-      setChatPhase('connected')
-    }
+      setChatPhase("connected");
+    };
 
     const handleSocketConnectError = () => {
-      setChatPhase('offline')
-    }
+      setChatPhase("offline");
+    };
 
     const handleStatus = (data) => {
-      if (data?.session_id && data.session_id !== streamingSessionIdRef.current) return
-      if (data?.status === 'started' || data?.status === 'streaming') {
-        setChatPhase('streaming')
+      if (data?.session_id && data.session_id !== streamingSessionIdRef.current)
+        return;
+      if (data?.status === "started" || data?.status === "streaming") {
+        setChatPhase("streaming");
       }
-    }
+    };
 
     const handleToken = (data) => {
-      if (data?.session_id && data.session_id !== streamingSessionIdRef.current) return
-      const chunk = data?.content || ''
-      if (!chunk || assistantIndexRef.current == null) return
+      if (data?.session_id && data.session_id !== streamingSessionIdRef.current)
+        return;
+      const chunk = data?.content || "";
+      if (!chunk || assistantIndexRef.current == null) return;
 
       setMessages((current) => {
-        const next = [...current]
-        const target = next[assistantIndexRef.current]
-        if (!target) return current
+        const next = [...current];
+        const target = next[assistantIndexRef.current];
+        if (!target) return current;
         next[assistantIndexRef.current] = {
           ...target,
-          content: `${target.content || ''}${chunk}`,
-        }
-        return next
-      })
-    }
+          content: `${target.content || ""}${chunk}`,
+        };
+        return next;
+      });
+    };
 
     const handleFinal = (data) => {
-      if (data?.session_id && data.session_id !== streamingSessionIdRef.current) return
+      if (data?.session_id && data.session_id !== streamingSessionIdRef.current)
+        return;
       if (assistantIndexRef.current == null) {
-        setLoading(false)
-        return
+        setLoading(false);
+        return;
       }
       if (data?.reply) {
+        const confidence = Number(
+          data?.router_confidence ??
+            data?.action_confidence ??
+            data?.sentiment_score ??
+            0,
+        );
         setMessages((current) => {
-          const next = [...current]
-          const target = next[assistantIndexRef.current]
-          if (!target) return current
+          const next = [...current];
+          const target = next[assistantIndexRef.current];
+          if (!target) return current;
           next[assistantIndexRef.current] = {
             ...target,
             content: data.reply,
-          }
-          return next
-        })
+            meta: {
+              ...(target.meta || {}),
+              ticketId: data.ticket_id || data.action_result?.ticket_id || "",
+              ticketNumber:
+                data.ticket_number ||
+                data.action_result?.updated_fields?.ticket_number ||
+                "",
+              traceId: data.trace_id || "",
+              intent: data.intent || "",
+              routerConfidence: confidence,
+              routerMethod: data.router_method || "",
+              actionConfidence: Number(data.action_confidence || 0),
+              actionMethod: data.action_method || "",
+              clarificationNeeded: Boolean(data.clarification_needed),
+            },
+          };
+          return next;
+        });
       }
-      setLoading(false)
-      setChatPhase('done')
-      streamingSessionIdRef.current = ''
-      assistantIndexRef.current = null
-    }
+      setLoading(false);
+      setChatPhase("done");
+      streamingSessionIdRef.current = "";
+      assistantIndexRef.current = null;
+    };
 
     const handleError = (data) => {
-      if (data?.session_id && data.session_id !== streamingSessionIdRef.current) return
-      const message = data?.message || 'Hệ thống chat tạm thời chưa sẵn sàng.'
+      if (data?.session_id && data.session_id !== streamingSessionIdRef.current)
+        return;
+      const message = data?.message || "Hệ thống chat tạm thời chưa sẵn sàng.";
       if (assistantIndexRef.current != null) {
         setMessages((current) => {
-          const next = [...current]
-          const target = next[assistantIndexRef.current]
-          if (!target) return current
-          next[assistantIndexRef.current] = { ...target, content: message }
-          return next
-        })
+          const next = [...current];
+          const target = next[assistantIndexRef.current];
+          if (!target) return current;
+          next[assistantIndexRef.current] = { ...target, content: message };
+          return next;
+        });
       }
-      setLoading(false)
-      setChatPhase('error')
-      streamingSessionIdRef.current = ''
-      assistantIndexRef.current = null
-    }
+      setLoading(false);
+      setChatPhase("error");
+      streamingSessionIdRef.current = "";
+      assistantIndexRef.current = null;
+    };
 
-    socketService.on('connect', handleSocketConnect)
-    socketService.on('disconnect', handleSocketDisconnect)
-    socketService.on('reconnect', handleSocketReconnect)
-    socketService.on('connect_error', handleSocketConnectError)
-    socketService.on('chat_token', handleToken)
-    socketService.on('chat_final', handleFinal)
-    socketService.on('chat_error', handleError)
-    socketService.on('chat_status', handleStatus)
+    socketService.on("connect", handleSocketConnect);
+    socketService.on("disconnect", handleSocketDisconnect);
+    socketService.on("reconnect", handleSocketReconnect);
+    socketService.on("connect_error", handleSocketConnectError);
+    socketService.on("chat_token", handleToken);
+    socketService.on("chat_final", handleFinal);
+    socketService.on("chat_error", handleError);
+    socketService.on("chat_status", handleStatus);
 
     return () => {
-      socketService.off('connect', handleSocketConnect)
-      socketService.off('disconnect', handleSocketDisconnect)
-      socketService.off('reconnect', handleSocketReconnect)
-      socketService.off('connect_error', handleSocketConnectError)
-      socketService.off('chat_token', handleToken)
-      socketService.off('chat_final', handleFinal)
-      socketService.off('chat_error', handleError)
-      socketService.off('chat_status', handleStatus)
-    }
-  }, [])
+      socketService.off("connect", handleSocketConnect);
+      socketService.off("disconnect", handleSocketDisconnect);
+      socketService.off("reconnect", handleSocketReconnect);
+      socketService.off("connect_error", handleSocketConnectError);
+      socketService.off("chat_token", handleToken);
+      socketService.off("chat_final", handleFinal);
+      socketService.off("chat_error", handleError);
+      socketService.off("chat_status", handleStatus);
+    };
+  }, []);
 
   useEffect(() => {
-    if (!hydrated) return
+    if (!hydrated) return;
 
     try {
       sessionStorage.setItem(
@@ -264,245 +348,324 @@ const ChatWidget = () => {
         JSON.stringify({
           open,
           messages: messages.slice(-MAX_HISTORY),
-          provider: selectedProvider || '',
+          provider: selectedProvider || "",
         }),
-      )
+      );
     } catch {
       // ignore storage write failures
     }
-  }, [messages, open, hydrated, selectedProvider])
+  }, [messages, open, hydrated, selectedProvider]);
 
   useEffect(() => {
-    if (!messagesRef.current) return
-    messagesRef.current.scrollTop = messagesRef.current.scrollHeight
-  }, [messages, open])
+    if (!messagesRef.current) return;
+    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+  }, [messages, open]);
 
-  const sendViaWebSocket = (trimmed, options = {}) => {
-    const sessionId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    streamingSessionIdRef.current = sessionId
-    setChatPhase('streaming')
-    assistantIndexRef.current = messages.length + 1
-    setMessages((current) => [...current, { role: 'assistant', content: '' }])
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const sendViaWebSocket = (trimmed, nextMessages, options = {}) => {
+    const sessionId =
+      chatSessionIdRef.current ||
+      `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    chatSessionIdRef.current = sessionId;
+    streamingSessionIdRef.current = sessionId;
+    setChatPhase("streaming");
+    assistantIndexRef.current = nextMessages.length;
+    setMessages((current) => [
+      ...current,
+      { role: "assistant", content: "", meta: {} },
+    ]);
     const provider = normalizeProviderChoice(
       options.provider || effectiveProvider,
-    )
+    );
     socketService.sendChatMessage({
       message: trimmed,
-      history: messages.slice(-MAX_HISTORY),
-      provider: provider === 'auto' ? 'agentic' : provider,
+      history: nextMessages.slice(-MAX_HISTORY),
+      provider: provider === "auto" ? "agentic" : provider,
       sessionId,
-      authToken: localStorage.getItem('authToken') || '',
-    })
-  }
+      authToken: localStorage.getItem("authToken") || "",
+    });
+  };
 
   const sendMessage = async (text, options = {}) => {
-    const trimmed = text.trim()
-    if (!trimmed || loading) return
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
 
-    const userMessage = { role: 'user', content: trimmed }
-    setMessages((current) => [...current, userMessage])
-    setInput('')
-    setLoading(true)
-    sendViaWebSocket(trimmed, options)
-  }
+    const userMessage = { role: "user", content: trimmed };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setInput("");
+    setLoading(true);
+    sendViaWebSocket(trimmed, nextMessages, options);
+  };
 
   const handleSubmit = async (event) => {
-    event.preventDefault()
-    await sendMessage(input)
-  }
-
-  const handleQuickPrompt = async (prompt) => {
-    const shouldForceAgentic = ORDER_STATUS_PROMPT_RE.test(prompt)
-    if (shouldForceAgentic) {
-      handleChangeProvider('agentic')
-    }
-    await sendMessage(prompt, {
-      provider: shouldForceAgentic ? 'agentic' : effectiveProvider,
-    })
-  }
+    event.preventDefault();
+    await sendMessage(input);
+  };
 
   const handleClear = () => {
-    setMessages([WELCOME_MESSAGE])
-    setInput('')
-    setLoading(false)
-    setChatPhase('idle')
-    streamingSessionIdRef.current = ''
-    assistantIndexRef.current = null
+    setMessages([WELCOME_MESSAGE]);
+    setInput("");
+    setLoading(false);
+    setChatPhase("idle");
+    streamingSessionIdRef.current = "";
+    chatSessionIdRef.current = "";
+    assistantIndexRef.current = null;
     try {
-      sessionStorage.removeItem(STORAGE_KEY)
-      localStorage.removeItem(PROVIDER_STORAGE_KEY)
+      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(SESSION_ID_KEY);
+      localStorage.removeItem(PROVIDER_STORAGE_KEY);
     } catch {
       // ignore storage failure
     }
-  }
-
-  const handleChangeProvider = (provider) => {
-    const nextProvider = normalizeProviderChoice(provider)
-    setSelectedProvider(nextProvider)
-    try {
-      localStorage.setItem(PROVIDER_STORAGE_KEY, nextProvider)
-    } catch {
-      // ignore storage failure
-    }
-  }
+  };
 
   const statusClassName = () => {
     switch (chatPhase) {
-      case 'connected':
-        return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      case 'streaming':
-        return 'border-sky-200 bg-sky-50 text-sky-700'
-      case 'done':
-        return 'border-rose-200 bg-rose-50 text-rose-700'
-      case 'error':
-        return 'border-amber-200 bg-amber-50 text-amber-700'
-      case 'offline':
-        return 'border-slate-200 bg-slate-50 text-slate-500'
+      case "connected":
+        return "border-emerald-200 bg-emerald-50 text-emerald-700";
+      case "streaming":
+        return "border-sky-200 bg-sky-50 text-sky-700";
+      case "done":
+        return "border-rose-200 bg-rose-50 text-rose-700";
+      case "error":
+        return "border-amber-200 bg-amber-50 text-amber-700";
+      case "offline":
+        return "border-slate-200 bg-slate-50 text-slate-500";
       default:
-        return 'border-slate-200 bg-slate-50 text-slate-500'
+        return "border-slate-200 bg-slate-50 text-slate-500";
     }
-  }
+  };
+
+  const sheetStateClassName =
+    chatPhase === "streaming"
+      ? "chat-widget-sheet--streaming"
+      : chatPhase === "connected" || chatPhase === "done"
+        ? "chat-widget-sheet--active"
+        : "";
+
+  useEffect(() => {
+    if (open) return undefined;
+
+    const interval = window.setInterval(() => {
+      setLaunchSloganIndex((current) => (current + 1) % LAUNCH_SLOGANS.length);
+    }, 2200);
+
+    return () => window.clearInterval(interval);
+  }, [open]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-[80] sm:bottom-6 sm:right-6">
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="group flex items-center gap-3 rounded-full bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 px-4 py-3 text-white shadow-2xl shadow-rose-300/40 transition-transform hover:scale-[1.03]"
-          aria-label="Open MilkyBloom chat"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15">
-            <MessageCircle className="h-5 w-5" />
-          </span>
-          <span className="pr-1 text-sm font-semibold">Ask MilkyBloom</span>
-          <Sparkles className="h-4 w-4 opacity-80" />
-        </button>
+    <>
+      {!isPresented ? (
+        <div className="fixed bottom-4 right-4 z-[80] sm:bottom-6 sm:right-6">
+          <button
+            type="button"
+            onClick={openChat}
+            className="chat-widget-launch group flex aspect-[16/9] w-[clamp(248px,22vw,340px)] flex-col justify-between rounded-[30px] px-4 py-4 text-slate-900 sm:w-[clamp(268px,20vw,360px)]"
+            aria-label="Open MilkyBloom chat"
+          >
+          <div className="flex items-start justify-between gap-4">
+            <span className="chat-widget-launch__orb flex h-10 w-10 items-center justify-center rounded-full text-white">
+              <MessageCircle className="h-5 w-5" />
+            </span>
+          </div>
+
+          <div className="space-y-2 text-left">
+            <span className="block text-[26px] font-semibold tracking-[-0.055em]">
+              MilkyBloom Assistant
+            </span>
+            <span
+              key={launchSloganIndex}
+              className="chat-widget-launch__slogan block max-w-[22ch] text-[14px] leading-6 text-slate-600"
+            >
+              {LAUNCH_SLOGANS[launchSloganIndex]}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-end pt-1">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/72 text-sky-500 shadow-[0_10px_18px_rgba(15,23,42,0.08)]">
+              <Send className="h-3.5 w-3.5 -rotate-12" />
+            </span>
+          </div>
+          </button>
+        </div>
       ) : (
-        <div className="flex h-[32rem] w-[calc(100vw-1.5rem)] max-w-[24rem] flex-col overflow-hidden rounded-[28px] border border-rose-100 bg-[linear-gradient(180deg,#fffefc_0%,#fff5f0_100%)] shadow-[0_30px_80px_rgba(190,90,90,0.25)]">
-          <div className="flex items-center justify-between border-b border-rose-100 px-4 py-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-amber-400 text-white">
-                  <Sparkles className="h-4 w-4" />
+        <div
+          className={`chat-widget-backdrop fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/10 p-2 backdrop-blur-[14px] sm:p-6 ${
+            isClosing ? "chat-widget-backdrop--closing" : "chat-widget-backdrop--open"
+          }`}
+          onClick={closeChat}
+        >
+          <div
+            ref={sheetRef}
+            className={`chat-widget-sheet ${
+              isClosing ? "chat-widget-sheet--closing" : "chat-widget-sheet--open"
+            } ${sheetStateClassName} relative h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-h-[52rem] max-w-[56rem] overflow-hidden rounded-[36px] shadow-[0_28px_80px_rgba(15,23,42,0.16)] sm:h-[min(82vh,52rem)] sm:w-[min(92vw,56rem)]`}
+            onClick={(event) => event.stopPropagation()}
+          >
+          <div className="chat-widget-sheet__glass relative z-[1] flex h-full w-full flex-col overflow-hidden rounded-[34px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(252,252,254,0.88))] backdrop-blur-[28px]">
+            <div className="chat-widget-sheet__content relative flex h-full w-full flex-col">
+            <div className="chat-widget-intel-aurora" aria-hidden="true" />
+            <div
+              className="chat-widget-intel-orb chat-widget-intel-orb--one"
+              aria-hidden="true"
+            />
+            <div
+              className="chat-widget-glow chat-widget-glow--rose"
+              aria-hidden="true"
+            />
+            <div
+              className="chat-widget-glow chat-widget-glow--amber"
+              aria-hidden="true"
+            />
+
+            <div className="relative px-4 pt-3">
+              <div
+                className="mx-auto h-[5px] w-11 rounded-full bg-slate-300/32 shadow-[0_1px_0_rgba(255,255,255,0.78)]"
+                aria-hidden="true"
+              />
+            </div>
+
+            <div className="chat-widget-sheet__header relative flex items-start justify-between gap-3 px-4 py-3.5">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <div className="chat-widget-orb mt-0.5 flex h-12 w-12 items-center justify-center rounded-full border border-white/80 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.99)_0%,rgba(255,239,246,0.94)_20%,rgba(255,214,221,0.76)_44%,rgba(191,219,254,0.46)_70%,rgba(192,132,252,0.62)_88%,rgba(251,113,133,0.88)_100%)] text-white shadow-[0_14px_32px_rgba(251,113,133,0.2)] ring-2 ring-white/70">
+                  <Sparkles className="h-[18px] w-[18px] drop-shadow-[0_1px_1px_rgba(255,255,255,0.42)]" />
                 </div>
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">
-                    MilkyBloom Assistant
-                  </div>
-                  <div className="text-xs text-slate-500">{providerLabel}</div>
-                  <div className="mt-1 inline-flex items-center rounded-full border border-rose-100 bg-white px-2 py-0.5 text-[11px] text-slate-500">
-                    Đang dùng: {providerLabel}
-                  </div>
-                  <div className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusClassName()}`}>
-                    {getChatPhaseLabel(chatPhase)}
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Backend snapshot: {getProviderLabel(providerState)}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="truncate text-[19px] font-bold tracking-[-0.05em] text-slate-950">
+                      MilkyBloom Assistant
+                    </h2>
+                    {getChatPhaseLabel(chatPhase) ? (
+                      chatPhase === "connected" || chatPhase === "streaming" ? (
+                        <span
+                          className={`inline-flex h-2.5 w-2.5 rounded-full ${
+                            chatPhase === "connected"
+                              ? "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"
+                              : "bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.16)] animate-pulse"
+                          }`}
+                          aria-label={getChatPhaseLabel(chatPhase)}
+                          title={getChatPhaseLabel(chatPhase)}
+                        />
+                      ) : (
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClassName()}`}
+                        >
+                          {getChatPhaseLabel(chatPhase)}
+                        </span>
+                      )
+                    ) : null}
                   </div>
                 </div>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {['agentic', 'auto'].map((provider) => {
-                  const active = effectiveProvider === provider
-                  return (
-                    <button
-                      key={provider}
-                      type="button"
-                      onClick={() => handleChangeProvider(provider)}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
-                        active
-                          ? 'border-rose-400 bg-rose-50 text-rose-700'
-                          : 'border-rose-100 bg-white text-slate-500 hover:bg-rose-50 hover:text-slate-700'
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-800"
+                  aria-label="Clear chat"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={closeChat}
+                  className="rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-800"
+                  aria-label="Close chat"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div
+              ref={messagesRef}
+              className="chat-widget-sheet__messages chat-widget-message-pane chat-widget-scroll relative flex-1 space-y-3 overflow-y-auto px-4 py-4"
+            >
+              {messages.map((message, index) => {
+                const isUser = message.role === "user";
+                const isAssistant = message.role === "assistant";
+                const isTyping =
+                  isAssistant && loading && index === assistantIndexRef.current;
+                return (
+                  <div
+                    key={`${message.role}-${index}`}
+                    className={`chat-widget-message flex ${isUser ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[88%] rounded-[24px] px-4 py-3 text-[15px] leading-[1.65] shadow-[0_12px_34px_rgba(15,23,42,0.08)] ${
+                        isUser
+                          ? "bg-slate-900 text-white shadow-[0_14px_28px_rgba(15,23,42,0.2)]"
+                          : "border border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.998),rgba(255,240,246,0.99))] text-slate-950 shadow-[0_14px_34px_rgba(15,23,42,0.1)]"
                       }`}
                     >
-                      {getProviderDisplayName(provider)}
-                    </button>
-                  )
-                })}
-              </div>
+                      <div className="whitespace-pre-wrap">
+                        {message.content || (isTyping ? "Đang suy nghĩ" : "")}
+                      </div>
+                      {isTyping && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:-0.2s]" />
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:-0.1s]" />
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400" />
+                        </div>
+                      )}
+                      {isAssistant &&
+                        (message.meta?.ticketId ||
+                          message.meta?.ticketNumber) &&
+                        getUserRoleFromStorage() === "admin" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                `/admin/support-tickets/${message.meta.ticketId || message.meta.ticketNumber}`,
+                              )
+                            }
+                            className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            <Ticket className="h-3.5 w-3.5" />
+                            Open ticket
+                          </button>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handleClear}
-                className="rounded-full p-2 text-slate-500 transition hover:bg-white hover:text-slate-800"
-                aria-label="Clear chat"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-full p-2 text-slate-500 transition hover:bg-white hover:text-slate-800"
-                aria-label="Close chat"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div
-            ref={messagesRef}
-            className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
-          >
-            {messages.map((message, index) => (
-              <div
-                key={`${message.role}-${index}`}
-                className={`flex ${
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                }`}
-              >
-                <div
-                  className={`max-w-[85%] whitespace-pre-wrap rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${
-                    message.role === 'user'
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-white text-slate-700'
-                  }`}
-                >
-                  {message.content || (loading && index === assistantIndexRef.current ? 'Đang suy nghĩ...' : '')}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t border-rose-100 bg-white/70 px-3 py-3 backdrop-blur">
-            <div className="mb-2 flex flex-wrap gap-2">
-              {QUICK_PROMPTS.map((prompt) => (
+            <div className="chat-widget-sheet__composer border-t border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.86))] px-4 py-4 backdrop-blur-[22px]">
+              <form onSubmit={handleSubmit} className="flex items-stretch gap-2">
+                <textarea
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  rows={2}
+                  placeholder="Type to MilkyBloom"
+                  className="chat-widget-siri-input h-[78px] flex-1 resize-none rounded-[24px] border border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.995),rgba(255,240,246,0.96))] px-4 py-4 text-[17px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_rgba(15,23,42,0.05)] outline-none transition placeholder:text-slate-600 focus:border-rose-300/80 focus:ring-2 focus:ring-rose-100/80 sm:h-[82px] sm:text-[18px]"
+                />
                 <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => handleQuickPrompt(prompt)}
-                  className="rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-left text-[11px] text-rose-700 transition hover:bg-rose-100"
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="chat-widget-siri-send group flex h-[78px] w-[78px] items-center justify-center self-stretch rounded-[24px] transition disabled:cursor-not-allowed disabled:opacity-40 sm:h-[82px] sm:w-[82px]"
+                  aria-label="Send message"
                 >
-                  {prompt}
+                  <Send className="h-[18px] w-[18px] text-rose-500 drop-shadow-[0_1px_0_rgba(255,255,255,0.8)] transition duration-200 group-hover:translate-x-[1px] group-hover:-translate-y-[1px] group-hover:rotate-[-10deg] group-hover:text-rose-600" />
                 </button>
-              ))}
+              </form>
             </div>
-
-            <form onSubmit={handleSubmit} className="flex items-end gap-2">
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                rows={2}
-                placeholder="Nhập câu hỏi của bạn..."
-                className="min-h-[52px] flex-1 resize-none rounded-2xl border border-rose-100 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-rose-300"
-              />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-amber-400 text-white transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Send message"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
+            </div>
           </div>
         </div>
+        </div>
       )}
-    </div>
-  )
-}
+    </>
+  );
+};
 
-export default ChatWidget
+export default ChatWidget;

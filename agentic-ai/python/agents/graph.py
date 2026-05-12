@@ -16,6 +16,7 @@ import asyncio
 import time
 import sys
 import re
+import uuid
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -23,7 +24,7 @@ from typing import Callable, Awaitable, Optional
 from langgraph.graph import StateGraph, END
 
 from agents.state import AgentState
-from agents.router import classify
+from agents.router import classify, classify_with_metadata
 from agents.sentiment_analyzer import sentiment_analyzer_node
 from agents.empathy_writer import (
     generate_empathy_streaming, generate_casual, generate_inquiry,
@@ -40,14 +41,80 @@ from tools.order_tool import (
     get_order_info_by_phone,
     determine_suggested_actions,
 )
+from tools.catalog_tool import lookup_live_catalog
+from tools.checkout_tool import start_checkout
 from tools.action_tool import detect_action_intent, execute_action, resume_action_intent
 
 from config import MAX_REWRITE_RETRIES
 from utils.console import console
+from agents.prompt_registry import prompt_meta, POLICY_VERSION
 
 # Session-level pending actions for multi-turn action execution
 # Format: {session_id: {"action": str, ...}}
 _session_pending_actions: dict[str, dict] = {}
+
+ORDER_CONTEXT_KEYWORDS = [
+    "mã đơn",
+    "mã truy cập",
+    "access token",
+    "email đặt hàng",
+    "email xác nhận",
+    "số điện thoại",
+    "đơn hàng",
+    "trạng thái đơn",
+    "kiểm tra đơn",
+    "theo dõi đơn",
+    "tra cứu đơn",
+    "order",
+    "tracking",
+]
+
+CHECKOUT_KEYWORDS = [
+    "checkout",
+    "đặt hàng",
+    "mua hàng",
+    "giỏ hàng",
+    "cart",
+    "mua ngay",
+    "chốt đơn",
+    "tạo đơn",
+    "xác nhận đơn",
+    "đi đến thanh toán",
+]
+
+CATALOG_KEYWORDS = [
+    "còn hàng",
+    "hết hàng",
+    "còn bao nhiêu",
+    "còn size",
+    "còn màu",
+    "tồn kho",
+    "stock",
+    "inventory",
+    "màu nào",
+    "size nào",
+    "mẫu nào",
+]
+
+
+def _join_lookup_hints(hints: list[str]) -> str:
+    if not hints:
+        return ""
+    if len(hints) == 1:
+        return hints[0]
+    if len(hints) == 2:
+        return f"{hints[0]} hoặc {hints[1]}"
+    return ", ".join(hints[:-1]) + f", hoặc {hints[-1]}"
+
+
+def _is_checkout_request(text: str) -> bool:
+    q = (text or "").lower()
+    return any(keyword in q for keyword in CHECKOUT_KEYWORDS)
+
+
+def _is_catalog_request(text: str) -> bool:
+    q = (text or "").lower()
+    return any(keyword in q for keyword in CATALOG_KEYWORDS)
 
 
 # ================================================================
@@ -69,6 +136,7 @@ def order_lookup_node(state: AgentState) -> dict:
     phone_number = extract_phone_number(all_text) if not order_id else None
     order_info: dict = {}
     suggested_actions: list = []
+    has_order_context = any(keyword in all_text.lower() for keyword in ORDER_CONTEXT_KEYWORDS)
 
     pending_action_intent: dict = {}
     session_id = state.get("session_id", "")
@@ -78,12 +146,38 @@ def order_lookup_node(state: AgentState) -> dict:
     elif phone_number:
         order_info = get_order_info_by_phone(phone_number, shop_context)
     else:
-        console.print("[dim]  OrderLookup: no order ID in message[/]")
+        if has_order_context:
+            lookup_hints = [
+                "đăng nhập tài khoản đã đặt đơn",
+                "xác minh OTP của tài khoản chủ đơn",
+                "mã truy cập đơn hàng trong email xác nhận",
+                "email bạn dùng khi đặt hàng để mình giúp bạn tìm email xác nhận",
+            ]
+            order_info = {
+                "found": False,
+                "ownership_verified": False,
+                "verification_required": True,
+                "order_id": "",
+                "summary": (
+                    "Mình chưa thấy mã đơn trong tin nhắn này.\n"
+                    f"Bạn giúp mình { _join_lookup_hints(lookup_hints) } nhé."
+                ),
+                "lookup_hints": lookup_hints,
+                "suggested_actions": ["request_access_token"],
+            }
+            console.print("[dim]  OrderLookup: order context detected but no identifier[/]")
+        else:
+            console.print("[dim]  OrderLookup: no order ID in message[/]")
 
     if order_info:
         sentiment = state.get("sentiment", "")
         suggested_actions = determine_suggested_actions(order_info, sentiment)
-        lookup_label = f"order '{order_id}'" if order_id else f"phone '{phone_number}'"
+        if order_id:
+            lookup_label = f"order '{order_id}'"
+        elif phone_number:
+            lookup_label = f"phone '{phone_number}'"
+        else:
+            lookup_label = "order context"
         found_str = "found" if order_info.get("found") else "not found"
         console.print(
             f"[dim]  OrderLookup: {lookup_label} -> {found_str} "
@@ -113,6 +207,74 @@ def order_lookup_node(state: AgentState) -> dict:
             "order_found": bool(order_info.get("found")),
             "order_status": order_info.get("status", ""),
             "order_lookup_ms": elapsed,
+        },
+    }
+
+
+def catalog_lookup_node(state: AgentState) -> dict:
+    """Node: Tra cứu catalog live để trả lời tồn kho / sản phẩm."""
+    t0 = time.time()
+    question = state["question"]
+    shop_context = state.get("shop_context", {}) or {}
+    catalog_info = lookup_live_catalog(question, shop_context)
+
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(
+        f"[dim]  CatalogLookup: {catalog_info.get('found', False)} "
+        f"({elapsed}ms)[/]"
+    )
+
+    answer = catalog_info.get("summary") or "Mình chưa tìm được sản phẩm phù hợp."
+
+    return {
+        "catalog_info": catalog_info,
+        "answer": answer,
+        "reviewer_triggered": False,
+        "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+        "agent_trace": {
+            **(state.get("agent_trace") or {}),
+            "catalog_found": catalog_info.get("found", False),
+            "catalog_query": catalog_info.get("query", ""),
+            "catalog_lookup_ms": elapsed,
+        },
+    }
+
+
+def _format_checkout_message(result: dict) -> str:
+    if result.get("needs_login"):
+        return result.get("message") or "Mình cần bạn đăng nhập trước khi checkout nhé."
+    if result.get("needs_address"):
+        return result.get("message") or "Mình cần địa chỉ giao hàng đã lưu để tạo đơn."
+    if result.get("ok"):
+        payload = result.get("result") or {}
+        order = payload.get("data") or payload.get("order") or {}
+        order_id = order.get("_id") or order.get("id") or payload.get("orderId") or ""
+        message = payload.get("message") or "Mình đã tạo đơn từ giỏ hàng rồi."
+        if order_id:
+            message += f"\nMã đơn: {order_id}"
+        return message
+    return result.get("message") or "Mình chưa thể tạo đơn lúc này."
+
+
+def checkout_node(state: AgentState) -> dict:
+    """Node: Checkout assistant dùng cart thật của user đang đăng nhập."""
+    t0 = time.time()
+    question = state["question"]
+    shop_context = state.get("shop_context", {}) or {}
+    checkout_result = start_checkout(question, shop_context)
+    answer = _format_checkout_message(checkout_result)
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(f"[dim]  CheckoutNode: {checkout_result.get('ok', False)} ({elapsed}ms)[/]")
+
+    return {
+        "checkout_result": checkout_result,
+        "answer": answer,
+        "reviewer_triggered": False,
+        "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+        "agent_trace": {
+            **(state.get("agent_trace") or {}),
+            "checkout_ok": checkout_result.get("ok", False),
+            "checkout_ms": elapsed,
         },
     }
 
@@ -154,6 +316,7 @@ def action_executor_node(state: AgentState) -> dict:
         action_intent = detect_action_intent(question, order_info)
 
     action = action_intent.get("action", "no_action")
+    action_conf = action_intent.get("confidence", {}) if isinstance(action_intent, dict) else {}
 
     # Save pending action for next turn if we need order_id or more info
     if action != "no_action" and session_id:
@@ -200,6 +363,13 @@ def action_executor_node(state: AgentState) -> dict:
             "action_blocked": action_result.get("blocked", False),
             "action_needs_order_id": action_intent.get("needs_order_id", False),
             "action_needs_more_info": action_intent.get("needs_more_info", False),
+            "action_confidence": action_conf.get("confidence", 0.0),
+            "action_method": action_conf.get("method", ""),
+            "action_keyword_hits": action_conf.get("keyword_hits", 0),
+            "action_semantic_score": action_conf.get("semantic_score", 0.0),
+            "action_fallback_used": action_conf.get("method") in {"keyword", "clarify"},
+            "action_prompt_version": action_conf.get("prompt_version", ""),
+            "action_policy_version": action_conf.get("policy_version", ""),
             "action_pending_saved": session_id in _session_pending_actions,
             "action_executor_ms": elapsed,
         },
@@ -214,17 +384,38 @@ def router_node(state: AgentState) -> dict:
     history = state.get("history", [])
     contextualized_q = _build_contextualized_question(question, history)
 
-    intent = classify(contextualized_q)
+    meta = classify_with_metadata(contextualized_q)
+    intent = meta["intent"]
 
     elapsed = int((time.time() - t0) * 1000)
-    console.print(f"[dim]  Router: {intent} ({elapsed}ms)[/]")
+    console.print(
+        f"[dim]  Router: {intent} ({elapsed}ms, confidence={meta.get('confidence', 0):.3f})[/]"
+    )
 
     return {
         "intent": intent,
+        "router_confidence": meta.get("confidence", 0.0),
+        "router_method": meta.get("method", ""),
+        "router_semantic_scores": meta.get("semantic_scores", {}),
+        "router_keyword_hits": meta.get("keyword_hits", 0),
+        "router_fallback_used": meta.get("fallback_used", False),
+        "router_clarify_reason": meta.get("clarify_reason", ""),
+        "router_semantic_margin": meta.get("semantic_margin", 0.0),
+        "clarification_needed": meta.get("method") == "clarify",
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "router_decision": intent,
             "router_ms": elapsed,
+            "router_confidence": meta.get("confidence", 0.0),
+            "router_method": meta.get("method", ""),
+            "router_semantic_scores": meta.get("semantic_scores", {}),
+            "router_keyword_hits": meta.get("keyword_hits", 0),
+            "router_fallback_used": meta.get("fallback_used", False),
+            "router_clarify_reason": meta.get("clarify_reason", ""),
+            "router_semantic_margin": meta.get("semantic_margin", 0.0),
+            "trace_id": state.get("trace_id", ""),
+            "policy_version": POLICY_VERSION,
+            **meta.get("prompt_meta", {}),
         },
     }
 
@@ -236,6 +427,51 @@ async def casual_node(state: AgentState) -> dict:
         "answer": answer,
         "reviewer_triggered": False,
         "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+        "agent_trace": {
+            **(state.get("agent_trace") or {}),
+            "casual_answer": answer[:500],
+            "casual_prompt_version": prompt_meta("casual")["prompt_version"],
+        },
+    }
+
+
+def clarify_node(state: AgentState) -> dict:
+    """Node: Ask a clarification question when confidence is too low."""
+    question = state.get("question", "")
+    history = state.get("history", [])
+    trace = state.get("agent_trace", {}) or {}
+    recent = " ".join(m.get("content", "") for m in history[-3:]).lower()
+    clarify_reason = (
+        state.get("router_clarify_reason", "")
+        or trace.get("router_clarify_reason", "")
+        or state.get("clarify_reason", "")
+        or trace.get("clarify_reason", "")
+        or ""
+    )
+    if clarify_reason == "noise_clarify":
+        answer = "Mình chưa đọc rõ ý bạn lắm. Bạn nhắn lại ngắn giúp mình nhé?"
+    elif any(k in recent for k in ORDER_CONTEXT_KEYWORDS):
+        answer = (
+            "Mình chưa chắc ý bạn ở phần nào lắm. "
+            "Bạn muốn mình kiểm tra đơn hàng, đổi địa chỉ, hoàn tiền hay đổi trả vậy?"
+        )
+    else:
+        answer = (
+            "Mình chưa chắc ý bạn lắm. "
+            "Bạn muốn hỏi về sản phẩm, đơn hàng, giao hàng hay hỗ trợ gì vậy?"
+        )
+    return {
+        "answer": answer,
+        "reviewer_triggered": False,
+        "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+        "agent_trace": {
+            **(state.get("agent_trace") or {}),
+            "clarification_needed": True,
+            "clarification_question": answer,
+            "clarify_reason": clarify_reason or "clarify",
+            "clarify_prompt_version": prompt_meta("inquiry")["prompt_version"],
+            "clarify_policy_version": prompt_meta("inquiry")["policy_version"],
+        },
     }
 
 
@@ -274,6 +510,7 @@ async def empathy_writer_node(state: AgentState) -> dict:
     sentiment_score = state.get("sentiment_score", 0)
     compensation = state.get("compensation", "")
     order_info = state.get("order_info", {})
+    catalog_info = state.get("catalog_info", {})
     action_result = state.get("action_result", {})
     action_intent = state.get("action_intent", {})
     stream_callback = state.get("stream_callback")
@@ -287,6 +524,7 @@ async def empathy_writer_node(state: AgentState) -> dict:
         order_info=order_info,
         action_result=action_result,
         action_intent=action_intent,
+        catalog_info=catalog_info,
         stream_callback=stream_callback,
     )
 
@@ -299,6 +537,8 @@ async def empathy_writer_node(state: AgentState) -> dict:
             **(state.get("agent_trace") or {}),
             "writer_answer": answer[:500],
             "writer_ms": elapsed,
+            "empathy_prompt_version": prompt_meta("empathy")["prompt_version"],
+            "empathy_policy_version": prompt_meta("empathy")["policy_version"],
         },
     }
 
@@ -309,8 +549,9 @@ async def inquiry_writer_node(state: AgentState) -> dict:
     question = state["question"]
     evidence_text = state.get("evidence_text", "")
     order_info = state.get("order_info", {})
+    catalog_info = state.get("catalog_info", {})
 
-    answer = await generate_inquiry(question, evidence_text, order_info=order_info)
+    answer = await generate_inquiry(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  InquiryWriter: {len(answer)} chars ({elapsed}ms)[/]")
@@ -323,6 +564,8 @@ async def inquiry_writer_node(state: AgentState) -> dict:
             **(state.get("agent_trace") or {}),
             "inquiry_answer": answer[:500],
             "inquiry_ms": elapsed,
+            "inquiry_prompt_version": prompt_meta("inquiry")["prompt_version"],
+            "inquiry_policy_version": prompt_meta("inquiry")["policy_version"],
         },
     }
 
@@ -340,13 +583,25 @@ async def order_status_writer_node(state: AgentState) -> dict:
         for i in items[:3]
     )
     item_suffix = f" ({item_names})" if item_names else ""
+    lookup_hints = order_info.get("lookup_hints") or [
+        "đăng nhập tài khoản đã đặt đơn",
+        "xác minh OTP của tài khoản chủ đơn",
+        "mã truy cập đơn hàng trong email xác nhận",
+        "email bạn dùng khi đặt hàng để mình giúp bạn tìm email xác nhận",
+    ]
+    lookup_hint_text = _join_lookup_hints(lookup_hints)
 
-    if not order_info.get("found"):
+    if order_info.get("verification_required"):
+        answer = (
+            "Mình cần xác minh đúng chủ đơn trước khi tra cứu nhé.\n"
+            f"Bạn giúp mình {lookup_hint_text} là mình kiểm tra tiếp ngay."
+        )
+    elif not order_info.get("found"):
         matched_phone = order_info.get("matched_phone", "")
         answer = (
             "Mình chưa tìm thấy đơn hàng nào khớp với thông tin bạn gửi."
             f"{f' Số điện thoại mình tra là {matched_phone}.' if matched_phone else ''} "
-            "Bạn gửi giúp mình mã đơn hàng hoặc email đặt hàng nhé."
+            f"Bạn có thể thử {lookup_hint_text} nhé."
         )
     elif status == "delivered":
         answer = (
@@ -397,6 +652,7 @@ async def order_status_writer_node(state: AgentState) -> dict:
             **(state.get("agent_trace") or {}),
             "order_status_answer": answer[:500],
             "order_status_ms": elapsed,
+            "order_status_prompt_version": prompt_meta("inquiry")["prompt_version"],
         },
     }
 
@@ -445,6 +701,8 @@ async def reviewer_node(state: AgentState) -> dict:
             "reviewer_triggered": reviewer_triggered,
             "reviewer_result": reviewer_result,
             "reviewer_ms": elapsed,
+            "reviewer_prompt_version": prompt_meta("reviewer")["prompt_version"],
+            "reviewer_policy_version": prompt_meta("reviewer")["policy_version"],
         },
     }
 
@@ -455,11 +713,32 @@ async def reviewer_node(state: AgentState) -> dict:
 
 def route_by_intent(state: AgentState) -> str:
     intent = state.get("intent", "")
+    trace = state.get("agent_trace", {}) or {}
+    if (
+        state.get("clarification_needed")
+        or state.get("router_method") == "clarify"
+        or state.get("router_clarify_reason")
+        or trace.get("router_method") == "clarify"
+        or trace.get("router_clarify_reason")
+    ):
+        return "clarify"
     session_id = state.get("session_id", "")
     question = state.get("question", "")
     history = state.get("history", [])
     all_text = question + " " + " ".join(m.get("content", "") for m in history[-5:])
     has_order_clue = bool(extract_order_id(all_text) or extract_phone_number(all_text))
+    recent_order_context = any(
+        keyword in " ".join(m.get("content", "") for m in history[-4:]).lower()
+        for keyword in ORDER_CONTEXT_KEYWORDS
+    )
+
+    if _is_checkout_request(all_text):
+        console.print("[dim]  Router: detected checkout request — forcing checkout path[/]")
+        return "checkout"
+
+    if _is_catalog_request(all_text):
+        console.print("[dim]  Router: detected catalog request — forcing catalog path[/]")
+        return "catalog"
 
     # Multi-turn override: if session has a pending action waiting for order_id,
     # force complaint path so action_executor can resume it
@@ -470,7 +749,7 @@ def route_by_intent(state: AgentState) -> str:
         )
         return "complaint"
 
-    if has_order_clue:
+    if has_order_clue or recent_order_context:
         console.print("[dim]  Router: detected order clue (order id / phone) — forcing COMPLAINT path[/]")
         return "complaint"
 
@@ -501,6 +780,9 @@ def build_graph() -> StateGraph:
     # Add nodes
     graph.add_node("router", router_node)
     graph.add_node("casual", casual_node)
+    graph.add_node("catalog", catalog_lookup_node)
+    graph.add_node("checkout", checkout_node)
+    graph.add_node("clarify", clarify_node)
     graph.add_node("order_lookup", order_lookup_node)
     graph.add_node("order_lookup_inquiry", order_lookup_node)
     graph.add_node("action_executor", action_executor_node)
@@ -522,6 +804,9 @@ def build_graph() -> StateGraph:
         route_by_intent,
         {
             "casual": "casual",
+            "catalog": "catalog",
+            "checkout": "checkout",
+            "clarify": "clarify",
             "inquiry": "order_lookup_inquiry",
             "complaint": "order_lookup",
         },
@@ -529,6 +814,9 @@ def build_graph() -> StateGraph:
 
     # Casual -> END
     graph.add_edge("casual", END)
+    graph.add_edge("catalog", END)
+    graph.add_edge("checkout", END)
+    graph.add_edge("clarify", END)
 
     # Complaint: order_lookup -> action_executor -> sentiment -> retrieve
     graph.add_edge("order_lookup", "action_executor")
@@ -541,7 +829,11 @@ def build_graph() -> StateGraph:
         order_info = state.get("order_info", {}) or {}
         if action_intent.get("action") == "check_order_status" and order_info.get("found"):
             return "status"
-        if action_intent.get("needs_order_id") or action_intent.get("needs_more_info"):
+        if (
+            action_intent.get("needs_order_id")
+            or action_intent.get("needs_more_info")
+            or order_info.get("verification_required")
+        ):
             return "direct"
         return "retrieve"
 
@@ -654,6 +946,7 @@ async def run_streaming(
     graph = _get_graph()
 
     initial_state: AgentState = {
+        "trace_id": session_id or f"trace_{uuid.uuid4().hex[:10]}",
         "session_id": session_id,
         "question": question,
         "history": history or [],
@@ -669,10 +962,14 @@ async def run_streaming(
         "rewrite_count": 0,
         "order_id": "",
         "order_info": {},
+        "catalog_info": {},
+        "checkout_result": {},
+        "ticket_info": {},
         "suggested_actions": [],
         "action_intent": {},
         "action_result": {},
         "pending_action_intent": {},
+        "clarification_needed": False,
         "is_evidence_sufficient": True,
         "answer": "",
         "reviewer_triggered": False,
@@ -686,6 +983,11 @@ async def run_streaming(
 
     processing_time = int((time.time() - start_time) * 1000)
     final_state["processing_time_ms"] = processing_time
+    try:
+        from utils.chatbot_metrics import record_chatbot_trace
+        record_chatbot_trace(final_state)
+    except Exception as e:
+        console.print(f"[yellow]  Chatbot metrics: failed to record trace: {e}[/]")
 
     console.print(f"[green]Done in {processing_time}ms[/]")
     return final_state

@@ -31,6 +31,9 @@ const Dashboard = () => {
     revenue7Data,
     monthColor,
     toNumber,
+    supportTicketStats,
+    supportTicketAssigneeStats,
+    chatbotInsights,
   } = useDashboardData();
 
   if (loading && !isRefreshing) {
@@ -88,6 +91,142 @@ const Dashboard = () => {
                 )}
                 accent="Includes COD, MoMo, VietQR, ZaloPay"
               />
+            </div>
+
+            <div className="admin-card">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-700">Support Tickets</h3>
+                  <p className="text-xs text-stone-500">Snapshot of tickets created by chatbot and web</p>
+                </div>
+                <div className="text-2xl font-extrabold text-stone-900">
+                  {supportTicketStats?.total ?? 0}
+                  <span className="ml-2 text-sm font-semibold text-stone-500">total</span>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
+                  Open
+                  <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    {supportTicketStats?.open ?? 0}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
+                  Pending
+                  <span className="rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    {supportTicketStats?.pending ?? 0}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-700">
+                  Closed
+                  <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs font-semibold text-white">
+                    {supportTicketStats?.closed ?? 0}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div className="admin-card">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-700">Chatbot Insights</h3>
+                  <p className="text-xs text-stone-500">
+                    Live traces from router, action, fallback, and Vietnamese normalization
+                  </p>
+                </div>
+                <div className="text-2xl font-extrabold text-stone-900">
+                  {chatbotInsights?.total ?? 0}
+                  <span className="ml-2 text-sm font-semibold text-stone-500">traces</span>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  title="Avg Router Confidence"
+                  value={`${Math.round((chatbotInsights?.avgRouterConfidence || 0) * 100)}%`}
+                  pill="router"
+                  accent={`Low confidence: ${Math.round((chatbotInsights?.lowConfidenceRate || 0) * 100)}%`}
+                />
+                <StatCard
+                  title="Avg Action Confidence"
+                  value={`${Math.round((chatbotInsights?.avgActionConfidence || 0) * 100)}%`}
+                  pill="action"
+                  accent={`Clarify rate: ${Math.round((chatbotInsights?.clarifyRate || 0) * 100)}%`}
+                />
+                <StatCard
+                  title="Keyword Fallback"
+                  value={`${Math.round((chatbotInsights?.keywordFallbackRate || 0) * 100)}%`}
+                  pill="fallback"
+                  accent="Used when semantic similarity is too low"
+                />
+                <StatCard
+                  title="Vietnamese OK"
+                  value={`${Math.round((chatbotInsights?.vietnameseOkRate || 0) * 100)}%`}
+                  pill="lang"
+                  accent={chatbotInsights?.latestTraceAt ? `Latest: ${chatbotInsights.latestTraceAt}` : 'No traces yet'}
+                />
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Top Intents</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(chatbotInsights?.topIntents || []).length === 0 ? (
+                      <span className="text-sm text-stone-500">No data yet</span>
+                    ) : (
+                      chatbotInsights.topIntents.map((item) => (
+                        <span key={item.label} className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm text-stone-700 border border-stone-200">
+                          <span>{item.label}</span>
+                          <span className="rounded-full bg-stone-900 px-2 py-0.5 text-xs font-semibold text-white">
+                            {item.count}
+                          </span>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Top Actions</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(chatbotInsights?.topActions || []).length === 0 ? (
+                      <span className="text-sm text-stone-500">No data yet</span>
+                    ) : (
+                      chatbotInsights.topActions.map((item) => (
+                        <span key={item.label} className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm text-stone-700 border border-stone-200">
+                          <span>{item.label}</span>
+                          <span className="rounded-full bg-stone-900 px-2 py-0.5 text-xs font-semibold text-white">
+                            {item.count}
+                          </span>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-card">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-700">Tickets by Assignee</h3>
+                  <p className="text-xs text-stone-500">See workload distribution across the support team</p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {supportTicketAssigneeStats.length === 0 ? (
+                  <span className="text-sm text-stone-500">No assignee data yet</span>
+                ) : (
+                  supportTicketAssigneeStats.map((item) => (
+                    <span
+                      key={item.assigneeId || 'unassigned'}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm"
+                    >
+                      <span>{item.fullName || 'Unassigned'}</span>
+                      <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">
+                        {item.count}
+                      </span>
+                    </span>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Charts Row */}

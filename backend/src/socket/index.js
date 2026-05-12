@@ -75,9 +75,10 @@ module.exports = {
                 const sessionId = payload.sessionId || payload.session_id || socket.id;
                 const provider = String(payload.provider || 'agentic').toLowerCase();
                 const effectiveProvider = provider === 'auto' ? 'agentic' : provider;
+                const providerLabel = effectiveProvider === 'agentic' ? 'Groq' : effectiveProvider;
 
                 console.log(
-                    `[chat_message] session=${sessionId} provider=${provider} effective=${effectiveProvider} message="${message.slice(0, 80)}"`
+                    `[chat_message] session=${sessionId} provider=${provider} effective=${effectiveProvider} label=${providerLabel} message="${message.slice(0, 80)}"`
                 );
 
                 if (!message) {
@@ -91,7 +92,7 @@ module.exports = {
                 if (!['agentic'].includes(effectiveProvider)) {
                     socket.emit('chat_error', {
                         sessionId,
-                        message: 'Only agentic streaming is supported over websocket right now.',
+                        message: 'Only Groq streaming is supported over websocket right now.',
                     });
                     return;
                 }
@@ -118,7 +119,7 @@ module.exports = {
                         onError: (error, data) => {
                             socket.emit('chat_error', {
                                 sessionId,
-                                message: error.message || `${effectiveProvider} AI error`,
+                                message: error.message || `${providerLabel} AI error`,
                                 raw: data || null,
                             });
                         },
@@ -130,14 +131,17 @@ module.exports = {
                             auth_token: authToken,
                             user_id: decodedUser?.id || decodedUser?._id || '',
                             email: decodedUser?.email || '',
+                            user_name: decodedUser?.fullName || decodedUser?.name || '',
+                            phone: decodedUser?.phone || '',
                             role: decodedUser?.role || '',
+                            ownership_verified: Boolean(decodedUser?.id || decodedUser?._id),
                         },
                     });
                 } catch (error) {
                     console.error(`[chat_message] session=${sessionId} failed:`, error);
                     socket.emit('chat_error', {
                         sessionId,
-                        message: error.message || `${effectiveProvider} AI streaming failed`,
+                        message: error.message || `${providerLabel} AI streaming failed`,
                     });
                 }
             });

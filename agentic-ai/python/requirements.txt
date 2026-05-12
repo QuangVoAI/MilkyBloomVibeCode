@@ -33,7 +33,3 @@ upstash-redis>=1.0.0
 # Data & Fine-tuning
 datasets>=2.18.0
 huggingface_hub>=0.22.0
-
-# Vertex AI (Google Cloud)
-google-cloud-aiplatform>=1.50.0  # package mới thay vertexai>=1.42.0
-google-auth>=2.28.0              # authentication cho Vertex AI custom endpoint

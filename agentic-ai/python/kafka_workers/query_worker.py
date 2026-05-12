@@ -39,6 +39,7 @@ from kafka_workers.kafka_config import (
     serialize, deserialize,
 )
 from agents.graph import run_streaming
+from agents.router import classify
 from retrieval.cache import get_cached_answer, set_cached_answer
 from tools.order_tool import extract_order_id
 
@@ -119,7 +120,9 @@ def run_worker():
             # ── Check Redis Cache FIRST ──
             # Không cache câu có mã đơn hàng: tránh rò rỉ PII giữa users + tránh bypass action
             has_order_id = extract_order_id(question) is not None
-            cached = None if has_order_id else get_cached_answer(question)
+            predicted_intent = classify(question)
+            cache_scope = "order" if has_order_id else f"intent:{predicted_intent}"
+            cached = None if has_order_id else get_cached_answer(question, scope=cache_scope)
             if cached:
                 # CACHE HIT → bypass toàn bộ LangGraph, trả kết quả ngay (<50ms)
                 cache_response = {
@@ -240,6 +243,7 @@ def run_worker():
                     answer=final_answer,
                     sources=sources,
                     agent_trace=final_trace,
+                    scope=cache_scope,
                 )
 
             # ── Flush Langfuse immediately for real-time dashboard ──

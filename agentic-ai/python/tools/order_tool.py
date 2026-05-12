@@ -27,6 +27,38 @@ except Exception:
 
 _orders_cache: dict | None = None
 _orders_mtime: float = 0.0
+GUEST_ORDER_ACCESS_TOKEN_HINT = "mã truy cập đơn hàng"
+
+ORDER_LOOKUP_HELP = {
+    "login": "đăng nhập tài khoản đã đặt đơn",
+    "otp": "xác minh OTP của tài khoản chủ đơn",
+    "access_token": "mã truy cập đơn hàng trong email xác nhận",
+    "order_email": "email bạn dùng khi đặt hàng để mình giúp bạn tìm email xác nhận",
+    "phone": "số điện thoại đặt hàng để bộ phận hỗ trợ nội bộ đối chiếu",
+}
+
+
+def _build_lookup_guidance(*, verified: bool = False, internal_lookup: bool = False) -> list[str]:
+    """Return the safest lookup paths we can honestly suggest to the user."""
+    hints = []
+    if not verified:
+        hints.append(ORDER_LOOKUP_HELP["login"])
+        hints.append(ORDER_LOOKUP_HELP["otp"])
+        hints.append(ORDER_LOOKUP_HELP["access_token"])
+    hints.append(ORDER_LOOKUP_HELP["order_email"])
+    if internal_lookup:
+        hints.append(ORDER_LOOKUP_HELP["phone"])
+    return list(dict.fromkeys(hints))
+
+
+def _format_lookup_guidance(hints: list[str]) -> str:
+    if not hints:
+        return ""
+    if len(hints) == 1:
+        return hints[0]
+    if len(hints) == 2:
+        return f"{hints[0]} hoặc {hints[1]}"
+    return ", ".join(hints[:-1]) + f", hoặc {hints[-1]}"
 
 
 def _load_orders() -> dict:
@@ -154,6 +186,7 @@ def _normalize_real_order(order: dict, order_id: str) -> dict:
     )
     return {
         "found": True,
+        "ownership_verified": True,
         "order_id": order_id,
         "customer_name": order_data.get("customerName") or "",
         "status": status,
@@ -185,27 +218,95 @@ def get_order_info(order_id: str, context: dict | None = None) -> dict:
     order_id = order_id.upper().strip()
 
     ctx = context or {}
-    if get_order_detail and (ctx.get("auth_token") or ctx.get("email") or ctx.get("user_email") or ctx.get("session_id") or ctx.get("sessionId")):
+    verified = bool(
+        ctx.get("auth_token")
+        or ctx.get("access_token")
+        or ctx.get("order_access_token")
+        or ctx.get("orderAccessToken")
+    )
+    lookup_hints = _build_lookup_guidance(verified=verified, internal_lookup=bool(ctx.get("internal_lookup") or ctx.get("allow_internal_lookup")))
+    if not verified:
+        return {
+            "found": False,
+            "ownership_verified": False,
+            "verification_required": True,
+            "order_id": order_id,
+            "summary": (
+                f"Mình chưa thể tra cứu đơn **{order_id}** vì chưa xác minh chủ đơn.\n"
+                f"Bạn giúp mình { _format_lookup_guidance(lookup_hints) } nhé."
+            ),
+            "lookup_hints": lookup_hints,
+            "suggested_actions": ["request_access_token"],
+        }
+
+    if get_order_detail and (ctx.get("auth_token") or ctx.get("access_token") or ctx.get("order_access_token") or ctx.get("orderAccessToken")):
         remote = get_order_detail(order_id, ctx)
         if remote and remote.get("success"):
             try:
-                return _normalize_real_order(remote, order_id)
+                normalized = _normalize_real_order(remote, order_id)
+                normalized["ownership_verified"] = True
+                return normalized
             except Exception:
                 pass
+        if remote:
+            remote_status = int(remote.get("status") or 0)
+            if remote_status in (401, 403):
+                return {
+                    "found": False,
+                    "ownership_verified": False,
+                    "verification_required": True,
+                    "order_id": order_id,
+                    "summary": (
+                        f"Mình tìm thấy yêu cầu tra cứu đơn **{order_id}** nhưng tài khoản hiện tại chưa được xác minh là chủ đơn.\n"
+                        f"Bạn giúp mình { _format_lookup_guidance(_build_lookup_guidance(verified=False, internal_lookup=False)) } nhé."
+                    ),
+                    "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=False),
+                    "suggested_actions": ["request_access_token"],
+                }
+            if remote_status == 404:
+                return {
+                    "found": False,
+                    "ownership_verified": False,
+                    "order_id": order_id,
+                    "summary": (
+                        f"Không tìm thấy đơn hàng với mã **{order_id}** trong hệ thống của tài khoản này.\n"
+                        f"Nếu bạn là chủ đơn, hãy đăng nhập đúng tài khoản hoặc xác minh OTP rồi thử lại."
+                    ),
+                    "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=False),
+                    "suggested_actions": ["ask_reconfirm_order_id"],
+                }
+            return {
+                "found": False,
+                "ownership_verified": False,
+                "verification_required": True,
+                "order_id": order_id,
+                "summary": (
+                    f"Mình chưa thể tra cứu đơn **{order_id}** lúc này vì backend chưa xác nhận quyền sở hữu.\n"
+                    f"Bạn giúp mình { _format_lookup_guidance(_build_lookup_guidance(verified=False, internal_lookup=False)) } nhé."
+                ),
+                "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=False),
+                "suggested_actions": ["request_access_token"],
+            }
 
     orders = _load_orders()
 
     if order_id not in orders:
         return {
             "found": False,
+            "ownership_verified": False,
             "order_id": order_id,
-            "summary": f"Không tìm thấy đơn hàng với mã **{order_id}** trong hệ thống.",
+            "summary": (
+                f"Không tìm thấy đơn hàng với mã **{order_id}** trong hệ thống.\n"
+                f"Bạn có thể thử { _format_lookup_guidance(lookup_hints) }."
+            ),
+            "lookup_hints": lookup_hints,
             "suggested_actions": ["ask_reconfirm_order_id"],
         }
 
     raw = orders[order_id]
     result: dict = {
         "found": True,
+        "ownership_verified": True,
         "order_id": raw["order_id"],
         "customer_name": raw.get("customer_name", ""),
         "status": raw.get("status", "unknown"),
@@ -353,17 +454,43 @@ def get_order_info_by_phone(phone: str, context: dict | None = None) -> dict:
     regular order_info payload. If multiple orders exist, return an ambiguous
     response so the assistant can ask for an order id.
     """
+    ctx = context or {}
     normalized_phone = re.sub(r"\D", "", str(phone or ""))
     if not normalized_phone:
-        return {"found": False, "summary": "Số điện thoại không hợp lệ.", "suggested_actions": ["ask_reconfirm_order_id"]}
+        return {
+            "found": False,
+            "ownership_verified": False,
+            "summary": "Số điện thoại không hợp lệ.",
+            "lookup_hints": _build_lookup_guidance(
+                verified=False,
+                internal_lookup=bool(ctx.get("internal_lookup") or ctx.get("allow_internal_lookup")),
+            ),
+            "suggested_actions": ["ask_reconfirm_order_id"],
+        }
 
-    ctx = context or {}
+    if not (ctx.get("internal_lookup") or ctx.get("allow_internal_lookup")):
+        lookup_hints = _build_lookup_guidance(verified=False, internal_lookup=False)
+        return {
+            "found": False,
+            "ownership_verified": False,
+            "verification_required": True,
+            "matched_phone": normalized_phone,
+            "summary": (
+                f"Mình chưa thể tra cứu đơn theo số điện thoại **{normalized_phone}** vì đây là thao tác nội bộ.\n"
+                f"Bạn giúp mình { _format_lookup_guidance(lookup_hints) } nhé."
+            ),
+            "lookup_hints": lookup_hints,
+            "suggested_actions": ["request_access_token"],
+        }
+
     if search_orders_by_phone:
         remote = search_orders_by_phone(normalized_phone, ctx)
         if remote and remote.get("success"):
             orders = remote.get("data") or []
             if len(orders) == 1:
-                return _normalize_order_detail(orders[0])
+                normalized = _normalize_order_detail(orders[0])
+                normalized["ownership_verified"] = True
+                return normalized
             if len(orders) > 1:
                 latest = orders[0]
                 order_lines = [
@@ -372,25 +499,29 @@ def get_order_info_by_phone(phone: str, context: dict | None = None) -> dict:
                 ]
                 return {
                     "found": False,
+                    "ownership_verified": False,
                     "ambiguous": True,
                     "matched_phone": normalized_phone,
                     "summary": (
                         f"Mình tìm thấy {len(orders)} đơn gắn với số điện thoại **{normalized_phone}**.\n"
-                        f"Bạn giúp mình chọn đúng mã đơn nhé:\n" + "\n".join(order_lines)
+                        f"Bạn đăng nhập hoặc gửi {GUEST_ORDER_ACCESS_TOKEN_HINT} để mình đối chiếu tiếp nhé:\n" + "\n".join(order_lines)
                     ),
+                    "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
                     "suggested_actions": ["ask_reconfirm_order_id"],
                     "latest_order_id": latest.get("order_id", ""),
                 }
 
-    return {
-        "found": False,
-        "matched_phone": normalized_phone,
-        "summary": (
-            f"Mình chưa tìm thấy đơn hàng nào khớp với số điện thoại **{normalized_phone}**.\n"
-            f"Bạn cho mình mã đơn hàng hoặc email đặt hàng nhé."
-        ),
-        "suggested_actions": ["ask_reconfirm_order_id"],
-    }
+        return {
+            "found": False,
+            "ownership_verified": False,
+            "matched_phone": normalized_phone,
+            "summary": (
+                f"Mình chưa tìm thấy đơn hàng nào khớp với số điện thoại **{normalized_phone}**.\n"
+                f"Bạn đăng nhập hoặc gửi {GUEST_ORDER_ACCESS_TOKEN_HINT} trong email xác nhận nhé."
+            ),
+            "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
+            "suggested_actions": ["ask_reconfirm_order_id"],
+        }
 
 
 def determine_suggested_actions(order_info: dict, sentiment: str) -> list[str]:

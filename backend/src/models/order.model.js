@@ -92,6 +92,50 @@ const OrderSchema = new mongoose.Schema(
             index: true,
         },
 
+        // Guest ownership verification token hash.
+        // Only the raw token sent via email/SMS should be accepted by the API.
+        guestAccessTokenHash: {
+            type: String,
+            select: false,
+            default: null,
+            index: true,
+        },
+        guestAccessTokenIssuedAt: {
+            type: Date,
+            select: false,
+            default: null,
+        },
+        guestAccessTokenExpiresAt: {
+            type: Date,
+            select: false,
+            default: null,
+        },
+
+        orderLookupOtpHash: {
+            type: String,
+            select: false,
+            default: null,
+        },
+        orderLookupOtpExpiresAt: {
+            type: Date,
+            select: false,
+            default: null,
+        },
+        orderLookupOtpSentTo: {
+            type: String,
+            select: false,
+            default: null,
+        },
+        orderLookupOtpAttempts: {
+            type: Number,
+            default: 0,
+        },
+        orderLookupOtpVerifiedAt: {
+            type: Date,
+            select: false,
+            default: null,
+        },
+
         // Voucher áp dụng (nếu có)
         voucherId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -143,6 +187,8 @@ const OrderSchema = new mongoose.Schema(
 OrderSchema.index({ userId: 1, createdAt: -1 }); // User's orders sorted by date
 OrderSchema.index({ status: 1, createdAt: -1 }); // Orders by status sorted by date
 OrderSchema.index({ paymentStatus: 1, status: 1 }); // Payment and order status queries
+OrderSchema.index({ guestAccessTokenHash: 1 }, { sparse: true });
+OrderSchema.index({ orderLookupOtpHash: 1 }, { sparse: true });
 
 // Tạo Model từ Schema
 module.exports = mongoose.model('Order', OrderSchema);

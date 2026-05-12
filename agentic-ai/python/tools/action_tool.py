@@ -20,22 +20,26 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import unicodedata
 
 import numpy as np
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 from agents.model_registry import get_embed_model, get_embed_cached
+from agents.prompt_registry import prompt_meta
 from utils.console import console
 
 # Import cached order loader/saver from order_tool to avoid duplicate I/O
-from tools.order_tool import _load_orders, _save_orders
+from tools.order_tool import _load_orders, _save_orders, extract_order_id, extract_phone_number
 try:
     from tools.shop_client import cancel_order as remote_cancel_order
     from tools.shop_client import update_address as remote_update_address
+    from tools.shop_client import create_support_ticket as remote_create_support_ticket
 except Exception:
     remote_cancel_order = None
     remote_update_address = None
+    remote_create_support_ticket = None
 
 
 # ════════════════════════════════════════════════════════
@@ -99,6 +103,12 @@ ACTION_SEEDS = {
         "mãi chưa giao", "vẫn chưa thấy hàng", "shipper đến chưa", "xem đơn hàng",
         "đơn đang xử lý không", "đơn bị lạc chưa", "có vấn đề gì với đơn không",
     ],
+    "create_ticket": [
+        "tạo ticket", "gặp nhân viên", "liên hệ hỗ trợ", "nhờ hỗ trợ",
+        "mở ticket", "chuyển lên người thật", "kết nối nhân viên",
+        "cần hỗ trợ", "báo lên bộ phận hỗ trợ", "report issue",
+        "support ticket", "human support", "live agent",
+    ],
 }
 
 # Regex fallback patterns (used when semantic score is ambiguous 0.30–0.55)
@@ -136,11 +146,17 @@ RETURN_PATTERNS = [
 ]
 
 CHECK_ORDER_PATTERNS = [
-    r"kiểm tra đơn", r"tình trạng đơn", r"đơn.*đến đâu", r"theo dõi.*đơn",
+    r"kiểm tra", r"kiểm tra đơn", r"tình trạng đơn", r"đơn.*đến đâu", r"theo dõi.*đơn",
     r"chưa thấy giao", r"chưa nhận.*hàng", r"hàng chưa đến", r"bao giờ giao",
     r"track.*đơn", r"đơn.*đi đâu", r"ship chưa", r"giao chưa",
     r"còn bao lâu", r"đơn lâu quá", r"chưa thấy shipper", r"hàng đang ở đâu",
     r"mãi chưa giao", r"vẫn chưa.*hàng", r"xem.*đơn hàng", r"check.*order",
+]
+
+CREATE_TICKET_PATTERNS = [
+    r"tạo ticket", r"gặp nhân viên", r"liên hệ hỗ trợ", r"nhờ hỗ trợ",
+    r"mở ticket", r"chuyển lên người thật", r"kết nối nhân viên",
+    r"report issue", r"support ticket", r"human support", r"live agent",
 ]
 
 ADDRESS_EXTRACT_PATTERNS = [
@@ -155,6 +171,14 @@ ADDRESS_EXTRACT_PATTERNS = [
 _semantic_centroids: dict | None = None
 _semantic_threshold_high = 0.55
 _semantic_threshold_low = 0.30
+ACTION_CONFIDENCE_THRESHOLDS = {
+    "update_address": 0.58,
+    "cancel_order": 0.56,
+    "request_refund": 0.57,
+    "process_return": 0.57,
+    "check_order_status": 0.52,
+    "create_ticket": 0.50,
+}
 
 
 def _ensure_action_centroids():
@@ -199,9 +223,72 @@ def _classify_action_semantic(text: str) -> tuple[str, float]:
     return best_action, round(confidence, 3)
 
 
+def _semantic_score_map(text: str) -> dict[str, float]:
+    _ensure_action_centroids()
+    q_emb = get_embed_cached(text)
+    scores = {
+        action: float(np.dot(q_emb, centroid))
+        for action, centroid in _semantic_centroids.items()
+    }
+    return scores
+
+
+def _confidence_from_scores(scores: dict[str, float], best_action: str, method: str = "semantic", keyword_hits: int = 0) -> float:
+    if not scores:
+        return 0.0
+    ordered = sorted(scores.values(), reverse=True)
+    best = scores.get(best_action, 0.0)
+    second = ordered[1] if len(ordered) > 1 else 0.0
+    raw = max(0.0, best - second)
+    score = best * 0.7 + raw * 0.3 + 0.1
+    if method == "keyword":
+        score += 0.06 + min(keyword_hits, 3) * 0.03
+    elif method == "clarify" or best_action == "no_action":
+        score = min(score, 0.24)
+    return round(min(0.99, max(0.0, score)), 3)
+
+
+def _normalize_text(text: str) -> str:
+    text = unicodedata.normalize("NFD", text or "")
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = text.replace("Đ", "d").replace("đ", "d")
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _looks_like_identifier_only(question: str) -> bool:
+    """Detect pure identifiers like phone numbers or order codes."""
+    compact = re.sub(r"\s+", "", question or "")
+    return bool(re.fullmatch(r"[\d\+\-\(\)]{8,}", compact))
+
+
+def _looks_like_noise(question: str) -> bool:
+    """Detect keyboard mash / junk input so we do not create false actions."""
+    normalized = _normalize_text(question)
+    compact = re.sub(r"\s+", "", normalized)
+    if not compact or len(compact) < 3:
+        return True
+    if extract_order_id(question) or extract_phone_number(question) or _looks_like_identifier_only(question):
+        return False
+    # Short single-token gibberish without vowels is likely noise.
+    tokens = normalized.split()
+    if len(tokens) == 1 and not re.search(r"[aeiouy]", compact):
+        return True
+    # Repeated or low-diversity characters are also likely noise.
+    if len(set(compact)) <= 3 and len(compact) >= 5:
+        return True
+    return False
+
+
+def _pattern_matches(text: str, pattern: str) -> bool:
+    normalized_text = _normalize_text(text)
+    normalized_pattern = _normalize_text(pattern)
+    if any(ch in normalized_pattern for ch in ".*+?[](){}|\\^$"):
+        return re.search(normalized_pattern, normalized_text) is not None
+    return re.search(rf"\b{re.escape(normalized_pattern)}\b", normalized_text) is not None
+
+
 def _match_any(text: str, patterns: list[str]) -> bool:
-    t = text.lower()
-    return any(re.search(p, t) for p in patterns)
+    return any(_pattern_matches(text, p) for p in patterns)
 
 
 def _extract_new_address(text: str) -> Optional[str]:
@@ -227,7 +314,63 @@ def _fallback_regex_detect(question: str) -> str:
         return "process_return"
     if _match_any(question, CHECK_ORDER_PATTERNS):
         return "check_order_status"
+    if _match_any(question, CREATE_TICKET_PATTERNS):
+        return "create_ticket"
     return "no_action"
+
+
+def _keyword_detect_action(question: str) -> str:
+    """Keyword/regex fallback when semantic similarity is too low."""
+    normalized = _normalize_text(question)
+
+    keyword_rules = [
+        ("update_address", UPDATE_ADDRESS_PATTERNS),
+        ("cancel_order", CANCEL_PATTERNS),
+        ("request_refund", REFUND_PATTERNS),
+        ("process_return", RETURN_PATTERNS),
+        ("create_ticket", CREATE_TICKET_PATTERNS),
+        ("check_order_status", CHECK_ORDER_PATTERNS),
+    ]
+
+    for action, patterns in keyword_rules:
+        if any(_pattern_matches(normalized, pattern) for pattern in patterns):
+            return action
+
+    return "no_action"
+
+
+def _keyword_score(action: str, question: str) -> int:
+    lookup = {
+        "update_address": UPDATE_ADDRESS_PATTERNS,
+        "cancel_order": CANCEL_PATTERNS,
+        "request_refund": REFUND_PATTERNS,
+        "process_return": RETURN_PATTERNS,
+        "create_ticket": CREATE_TICKET_PATTERNS,
+        "check_order_status": CHECK_ORDER_PATTERNS,
+    }
+    patterns = lookup.get(action, [])
+    normalized = _normalize_text(question)
+    return sum(1 for pattern in patterns if _pattern_matches(normalized, pattern))
+
+
+def _build_action_meta(question: str, action: str, semantic_scores: dict[str, float], method: str, keyword_hits: int = 0) -> dict:
+    best_semantic = semantic_scores.get(action, 0.0) if semantic_scores else 0.0
+    top_candidates = []
+    confidence = _confidence_from_scores(semantic_scores, action, method=method, keyword_hits=keyword_hits) if semantic_scores else 0.0
+    if semantic_scores:
+        ordered = sorted(semantic_scores.items(), key=lambda item: item[1], reverse=True)[:3]
+        top_candidates = [
+            {"action": candidate_action, "score": round(score, 3)}
+            for candidate_action, score in ordered
+        ]
+    return {
+        **prompt_meta("action"),
+        "method": method,
+        "confidence": confidence,
+        "semantic_score": round(best_semantic, 3),
+        "keyword_hits": keyword_hits,
+        "top_candidates": top_candidates,
+    }
 
 
 def detect_action_intent(question: str, order_info: dict) -> dict:
@@ -238,24 +381,57 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
     status = order_info.get("status", "") if order_info.get("found") else ""
     found = order_info.get("found", False)
 
+    if _looks_like_noise(question):
+        action_meta = _build_action_meta(question, "no_action", {}, "clarify", 0)
+        action_meta["decision_reason"] = "noise_clarify"
+        return {
+            "action": "no_action",
+            "executable": False,
+            "block_reason": "",
+            "confidence": action_meta,
+        }
+
     # ── Semantic classification ──
-    semantic_action, score = _classify_action_semantic(question)
+    semantic_scores = _semantic_score_map(question)
+    semantic_action, score = max(semantic_scores.items(), key=lambda item: item[1])
 
     if score >= _semantic_threshold_high:
         action = semantic_action
+        decision_method = "semantic"
+        keyword_hits = _keyword_score(action, question)
         console.print(f"[dim]  ActionIntent: semantic -> {action} (score={score})[/]")
-    elif score >= _semantic_threshold_low:
-        # Ambiguous: regex fallback
-        regex_action = _fallback_regex_detect(question)
-        if regex_action != "no_action":
-            action = regex_action
-            console.print(f"[dim]  ActionIntent: semantic ambiguous ({score}) -> regex fallback -> {action}[/]")
-        else:
-            action = semantic_action  # trust semantic even if weak
-            console.print(f"[dim]  ActionIntent: semantic -> {action} (score={score}, no regex match)[/]")
     else:
-        action = "no_action"
-        console.print(f"[dim]  ActionIntent: no action detected (score={score})[/]")
+        keyword_action = _keyword_detect_action(question)
+        if keyword_action != "no_action":
+            action = keyword_action
+            decision_method = "keyword"
+            keyword_hits = _keyword_score(action, question)
+            console.print(
+                f"[dim]  ActionIntent: semantic low ({score}) -> keyword fallback -> {action}[/]"
+            )
+        elif score >= _semantic_threshold_low:
+            # Ambiguous but still usable: trust semantic intent if keyword fallback failed.
+            action = semantic_action
+            decision_method = "semantic-ambiguous"
+            keyword_hits = _keyword_score(action, question)
+            console.print(
+                f"[dim]  ActionIntent: semantic ambiguous ({score}) -> {action}[/]"
+            )
+        else:
+            action = "no_action"
+            decision_method = "clarify"
+            keyword_hits = 0
+            console.print(f"[dim]  ActionIntent: no action detected (score={score})[/]")
+
+    action_meta = _build_action_meta(question, action, semantic_scores, decision_method, keyword_hits)
+    if action == "no_action":
+        action_meta["decision_reason"] = "no_action_detected"
+    elif decision_method == "clarify":
+        action_meta["decision_reason"] = "low_confidence_clarify"
+    elif decision_method == "keyword":
+        action_meta["decision_reason"] = "keyword_fallback"
+    else:
+        action_meta["decision_reason"] = "semantic_match"
 
     # ── Build result per action type ──
     if action == "update_address":
@@ -282,6 +458,7 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
             "needs_order_id": False,
             "needs_more_info": new_addr is None,
             "block_reason": block_reason,
+            "confidence": {**action_meta, "method": decision_method},
         }
 
     if action == "cancel_order":
@@ -300,6 +477,7 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
             "executable": executable,
             "needs_order_id": False,
             "block_reason": block_reason,
+            "confidence": {**action_meta, "method": decision_method},
         }
 
     if action == "request_refund":
@@ -334,6 +512,7 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
             "executable": executable,
             "needs_order_id": False,
             "block_reason": block_reason,
+            "confidence": {**action_meta, "method": decision_method},
         }
 
     if action == "process_return":
@@ -353,14 +532,35 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
             "executable": executable,
             "needs_order_id": False,
             "block_reason": block_reason,
+            "confidence": {**action_meta, "method": decision_method},
         }
 
     if action == "check_order_status":
         if not found:
             return {"action": "check_order_status", "executable": False, "needs_order_id": True, "block_reason": ""}
-        return {"action": "check_order_status", "executable": True, "needs_order_id": False, "block_reason": ""}
+        return {
+            "action": "check_order_status",
+            "executable": True,
+            "needs_order_id": False,
+            "block_reason": "",
+            "confidence": {**action_meta, "method": decision_method},
+        }
 
-    return {"action": "no_action", "executable": False, "block_reason": ""}
+    if action == "create_ticket":
+        return {
+            "action": "create_ticket",
+            "executable": True,
+            "needs_order_id": False,
+            "block_reason": "",
+            "confidence": {**action_meta, "method": decision_method},
+        }
+
+    return {
+        "action": "no_action",
+        "executable": False,
+        "block_reason": "",
+        "confidence": {**action_meta, "method": decision_method},
+    }
 
 
 def resume_action_intent(question: str, order_info: dict, pending: dict) -> dict:
@@ -435,6 +635,14 @@ def resume_action_intent(question: str, order_info: dict, pending: dict) -> dict
             "block_reason": block_reason,
         }
 
+    if action == "create_ticket":
+        return {
+            "action": "create_ticket",
+            "executable": True,
+            "needs_order_id": False,
+            "block_reason": "",
+        }
+
     return detect_action_intent(question, order_info)
 
 
@@ -461,9 +669,67 @@ def execute_action(action_intent: dict, order_info: dict, context: dict | None =
     block_reason = action_intent.get("block_reason", "")
     ctx = context or {}
     use_remote = bool(ctx.get("auth_token") or ctx.get("token") or ctx.get("email") or ctx.get("user_email"))
+    ticket_id = f"TK{uuid.uuid4().hex[:6].upper()}"
 
     if action == "no_action":
         return {"success": False, "action": action, "message": "", "ticket_id": None, "updated_fields": {}}
+
+    if action == "create_ticket":
+        subject = (
+            action_intent.get("subject")
+            or (f"Yêu cầu hỗ trợ đơn {order_id}" if order_id else "Yêu cầu hỗ trợ từ chatbot")
+        )
+        description = (
+            action_intent.get("description")
+            or order_info.get("summary")
+            or block_reason
+            or "Khách cần hỗ trợ"
+        )
+        ticket_payload = {
+            "subject": subject,
+            "description": description,
+            "channel": "chat",
+            "category": action_intent.get("category") or "other",
+            "priority": action_intent.get("priority") or "normal",
+            "orderId": order_info.get("raw", {}).get("_id") or order_info.get("raw", {}).get("id") or None,
+            "sourceMessage": ctx.get("question") or description,
+            "contactName": ctx.get("user_name") or ctx.get("full_name") or "",
+            "contactEmail": ctx.get("email") or ctx.get("user_email") or "",
+            "contactPhone": ctx.get("phone") or ctx.get("user_phone") or "",
+            "metadata": {
+                "session_id": ctx.get("session_id") or "",
+                "user_id": ctx.get("user_id") or "",
+                "order_id": order_id or "",
+            },
+        }
+
+        if use_remote and remote_create_support_ticket:
+            result = remote_create_support_ticket(ticket_payload, ctx)
+            if result.get("success"):
+                ticket_number = result.get("ticketNumber") or result.get("data", {}).get("ticketNumber") or ticket_id
+                ticket_record_id = result.get("ticketId") or result.get("data", {}).get("_id") or ""
+                return {
+                    "success": True,
+                    "action": action,
+                    "message": result.get("message") or f"Đã tạo ticket hỗ trợ **{ticket_number}**.",
+                    "ticket_id": ticket_record_id or ticket_number,
+                    "updated_fields": {
+                        "ticket_id": ticket_record_id,
+                        "ticket_number": ticket_number,
+                    },
+                }
+
+        return {
+            "success": True,
+            "action": action,
+            "message": (
+                f"Đã tạo ticket hỗ trợ **{ticket_id}**.\n"
+                f"• Mô tả: {description}\n"
+                f"• Mã ticket: {ticket_id}"
+            ),
+            "ticket_id": ticket_id,
+            "updated_fields": {"ticket_number": ticket_id},
+        }
 
     if not executable:
         if action_intent.get("needs_order_id"):
@@ -497,7 +763,6 @@ def execute_action(action_intent: dict, order_info: dict, context: dict | None =
     if order_id not in orders:
         return {"success": False, "action": action, "message": f"Không tìm thấy {order_id} trong DB", "ticket_id": None, "updated_fields": {}}
 
-    ticket_id = f"TK{uuid.uuid4().hex[:6].upper()}"
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # ── Update Address ──

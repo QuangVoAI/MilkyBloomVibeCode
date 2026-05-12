@@ -8,6 +8,8 @@ export const getTopSelling = () => apiClient.get('/dashboard/products/top-sellin
 export const getLowStock = () => apiClient.get('/dashboard/products/low-stock');
 export const getCategoryStats = () => apiClient.get('/dashboard/products/category-stats');
 export const getBranchesMap = () => apiClient.get('/dashboard/branches-map');
+export const getChatbotInsights = () => apiClient.get('/dashboard/chatbot-insights');
+export const getChatbotCases = (params = {}) => apiClient.get('/dashboard/chatbot-cases', { params });
 
 export default {
   getSalesOverview,
@@ -18,4 +20,6 @@ export default {
   getLowStock,
   getCategoryStats,
   getBranchesMap,
+  getChatbotInsights,
+  getChatbotCases,
 };

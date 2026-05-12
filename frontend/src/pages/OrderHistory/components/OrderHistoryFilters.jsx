@@ -26,7 +26,7 @@ const OrderHistoryFilters = ({ filters, onFilterChange, onSearch }) => {
         <Search className="search-icon" size={20} />
         <Input
           type="text"
-          placeholder="Search orders..."
+          placeholder="Search by order ID, phone, or email..."
           value={filters.search}
           onChange={handleSearchChange}
           className="search-input"

@@ -71,6 +71,46 @@ def _request_json(method: str, path: str, context: dict | None = None, data: dic
         return {"success": False, "message": str(err)}
 
 
+def search_products(query: str, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", "/products", ctx, params={"keyword": query})
+
+
+def get_product_detail(product_id: str, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", f"/products/{product_id}", ctx)
+
+
+def get_product_by_slug(slug: str, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", f"/products/slug/{slug}", ctx)
+
+
+def get_variant_detail(variant_id: str, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", f"/variants/{variant_id}", ctx)
+
+
+def get_addresses_for_user(user_id: str, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", f"/addresses/user/{user_id}", ctx)
+
+
+def get_default_address(user_id: str, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", f"/addresses/default/{user_id}", ctx)
+
+
+def checkout_from_cart(payload: dict, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("POST", "/orders/checkout/cart", ctx, data=payload)
+
+
+def create_support_ticket(payload: dict, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("POST", "/support-tickets", ctx, data=payload)
+
+
 def get_order_detail(order_id: str, context: dict | None = None) -> dict:
     """
     Try authenticated / guest order lookup against the real shop backend.
@@ -79,15 +119,24 @@ def get_order_detail(order_id: str, context: dict | None = None) -> dict:
     if ctx.get("auth_token"):
         return _request_json("GET", f"/orders/{order_id}", ctx)
 
-    email = ctx.get("email") or ctx.get("user_email")
-    if email:
-        return _request_json("GET", f"/orders/{order_id}/guest", ctx, params={"email": email})
+    access_token = (
+        ctx.get("access_token")
+        or ctx.get("order_access_token")
+        or ctx.get("orderAccessToken")
+    )
+    if access_token:
+        return _request_json(
+            "GET",
+            f"/orders/{order_id}/guest",
+            ctx,
+            params={"accessToken": access_token},
+        )
 
-    session_id = ctx.get("session_id") or ctx.get("sessionId")
-    if session_id:
-        return _request_json("GET", f"/orders/{order_id}/guest", ctx, params={"sessionId": session_id})
-
-    return {"success": False, "message": "No auth or guest context available"}
+    return {
+        "success": False,
+        "message": "Order ownership is not verified. Please login or provide an order access token.",
+        "ownership_verified": False,
+    }
 
 
 def search_orders_by_phone(phone: str, context: dict | None = None) -> dict:
@@ -95,6 +144,12 @@ def search_orders_by_phone(phone: str, context: dict | None = None) -> dict:
     Search guest/user orders by phone number against the real shop backend.
     """
     ctx = context or {}
+    if not (ctx.get("internal_lookup") or ctx.get("allow_internal_lookup")):
+        return {
+            "success": False,
+            "message": "Phone lookup is internal-only and requires explicit ownership verification.",
+            "ownership_verified": False,
+        }
     return _request_json("GET", "/orders/guest/search", ctx, params={"phone": phone})
 
 

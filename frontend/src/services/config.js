@@ -127,7 +127,13 @@ const apiClient = {
           window.dispatchEvent(new Event('userLoggedOut'));
         }
         
-        throw new Error(error.message || `HTTP error! status: ${response.status}`);
+        const apiError = new Error(error.message || `HTTP error! status: ${response.status}`);
+        apiError.status = response.status;
+        apiError.response = {
+          status: response.status,
+          data: error,
+        };
+        throw apiError;
       }
 
       const result = await response.json();

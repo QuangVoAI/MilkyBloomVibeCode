@@ -180,6 +180,7 @@ const registerRoutes = () => {
     const badgeRoutes = require("./routes/badge.route.js");
     const dashboardRoutes = require('./routes/dashboard.routes.js');
     const chatRoutes = require("./routes/chat.route.js");
+    const supportTicketRoutes = require("./routes/support-ticket.route.js");
     const mediaRoutes = require('./routes/media.route.js');
     const errorHandler = require('./middlewares/error.middleware');
 
@@ -201,6 +202,7 @@ const registerRoutes = () => {
     app.use("/api/badges", badgeRoutes);
     app.use('/api/dashboard', dashboardRoutes);
     app.use("/api/chat", chatRoutes);
+    app.use("/api/support-tickets", supportTicketRoutes);
     app.use('/api/media', mediaRoutes);
     app.use(errorHandler);
 };

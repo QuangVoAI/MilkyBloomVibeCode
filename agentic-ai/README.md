@@ -44,7 +44,7 @@ graph TD
     KW --> REDIS[(Redis Cache)]
     KW --> QDRANT[(Qdrant<br/>Vector DB)]
     KW --> ORDERS[(mock_orders.json<br/>Order Database)]
-    KW --> LLM[LLM Backend<br/>Vertex AI / Groq]
+    KW --> LLM[LLM Backend<br/>Groq / Featherless]
 
     style U fill:#4CAF50,color:#fff
     style RB fill:#FF6B35,color:#fff
@@ -178,7 +178,7 @@ Confirm hành động đã xử lý]
 | **Gateway** | **Rust (Axum + Tokio)** | WebSocket server, Kafka producer/consumer, HTTP API |
 | **Message Queue** | **Redpanda (Kafka-compatible)** | Tách biệt gateway và AI worker, hỗ trợ streaming |
 | **AI Pipeline** | **LangGraph (Python)** | Điều phối stateful multi-node workflow |
-| **LLM Backends** | **Groq**, **Featherless**, **Vertex AI** | Groq mặc định, Featherless fallback, Vertex legacy compatibility |
+| **LLM Backends** | **Groq**, **Featherless** | Groq mặc định, Featherless fallback |
 | **Embedding** | **BGE-M3** | Dense embedding đa ngôn ngữ |
 | **Vector DB** | **Qdrant** | Hybrid Search: Dense + Sparse + RRF fusion |
 | **Reranker** | **BGE-Reranker-v2-M3** | Cross-encoder reranking |
@@ -215,11 +215,6 @@ EMPATHY_MODE=groq               # mặc định: Groq, fallback sang Featherless
 GROQ_API_KEY=your-groq-key
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 FEATHERLESS_API_KEY=your-featherless-key
-
-# Vertex AI (nếu dùng fine-tuned model)
-VERTEX_PROJECT_ID=your-project-id
-VERTEX_REGION=asia-southeast1
-VERTEX_ENDPOINT_ID=your-endpoint-id
 
 # Qdrant
 QDRANT_HOST=localhost
@@ -294,8 +289,6 @@ empathai/
 ├── data/
 │   ├── mykingdom_policies.json # Chính sách RAG source
 │   └── mock_orders.json        # Mock order database (7 đơn mẫu)
-│
-├── vertex_inference/           # Vertex AI deployment scripts
 ├── docker-compose.yml
 └── .env
 ```
@@ -315,5 +308,5 @@ Giao diện Agent Trace trực tiếp trên UI (nút `account_tree` sau mỗi ph
 ---
 
 <div align="center">
-  <sub>Built with ❤️ — Python · Rust · LangGraph · Qdrant · Groq · Vertex AI</sub>
+  <sub>Built with ❤️ — Python · Rust · LangGraph · Qdrant · Groq · Featherless</sub>
 </div>

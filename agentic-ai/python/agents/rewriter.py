@@ -1,6 +1,6 @@
 """
 Rewriter Agent — Viết lại query khi policy search không đủ.
-Phần sinh text có thể đi qua Groq hoặc Featherless tùy EMPATHY_MODE.
+Phần sinh text đi qua Groq là chính, Featherless là fallback.
 """
 import time
 import sys
@@ -11,7 +11,6 @@ from agents.state import AgentState
 from agents.llm_client import (
     groq_complete,
     featherless_complete,
-    vertex_custom_complete,
     GROQ_MODEL_FAST,
     FEATHERLESS_MODEL_FAST,
 )
@@ -19,19 +18,20 @@ from config import EMPATHY_MODE
 from utils.console import console
 
 REWRITE_SYSTEM_PROMPT = """\
-You are a query rewriting expert for customer service policy search.
-Given a customer complaint that returned poor policy results, rewrite the search query.
+Bạn là chuyên gia viết lại truy vấn để tìm chính sách CSKH phù hợp nhất.
+Khi nhận một câu hỏi hoặc khiếu nại trả về kết quả tìm kiếm chưa tốt, hãy viết lại truy vấn sao cho sát ý hơn.
 
-Strategies:
-1. Extract the CORE ISSUE (delivery delay, broken product, wrong item, etc.)
-2. Add specific policy-related terms (hoàn tiền, đổi trả, bồi thường, voucher, bảo hành)
-3. Include the CATEGORY (vận chuyển, sản phẩm, dịch vụ, thanh toán)
-4. Be concise and specific
+CHIẾN LƯỢC:
+1. Rút ra VẤN ĐỀ CHÍNH: giao trễ, hàng hỏng, giao sai, đổi trả, hoàn tiền, bảo hành...
+2. Thêm các từ khóa chính sách phù hợp: hoàn tiền, đổi trả, bồi thường, voucher, bảo hành, vận chuyển, thanh toán
+3. Giữ lại mã đơn, tên sản phẩm, thời gian, số điện thoại nếu chúng xuất hiện và có ích
+4. Viết ngắn gọn, ưu tiên từ khóa thực dụng để tìm đúng chính sách
 
-RULES:
-- Output ONLY the rewritten query in Vietnamese, nothing else
-- Keep it concise (1-2 sentences max)
-- Focus on finding the RIGHT POLICY to resolve the complaint
+QUY TẮC BẮT BUỘC:
+- Chỉ xuất ra truy vấn đã viết lại, KHÔNG giải thích gì thêm
+- BẮT BUỘC viết bằng tiếng Việt
+- Không bịa thêm chi tiết không có trong đầu vào
+- Tối đa 1-2 câu
 """
 
 
@@ -65,28 +65,12 @@ async def rewrite_query_node(state: AgentState) -> dict:
         {"role": "user", "content": prompt},
     ]
     
-    if EMPATHY_MODE == "vertex":
-        try:
-            rewritten = await vertex_custom_complete(
-                messages=messages,
-                max_tokens=128,
-                temperature=0.3,
-            )
-        except Exception as e:
-            print(f"Legacy rewrite error: {e}, falling back to primary LLM backend")
-            rewritten = await groq_complete(
-                prompt=prompt,
-                system_prompt=REWRITE_SYSTEM_PROMPT,
-                model=GROQ_MODEL_FAST,
-                max_tokens=128,
-                temperature=0.3,
-            )
-    elif EMPATHY_MODE == "featherless":
+    if EMPATHY_MODE == "featherless":
         rewritten = await featherless_complete(
             messages=messages,
             model=FEATHERLESS_MODEL_FAST,
             max_tokens=128,
-            temperature=0.3,
+            temperature=0.2,
         )
     else:
         rewritten = await groq_complete(
@@ -94,7 +78,7 @@ async def rewrite_query_node(state: AgentState) -> dict:
             system_prompt=REWRITE_SYSTEM_PROMPT,
             model=GROQ_MODEL_FAST,
             max_tokens=128,
-            temperature=0.3,
+            temperature=0.2,
         )
 
     rewritten = rewritten.strip().strip('"').strip("'")

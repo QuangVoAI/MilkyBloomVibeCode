@@ -1,14 +1,12 @@
 """
 LLM client for EmpathAI.
 
-- Groq is the real production provider for the legacy `groq_*` entrypoints.
-- Featherless stays available as a first-class OpenAI-compatible backend.
-- Vertex helpers remain for compatibility with older branches.
+- Groq is the primary production provider for the `groq_*` entrypoints.
+- Featherless stays available as a first-class OpenAI-compatible fallback.
 """
 import asyncio
 import aiohttp
 import json
-import time
 from typing import AsyncGenerator
 
 import sys
@@ -29,7 +27,6 @@ from config import (
     FEATHERLESS_MODEL_SMART,
     FEATHERLESS_HTTP_REFERER,
     FEATHERLESS_X_TITLE,
-    VERTEX_PROJECT_ID, VERTEX_REGION,
 )
 
 # Langfuse decorator (graceful fallback if not configured)
@@ -137,6 +134,24 @@ def _build_openai_payload(
     if stream:
         payload["stream"] = True
     return payload
+
+
+_FEATHERLESS_VIETNAMESE_GUARD = (
+    "Bạn bắt buộc phải trả lời hoàn toàn bằng tiếng Việt. "
+    "Nếu thiếu dữ liệu hoặc thấy câu hỏi mơ hồ, hãy hỏi lại ngắn gọn thay vì đoán. "
+    "Không thêm giải thích thừa, không dùng tiếng Anh nếu không cần."
+)
+
+
+def _with_featherless_guard(messages: list[dict]) -> list[dict]:
+    """Add a Vietnamese/precision guard for fallback outputs."""
+    if any(
+        message.get("role") == "system"
+        and _FEATHERLESS_VIETNAMESE_GUARD in (message.get("content") or "")
+        for message in messages or []
+    ):
+        return list(messages)
+    return [{"role": "system", "content": _FEATHERLESS_VIETNAMESE_GUARD}, *(messages or [])]
 
 
 async def _openai_chat_complete(
@@ -256,124 +271,6 @@ async def _openai_stream_complete(
                     continue
 
 
-# ─── Vertex AI Gemini Completion ─────────────────────────────
-
-@observe(name="vertex_gemini_complete", as_type="generation")
-async def vertex_gemini_complete(
-    messages: list[dict],
-    model: str = "gemini-1.5-flash",
-    max_tokens: int = 4096,
-    temperature: float = 0.1,
-) -> str:
-    """Vertex AI Gemini chat completion using Google Cloud SDK."""
-    import vertexai
-    from vertexai.generative_models import GenerativeModel, Content, Part
-    
-    vertexai.init(project=VERTEX_PROJECT_ID, location=VERTEX_REGION)
-    
-    # Extract system instruction and format contents
-    system_instruction = None
-    contents = []
-    
-    for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        
-        if role == "system":
-            system_instruction = content
-        else:
-            # Vertex roles: 'user', 'model'
-            v_role = "user" if role != "assistant" else "model"
-            contents.append(Content(role=v_role, parts=[Part.from_text(content)]))
-            
-    v_model = GenerativeModel(model, system_instruction=system_instruction)
-    
-    response = await v_model.generate_content_async(
-        contents,
-        generation_config={
-            "temperature": temperature,
-            "max_output_tokens": max_tokens,
-        }
-    )
-    return response.text
-
-
-# ─── Vertex AI Custom Endpoint (Fine-tuned Model) ─────────────────────────────
-
-# Cache endpoint URL and access token
-_vertex_endpoint_url: str | None = None
-_vertex_access_token: str = ""
-_vertex_token_expiry: float = 0.0
-_VERTEX_TOKEN_TTL = 3000  # Refresh token every 50 minutes (GCP tokens last ~60min)
-
-
-def _get_vertex_endpoint_url() -> str:
-    """Build Vertex AI Custom Endpoint URL from project config."""
-    global _vertex_endpoint_url
-    if _vertex_endpoint_url is not None:
-        return _vertex_endpoint_url
-    
-    # Format: https://REGION-aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/REGION/endpoints/ENDPOINT_ID
-    # Endpoint ID can be set via env or inferred
-    import os
-    endpoint_id = os.getenv("VERTEX_ENDPOINT_ID", "")
-    
-    if endpoint_id:
-        _vertex_endpoint_url = (
-            f"https://{VERTEX_REGION}-aiplatform.googleapis.com/v1/"
-            f"projects/{VERTEX_PROJECT_ID}/locations/{VERTEX_REGION}/"
-            f"endpoints/{endpoint_id}"
-        )
-    else:
-        # Try to get from gcloud or raise error
-        _vertex_endpoint_url = os.getenv("VERTEX_ENDPOINT_URL", "")
-    
-    return _vertex_endpoint_url
-
-
-@observe(name="vertex_custom_complete", as_type="generation")
-async def vertex_custom_complete(
-    messages: list[dict],
-    max_tokens: int = 512,
-    temperature: float = 0.7,
-) -> str:
-    """
-    Legacy compatibility wrapper.
-    Kept for older call sites, but now routes to Featherless.
-    """
-    return await featherless_complete(
-        messages=messages,
-        model=FEATHERLESS_MODEL_SMART,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-
-
-# Alias for backward compatibility - vertex mode uses custom endpoint for fine-tuned model
-async def vertex_chat_complete(
-    messages: list[dict],
-    model: str = "gemini-1.5-flash",
-    max_tokens: int = 4096,
-    temperature: float = 0.1,
-) -> str:
-    """
-    Vertex AI chat completion - auto-selects Gemini or Custom Endpoint.
-    If model starts with 'projects/' it's a custom endpoint, else Gemini.
-    """
-    if model.startswith("projects/") or model.startswith("custom:"):
-        return await vertex_custom_complete(
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-    return await vertex_gemini_complete(
-        messages=messages,
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-
-
 # ─── Non-Streaming Completion ────────────────────────────
 
 async def groq_complete(
@@ -443,7 +340,7 @@ async def featherless_complete(
 ) -> str:
     """Featherless completion (non-streaming)."""
     return await _openai_chat_complete(
-        messages=messages,
+        messages=_with_featherless_guard(messages),
         model=model,
         api_key=FEATHERLESS_API_KEY,
         base_url=FEATHERLESS_BASE_URL,
@@ -533,7 +430,7 @@ async def featherless_stream_complete(
 ) -> AsyncGenerator[str, None]:
     """Streaming chat completion via Featherless SSE."""
     async for token in _openai_stream_complete(
-        messages=messages,
+        messages=_with_featherless_guard(messages),
         model=model,
         api_key=FEATHERLESS_API_KEY,
         base_url=FEATHERLESS_BASE_URL,

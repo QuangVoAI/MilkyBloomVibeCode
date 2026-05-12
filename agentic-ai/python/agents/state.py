@@ -26,6 +26,9 @@ class AgentState(TypedDict, total=False):
     evidence_text: str          # Formatted policy context cho LLM
     policy_context: str         # Chính sách áp dụng cụ thể
     compensation: str           # Gợi ý bồi thường từ RAG
+    catalog_info: dict          # Live catalog lookup result
+    checkout_result: dict       # Checkout helper result
+    ticket_info: dict           # Support ticket creation/lookup result
 
     # --- Rewrite Loop ---
     rewrite_count: int

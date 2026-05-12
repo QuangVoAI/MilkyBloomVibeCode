@@ -9,6 +9,7 @@ import {
   getLowStock,
   getCategoryStats,
   getBranchesMap,
+  getChatbotInsights,
 } from '@/services';
 import { formatPrice, formatPriceNumber } from '@/utils/formatPrice';
 import BranchMap from './BranchMap';
@@ -182,6 +183,7 @@ const Main = () => {
   const [lowStock, setLowStock] = useState([]);
   const [categoryStats, setCategoryStats] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [chatbotInsights, setChatbotInsights] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -198,6 +200,7 @@ const Main = () => {
           lowStockRes,
           branchesRes,
           categoryRes,
+          chatbotRes,
         ] = await Promise.all([
           getSalesOverview(),
           getRevenueUpdates(),
@@ -207,6 +210,7 @@ const Main = () => {
           getLowStock(),
           getBranchesMap(),
           getCategoryStats(),
+          getChatbotInsights(),
         ]);
 
         setOverview(overviewRes.data);
@@ -217,6 +221,7 @@ const Main = () => {
         setLowStock(lowStockRes.data || []);
         setBranches(branchesRes.data || []);
         setCategoryStats(categoryRes.data || []);
+        setChatbotInsights(chatbotRes.data || null);
       } catch (err) {
         console.error('Load dashboard error:', err);
         setError(err.message || 'Failed to load dashboard');
@@ -344,6 +349,47 @@ const Main = () => {
                 )}
                 accent="Includes COD, MoMo, VietQR, ZaloPay"
               />
+            </div>
+
+            <div className="p-4 rounded-xl bg-white shadow-sm border border-stone-200">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-700">Chatbot Insights</h3>
+                  <p className="text-xs text-stone-500">
+                    Router confidence, fallback rate, and Vietnamese output quality
+                  </p>
+                </div>
+                <div className="text-2xl font-extrabold text-stone-900">
+                  {chatbotInsights?.total ?? 0}
+                  <span className="ml-2 text-sm font-semibold text-stone-500">traces</span>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  title="Avg Router Confidence"
+                  value={`${Math.round((chatbotInsights?.avgRouterConfidence || 0) * 100)}%`}
+                  pill="router"
+                  accent={`Low confidence: ${Math.round((chatbotInsights?.lowConfidenceRate || 0) * 100)}%`}
+                />
+                <StatCard
+                  title="Avg Action Confidence"
+                  value={`${Math.round((chatbotInsights?.avgActionConfidence || 0) * 100)}%`}
+                  pill="action"
+                  accent={`Clarify rate: ${Math.round((chatbotInsights?.clarifyRate || 0) * 100)}%`}
+                />
+                <StatCard
+                  title="Keyword Fallback"
+                  value={`${Math.round((chatbotInsights?.keywordFallbackRate || 0) * 100)}%`}
+                  pill="fallback"
+                  accent="Used when semantic similarity is too low"
+                />
+                <StatCard
+                  title="Vietnamese OK"
+                  value={`${Math.round((chatbotInsights?.vietnameseOkRate || 0) * 100)}%`}
+                  pill="lang"
+                  accent={chatbotInsights?.latestTraceAt ? `Latest: ${chatbotInsights.latestTraceAt}` : 'No traces yet'}
+                />
+              </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">

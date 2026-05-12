@@ -70,5 +70,17 @@ router.get(
     adminOnly,
     dashboardController.getBranchesMap,
 );
+router.get(
+    "/chatbot-insights",
+    auth,
+    adminOnly,
+    dashboardController.getChatbotInsights,
+);
+router.get(
+    "/chatbot-cases",
+    auth,
+    adminOnly,
+    dashboardController.getChatbotCases,
+);
 
 module.exports = router;

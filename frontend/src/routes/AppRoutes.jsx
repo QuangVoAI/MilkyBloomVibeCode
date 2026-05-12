@@ -30,10 +30,13 @@ const Payment = lazy(() => import('../pages/Payment'));
 const Profile = lazy(() => import('../pages/Profile'));
 const AdminPanel = lazy(() => import('../pages/AdminPanel'));
 const Dashboard = lazy(() => import('../pages/AdminPanel/Dashboard'));
+const ChatbotQuality = lazy(() => import('../pages/AdminPanel/ChatbotQuality'));
 const Users = lazy(() => import('../pages/AdminPanel/Users'));
 const AdminProducts = lazy(() => import('../pages/AdminPanel/Products'));
 const AdminOrders = lazy(() => import('../pages/AdminPanel/Orders'));
 const DiscountCodes = lazy(() => import('../pages/AdminPanel/DiscountCodes'));
+const SupportTickets = lazy(() => import('../pages/AdminPanel/SupportTickets'));
+const SupportTicketDetail = lazy(() => import('../pages/AdminPanel/SupportTickets/Detail'));
 const CarouselDemo = lazy(() => import('../pages/CarouselDemo'));
 
 // Loading component for Suspense fallback
@@ -107,6 +110,10 @@ const router = createBrowserRouter([
             element: <Suspense fallback={<PageLoader />}><Dashboard /></Suspense>
           },
           {
+            path: 'chatbot-quality',
+            element: <Suspense fallback={<PageLoader />}><ChatbotQuality /></Suspense>
+          },
+          {
             path: 'users',
             element: <Suspense fallback={<PageLoader />}><Users /></Suspense>
           },
@@ -121,6 +128,14 @@ const router = createBrowserRouter([
           {
             path: 'discount-codes',
             element: <Suspense fallback={<PageLoader />}><DiscountCodes /></Suspense>
+          },
+          {
+            path: 'support-tickets',
+            element: <Suspense fallback={<PageLoader />}><SupportTickets /></Suspense>
+          },
+          {
+            path: 'support-tickets/:ticketId',
+            element: <Suspense fallback={<PageLoader />}><SupportTicketDetail /></Suspense>
           }
         ]
       },

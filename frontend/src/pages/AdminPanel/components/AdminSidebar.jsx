@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { House, User, Panda, Package, Tag, Search, ChevronDown } from 'lucide-react';
+import { House, User, Panda, Package, Tag, Search, ChevronDown, Ticket } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { ADMIN_ROUTES, PUBLIC_ROUTES } from '@/config/routes';
 import { getUsers } from '@/services/users.service';
 import { getProducts } from '@/services/products.service';
 import { getAllOrders } from '@/services/orders.service';
+import { getAllSupportTickets } from '@/services/supportTickets.service';
 
 const AdminSidebar = ({ onNavigate }) => {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -18,9 +19,11 @@ const AdminSidebar = ({ onNavigate }) => {
 
   const navigationTabs = [
     {title: 'Dashboard', route: ADMIN_ROUTES.DASHBOARD },
+    { title: 'Chatbot Quality', route: ADMIN_ROUTES.CHATBOT_QUALITY },
     { title: 'Users', route: ADMIN_ROUTES.USERS },
     { title: 'Products', route: ADMIN_ROUTES.PRODUCTS },
     { title: 'Orders', route: ADMIN_ROUTES.ORDERS },
+    { title: 'Support Tickets', route: ADMIN_ROUTES.SUPPORT_TICKETS },
     { title: 'Discount Codes', route: ADMIN_ROUTES.DISCOUNT_CODES },
   ];
 
@@ -29,7 +32,10 @@ const AdminSidebar = ({ onNavigate }) => {
     onNavigate?.();
   };
 
-  const isActive = (route) => location.pathname === route;
+  const isActive = (route) =>
+    location.pathname === route ||
+    (route === ADMIN_ROUTES.SUPPORT_TICKETS &&
+      location.pathname.startsWith(`${ADMIN_ROUTES.SUPPORT_TICKETS}/`));
   const filteredTabs = navigationTabs.filter((tab) =>
     tab.title.toLowerCase().includes(searchTerm.trim().toLowerCase())
   );
@@ -44,10 +50,11 @@ const AdminSidebar = ({ onNavigate }) => {
     const timeout = setTimeout(async () => {
       try {
         setSearchLoading(true);
-        const [userRes, productRes, orderRes] = await Promise.allSettled([
+        const [userRes, productRes, orderRes, ticketRes] = await Promise.allSettled([
           getUsers({ keyword: term, limit: 5 }),
           getProducts({ keyword: term, limit: 5, status: 'all' }),
           getAllOrders({ search: term, limit: 5 }),
+          getAllSupportTickets({ search: term, limit: 5 }),
         ]);
 
         const results = [];
@@ -84,6 +91,18 @@ const AdminSidebar = ({ onNavigate }) => {
               title: `Order #${o._id?.slice(-8)}`,
               subtitle: o.userId?.email || o.userId?.fullName || 'Guest',
               route: ADMIN_ROUTES.ORDERS,
+            });
+          });
+        }
+
+        if (ticketRes.status === 'fulfilled') {
+          (ticketRes.value?.tickets || ticketRes.value || []).slice(0, 5).forEach((t) => {
+            results.push({
+              id: t._id,
+              type: 'Ticket',
+              title: t.ticketNumber || t.subject || 'Support ticket',
+              subtitle: t.contactEmail || t.contactName || t.category || 'Ticket',
+              route: `${ADMIN_ROUTES.SUPPORT_TICKETS}/${t._id}`,
             });
           });
         }

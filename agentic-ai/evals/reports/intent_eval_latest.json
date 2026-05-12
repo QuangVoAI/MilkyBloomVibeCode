@@ -1,0 +1,25 @@
+{
+  "total_cases": 105,
+  "intent_accuracy": 1.0,
+  "route_accuracy": 1.0,
+  "action_accuracy": 1.0,
+  "keyword_fallback_rate": 0.3714,
+  "clarify_rate": 0.1619,
+  "clarify_cases": 12,
+  "intent_evaluable_cases": 93,
+  "predicted_intents": {
+    "COMPLAINT": 51,
+    "INQUIRY": 33,
+    "CASUAL": 21
+  },
+  "predicted_actions": {
+    "cancel_order": 8,
+    "update_address": 6,
+    "request_refund": 6,
+    "process_return": 11,
+    "check_order_status": 8,
+    "create_ticket": 9,
+    "no_action": 57
+  },
+  "failures": []
+}

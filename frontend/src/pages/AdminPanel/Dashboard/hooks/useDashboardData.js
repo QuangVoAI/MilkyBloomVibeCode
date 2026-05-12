@@ -8,6 +8,9 @@ import {
   getLowStock,
   getCategoryStats,
   getBranchesMap,
+  getChatbotInsights,
+  getSupportTicketStats,
+  getSupportTicketAssigneeStats,
 } from '@/services';
 
 const toNumber = (v) => {
@@ -30,6 +33,9 @@ export const useDashboardData = () => {
     lowStock: [],
     categoryStats: [],
     branches: [],
+    supportTicketStats: null,
+    supportTicketAssigneeStats: [],
+    chatbotInsights: null,
   });
 
   const loadDashboard = useCallback(async () => {
@@ -47,6 +53,9 @@ export const useDashboardData = () => {
         getLowStock(),
         getBranchesMap(),
         getCategoryStats(),
+        getChatbotInsights(),
+        getSupportTicketStats(),
+        getSupportTicketAssigneeStats(),
       ]);
 
       const [
@@ -58,6 +67,9 @@ export const useDashboardData = () => {
         lowStockRes,
         branchesRes,
         categoryRes,
+        chatbotRes,
+        ticketStatsRes,
+        assigneeStatsRes,
       ] = results;
 
       setData({
@@ -73,6 +85,9 @@ export const useDashboardData = () => {
         lowStock: lowStockRes.status === 'fulfilled' ? (lowStockRes.value.data || []) : [],
         branches: branchesRes.status === 'fulfilled' ? (branchesRes.value.data || []) : [],
         categoryStats: categoryRes.status === 'fulfilled' ? (categoryRes.value.data || []) : [],
+        chatbotInsights: chatbotRes.status === 'fulfilled' ? (chatbotRes.value.data || null) : null,
+        supportTicketStats: ticketStatsRes.status === 'fulfilled' ? (ticketStatsRes.value.data || null) : null,
+        supportTicketAssigneeStats: assigneeStatsRes.status === 'fulfilled' ? (assigneeStatsRes.value.data || []) : [],
       });
     } catch (err) {
       console.error('Load dashboard error:', err);
@@ -185,6 +200,8 @@ export const useDashboardData = () => {
     revenue7Data,
     monthColor,
     toNumber,
+    supportTicketAssigneeStats: data.supportTicketAssigneeStats,
+    chatbotInsights: data.chatbotInsights,
   };
 };
 

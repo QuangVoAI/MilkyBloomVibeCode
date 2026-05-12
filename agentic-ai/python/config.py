@@ -50,8 +50,6 @@ FEATHERLESS_X_TITLE = os.getenv("FEATHERLESS_X_TITLE", "")
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
-VERTEX_PROJECT_ID = os.getenv("VERTEX_PROJECT_ID", "empathai-494308")
-VERTEX_REGION = os.getenv("VERTEX_REGION", "asia-southeast1")  # Singapore, gần VN nhất
 
 # --- Model Configuration ---
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")

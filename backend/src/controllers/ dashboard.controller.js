@@ -73,4 +73,24 @@ module.exports = {
             data: await dashboardService.getBranchesMap(),
         });
     },
+
+    async getChatbotInsights(req, res) {
+        res.json({
+            success: true,
+            data: await dashboardService.getChatbotInsights(),
+        });
+    },
+
+    async getChatbotCases(req, res, next) {
+        try {
+            const limit = Number(req.query.limit || 8);
+            const mode = req.query.mode || 'all';
+            const reason = req.query.reason || '';
+            const threshold = req.query.threshold;
+            const data = await dashboardService.getChatbotCases({ limit, mode, reason, threshold });
+            res.json({ success: true, data });
+        } catch (err) {
+            return next(err);
+        }
+    },
 };

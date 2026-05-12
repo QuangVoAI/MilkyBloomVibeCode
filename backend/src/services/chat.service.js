@@ -9,6 +9,17 @@ const normalizeMode = (value) => {
     return 'agentic';
 };
 
+const getPublicProviderLabel = (provider) => {
+    switch (provider) {
+        case 'agentic':
+            return 'groq';
+        case 'auto':
+            return 'groq';
+        default:
+            return provider || 'groq';
+    }
+};
+
 const toNumber = (value, fallback) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -45,8 +56,8 @@ const resolveCandidateOrder = (provider) => {
 const getProviderSnapshot = () => {
     const config = getChatConfig();
     return {
-        provider: config.provider,
-        candidates: resolveCandidateOrder(config.provider),
+        provider: getPublicProviderLabel(config.provider),
+        candidates: [getPublicProviderLabel(config.provider)],
         streamingOnly: true,
         agentic: {
             configured: isAgenticConfigured(config.agentic),

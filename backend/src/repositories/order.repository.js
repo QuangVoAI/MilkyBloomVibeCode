@@ -47,6 +47,63 @@ module.exports = {
         return Order.findById(id).lean();
     },
 
+    findByIdWithGuestAccess(id) {
+        return Order.findById(id)
+            .select('+guestAccessTokenHash +guestAccessTokenExpiresAt')
+            .lean();
+    },
+
+    findByIdWithLookupAccess(id) {
+        return Order.findById(id)
+            .select(
+                '+guestAccessTokenHash +guestAccessTokenExpiresAt +orderLookupOtpHash +orderLookupOtpExpiresAt +orderLookupOtpSentTo +orderLookupOtpAttempts +orderLookupOtpVerifiedAt',
+            )
+            .lean();
+    },
+
+    updateLookupOtp(id, update = {}) {
+        const $set = {};
+        if (Object.prototype.hasOwnProperty.call(update, 'orderLookupOtpHash')) {
+            $set.orderLookupOtpHash = update.orderLookupOtpHash;
+        }
+        if (Object.prototype.hasOwnProperty.call(update, 'orderLookupOtpExpiresAt')) {
+            $set.orderLookupOtpExpiresAt = update.orderLookupOtpExpiresAt;
+        }
+        if (Object.prototype.hasOwnProperty.call(update, 'orderLookupOtpSentTo')) {
+            $set.orderLookupOtpSentTo = update.orderLookupOtpSentTo;
+        }
+        if (Object.prototype.hasOwnProperty.call(update, 'orderLookupOtpVerifiedAt')) {
+            $set.orderLookupOtpVerifiedAt = update.orderLookupOtpVerifiedAt;
+        }
+        if (typeof update.orderLookupOtpAttempts === 'number') {
+            $set.orderLookupOtpAttempts = update.orderLookupOtpAttempts;
+        }
+
+        return Order.findByIdAndUpdate(
+            id,
+            {
+                $set,
+            },
+            { new: true },
+        );
+    },
+
+    clearLookupOtp(id) {
+        return Order.findByIdAndUpdate(
+            id,
+            {
+                $set: {
+                    orderLookupOtpHash: null,
+                    orderLookupOtpExpiresAt: null,
+                    orderLookupOtpSentTo: null,
+                    orderLookupOtpVerifiedAt: null,
+                    orderLookupOtpAttempts: 0,
+                },
+            },
+            { new: true },
+        );
+    },
+
     async findByPhone(phone) {
         const normalizedPhone = normalizePhone(phone);
         if (!normalizedPhone) return [];

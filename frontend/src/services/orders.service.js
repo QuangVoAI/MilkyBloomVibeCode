@@ -25,10 +25,28 @@ export const getAllOrders = async (params = {}) => {
 };
 
 // Get single order detail
-export const getOrderById = async (orderId) => {
+export const getOrderById = async (orderId, options = {}) => {
   // Check if user is authenticated
   const token = localStorage.getItem('authToken');
+  const lookupToken = options.lookupToken || localStorage.getItem(`orderLookupToken:${orderId}`);
   
+  if (lookupToken) {
+    try {
+      const response = await apiClient.get(`/orders/${orderId}/guest`, {
+        params: {
+          lookupToken,
+        },
+      });
+      return response;
+    } catch (err) {
+      const status = err.response?.status || err.status;
+      if (!token || (status && status !== 403)) {
+        throw err;
+      }
+      // If lookup token is stale but user is actually the owner, fall back to auth route.
+    }
+  }
+
   if (token) {
     // Authenticated user - backend will verify ownership
     const response = await apiClient.get(`/orders/${orderId}`);
@@ -46,6 +64,16 @@ export const getOrderById = async (orderId) => {
     });
     return response;
   }
+};
+
+export const requestOrderLookupOtp = async (orderId) => {
+  const response = await apiClient.post(`/orders/${orderId}/lookup/request-otp`, {});
+  return response;
+};
+
+export const verifyOrderLookupOtp = async (orderId, otp) => {
+  const response = await apiClient.post(`/orders/${orderId}/lookup/verify-otp`, { otp });
+  return response;
 };
 
 // Create order directly
@@ -90,6 +118,8 @@ export default {
   getMyOrders,
   getAllOrders,
   getOrderById,
+  requestOrderLookupOtp,
+  verifyOrderLookupOtp,
   createOrder,
   checkoutFromCart,
   guestCheckoutFromCart,

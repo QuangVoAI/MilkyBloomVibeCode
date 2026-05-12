@@ -160,9 +160,67 @@ async function sendOrderConfirmationEmail(order, user, items, address) {
 }
 
 /**
+ * Send OTP for order lookup verification
+ */
+async function sendOrderLookupOtpEmail(order, user, otp) {
+    if (!user?.email || !otp) {
+        return;
+    }
+
+    const orderId = order._id.toString();
+    const orderIdShort = orderId.slice(-8).toUpperCase();
+    const orderLink = `${FRONTEND_URL}/order-history/${orderId}`;
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #1a73e8 0%, #4f8ff7 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">🔐 OTP tra cứu đơn hàng</h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0;">Mã xác minh để mở chi tiết đơn của bạn</p>
+        </div>
+        
+        <div style="background: #fff; padding: 30px; border: 1px solid #eee; border-top: none;">
+            <p>Xin chào <strong>${user.fullName || 'bạn'}</strong>,</p>
+            <p>Bạn vừa yêu cầu xác minh để tra cứu đơn hàng <strong>#${orderIdShort}</strong>.</p>
+
+            <div style="background: #eef5ff; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <p style="margin: 0 0 10px; color: #1a73e8; font-weight: 600;">Mã OTP của bạn</p>
+                <div style="font-size: 32px; letter-spacing: 8px; font-weight: 700; color: #0b5ed7;">${otp}</div>
+                <p style="margin: 10px 0 0; color: #1a73e8;">OTP có hiệu lực trong vài phút.</p>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="${orderLink}" style="display: inline-block; background: linear-gradient(135deg, #1a73e8 0%, #4f8ff7 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold;">Mở tra cứu đơn hàng</a>
+            </div>
+
+            <p style="margin-top: 30px; color: #666; font-size: 14px;">
+                Nếu bạn không phải người yêu cầu, hãy bỏ qua email này.
+            </p>
+        </div>
+    </body>
+    </html>
+    `;
+
+    try {
+        await sendMail({
+            to: user.email,
+            subject: `🔐 OTP tra cứu đơn hàng #${orderIdShort} - MilkyBloom`,
+            html,
+        });
+    } catch (err) {
+        console.error('[EMAIL ERROR] Failed to send order lookup OTP:', err?.message || err);
+    }
+}
+
+/**
  * Send order confirmation email to guest
  */
-async function sendGuestOrderConfirmationEmail(order, guestInfo, items, address) {
+async function sendGuestOrderConfirmationEmail(order, guestInfo, items, address, orderAccessToken = "") {
     if (!guestInfo?.email && !address?.email) {
         return;
     }
@@ -177,6 +235,9 @@ async function sendGuestOrderConfirmationEmail(order, guestInfo, items, address)
 
     const itemsHtml = generateItemsHtml(items);
     const orderLink = `${FRONTEND_URL}/order-history/${orderId}`;
+    const orderAccessLink = orderAccessToken
+        ? `${FRONTEND_URL}/order-history/${orderId}?accessToken=${encodeURIComponent(orderAccessToken)}`
+        : orderLink;
 
     const addressText = address 
         ? `${address.fullNameOfReceiver || fullName}, ${address.phone || guestInfo?.phone}<br>${address.addressLine || guestInfo?.addressLine}`
@@ -226,6 +287,20 @@ async function sendGuestOrderConfirmationEmail(order, guestInfo, items, address)
             <p>Đơn hàng của bạn đã được tiếp nhận và đang được xử lý.</p>
             
             ${accountInfoHtml}
+
+            ${orderAccessToken ? `
+            <div style="background: #fff7e6; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f0ad4e;">
+                <h3 style="margin: 0 0 15px; color: #8a5b00;">🔐 Mã truy cập đơn hàng</h3>
+                <p style="margin: 5px 0;">Đây là mã xác minh chỉ dành cho chủ đơn. Bạn dùng mã này để tra cứu đơn hàng:</p>
+                <div style="background: white; padding: 12px 15px; border-radius: 6px; margin-top: 10px; word-break: break-all;">
+                    <code style="font-size: 14px; color: #8a5b00;">${orderAccessToken}</code>
+                </div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="${orderAccessLink}" style="display: inline-block; background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%); color: white; text-decoration: none; padding: 12px 22px; border-radius: 8px; font-weight: bold;">Tra cứu đơn hàng</a>
+                </div>
+                <p style="margin: 10px 0 0; font-size: 13px; color: #8a5b00;">Nếu bạn không phải chủ đơn, vui lòng không sử dụng mã này.</p>
+            </div>
+            ` : ''}
 
             <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
                 <h3 style="margin: 0 0 15px; color: #ff6b35;">📦 Thông tin đơn hàng #${orderIdShort}</h3>
@@ -424,5 +499,6 @@ function getStatusInfo(status) {
 module.exports = {
     sendOrderConfirmationEmail,
     sendGuestOrderConfirmationEmail,
+    sendOrderLookupOtpEmail,
     sendOrderStatusUpdateEmail
 };

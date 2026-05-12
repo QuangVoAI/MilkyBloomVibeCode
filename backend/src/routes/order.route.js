@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const orderController = require("../controllers/order.controller");
 const auth = require("../middlewares/auth.middleware");
+const optionalAuth = require("../middlewares/optionalAuth.middleware");
 const adminOnly = require("../middlewares/admin.middleware");
+const internalService = require("../middlewares/internalService.middleware");
 const { strictApiLimiter } = require('../middlewares/rateLimit.middleware');
 
 // User tạo đơn
@@ -17,11 +19,15 @@ router.get("/discount/:discountCodeId", auth, adminOnly, orderController.getOrde
 // Admin xem tất cả đơn hàng
 router.get("/admin/all", auth, adminOnly, orderController.adminGetAll);
 
-// Tìm đơn theo số điện thoại (guest/internal CSKH lookup)
-router.get("/guest/search", orderController.searchGuestOrdersByPhone);
+// Tìm đơn theo số điện thoại (internal CSKH lookup only)
+router.get("/guest/search", internalService, orderController.searchGuestOrdersByPhone);
 
-// Lấy chi tiết đơn guest (requires sessionId or email verification)
-router.get("/:id/guest", orderController.getGuestOrderDetail);
+// Lấy chi tiết đơn guest (optional auth + access token)
+router.get("/:id/guest", optionalAuth, orderController.getGuestOrderDetail);
+
+// OTP flow cho tra cứu đơn
+router.post("/:id/lookup/request-otp", strictApiLimiter, orderController.requestOrderLookupOtp);
+router.post("/:id/lookup/verify-otp", strictApiLimiter, orderController.verifyOrderLookupOtp);
 
 // Lấy chi tiết đơn (authenticated - user can only see their own)
 router.get("/:id", auth, orderController.getDetail);

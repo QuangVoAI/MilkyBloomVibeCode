@@ -25,6 +25,8 @@ export const ADMIN_ROUTES = {
   USERS: '/admin/users',
   PRODUCTS: '/admin/products',
   ORDERS: '/admin/orders',
+  SUPPORT_TICKETS: '/admin/support-tickets',
+  CHATBOT_QUALITY: '/admin/chatbot-quality',
   DISCOUNT_CODES: '/admin/discount-codes',
   SETTINGS: '/admin/settings',
 };

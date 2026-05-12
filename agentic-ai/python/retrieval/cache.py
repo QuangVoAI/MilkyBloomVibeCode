@@ -12,6 +12,7 @@ Cache Strategy:
 import hashlib
 import json
 import time
+import re
 
 import sys
 from pathlib import Path
@@ -54,21 +55,26 @@ def _get_redis():
         return None
 
 
+def _normalize_scope(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9:_-]+", "-", str(value or "").strip().lower())[:64] or "general"
+
+
 # ─── Key Generation ──────────────────────────────────────
 
-def _make_cache_key(question: str) -> str:
+def _make_cache_key(question: str, scope: str = "general") -> str:
     """
     Tạo Redis key từ câu hỏi.
     Normalize: lowercase + strip + SHA-256 (16 chars).
     """
     normalized = question.strip().lower()
-    hash_digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
-    return f"rag:cache:{hash_digest}"
+    scoped = f"{_normalize_scope(scope)}:{normalized}"
+    hash_digest = hashlib.sha256(scoped.encode("utf-8")).hexdigest()[:16]
+    return f"rag:cache:{_normalize_scope(scope)}:{hash_digest}"
 
 
 # ─── Public API ──────────────────────────────────────────
 
-def get_cached_answer(question: str) -> dict | None:
+def get_cached_answer(question: str, scope: str = "general") -> dict | None:
     """
     Kiểm tra cache cho câu hỏi.
 
@@ -83,7 +89,7 @@ def get_cached_answer(question: str) -> dict | None:
         return None
 
     try:
-        key = _make_cache_key(question)
+        key = _make_cache_key(question, scope=scope)
         data = redis.get(key)
 
         if data is None:
@@ -107,6 +113,7 @@ def set_cached_answer(
     answer: str,
     sources: list,
     agent_trace: dict,
+    scope: str = "general",
     ttl: int = REDIS_CACHE_TTL,
 ) -> bool:
     """
@@ -127,7 +134,7 @@ def set_cached_answer(
         return False
 
     try:
-        key = _make_cache_key(question)
+        key = _make_cache_key(question, scope=scope)
         value = json.dumps({
             "answer": answer,
             "sources": sources,

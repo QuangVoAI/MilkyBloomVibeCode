@@ -7,7 +7,7 @@ const addressRepo = require("../repositories/address.repository");
 const paymentRepo = require("../repositories/payment.repository");
 const variantRepo = require("../repositories/variant.repository");
 const { sendMail } = require("../libs/mailer.js");
-const { generateToken, sha256 } = require("../utils/token.js");
+const { generateToken, genOtp6, sha256 } = require("../utils/token.js");
 const { calculateShippingFee } = require("../services/shipping.service");
 const { getWeatherCondition } = require("../services/weather.service");
 const cartRepository = require("../repositories/cart.repository");
@@ -20,10 +20,12 @@ const { checkAndAssignBadges } = require("../services/badge.service");
 const voucherRepository = require("../repositories/voucher.repository");
 const userVoucherRepository = require("../repositories/user-voucher.repository");
 const Product = require("../models/product.model");
-const { sendOrderConfirmationEmail, sendGuestOrderConfirmationEmail, sendOrderStatusUpdateEmail } = require("./email.service");
+const { sendOrderConfirmationEmail, sendGuestOrderConfirmationEmail, sendOrderLookupOtpEmail, sendOrderStatusUpdateEmail } = require("./email.service");
 const { getBackendUrl } = require('../config/runtime.js');
 
 const VERIFY_TTL_MINUTES = Number(process.env.VERIFY_TTL_MINUTES || 15);
+const GUEST_ORDER_ACCESS_TOKEN_TTL_DAYS = Number(process.env.GUEST_ORDER_ACCESS_TOKEN_TTL_DAYS || 30);
+const ORDER_LOOKUP_OTP_TTL_MINUTES = Number(process.env.ORDER_LOOKUP_OTP_TTL_MINUTES || 10);
 const BACKEND_URL = getBackendUrl();
 
 async function sendVerifyEmail(user) {
@@ -129,7 +131,7 @@ module.exports = {
         });
 
         // Tạo đơn
-        const order = await this.createOrder({
+        const orderDetail = await this.createOrder({
             userId: userId || null,
             guestInfo: guestInfo || null,
             addressId: addressId || null,
@@ -149,20 +151,6 @@ module.exports = {
             discountCodeId: null,
         });
 
-        // Get order detail for email and response
-        const orderDetail = await this.getOrderDetail(order._id);
-
-        // Gửi email ngay sau khi tạo order để có thể gửi kèm password (nếu là guest mới)
-        // Password chỉ có trong bộ nhớ lúc này, sau đó sẽ mất
-        if (guestInfo) {
-            try {
-                await this.sendOrderEmail(orderDetail, guestInfo);
-            } catch (err) {
-                // Non-critical: order is still created, but log for debugging
-                console.error('[ORDER EMAIL ERROR]', err?.message || err);
-            }
-        }
-        
         return orderDetail;
     },
 
@@ -178,7 +166,13 @@ module.exports = {
                 await sendOrderConfirmationEmail(orderDetail, user, items, address);
             } else {
                 // Guest user
-                await sendGuestOrderConfirmationEmail(orderDetail, guestInfo, items, address);
+                await sendGuestOrderConfirmationEmail(
+                    orderDetail,
+                    guestInfo,
+                    items,
+                    address,
+                    guestInfo?.orderAccessToken || "",
+                );
             }
         } catch (err) {
             // Non-critical: log for debugging but don't break order flow
@@ -275,6 +269,13 @@ module.exports = {
 
         // TIỀN HÀNG GỐC
         const goodsTotal = Number(data.totalAmount);
+        const isGuestOrder = Boolean(guestInfo);
+        const guestAccessToken = isGuestOrder ? generateToken() : "";
+        const guestAccessTokenHash = isGuestOrder ? sha256(guestAccessToken) : null;
+        const guestAccessTokenIssuedAt = isGuestOrder ? new Date() : null;
+        const guestAccessTokenExpiresAt = isGuestOrder
+            ? new Date(Date.now() + GUEST_ORDER_ACCESS_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000)
+            : null;
 
         //  XỬ LÝ DÙNG COIN
         // -------------------------------------------
@@ -415,6 +416,9 @@ module.exports = {
             voucherDiscount,
             pointsUsed,
             pointsEarned: 0,
+            guestAccessTokenHash,
+            guestAccessTokenIssuedAt,
+            guestAccessTokenExpiresAt,
         });
 
         // CREATE ORDER ITEMS
@@ -431,7 +435,21 @@ module.exports = {
 
         await historyRepo.add(order._id, 'pending');
 
-        return order;
+        const orderDetail = await this.getOrderDetail(order._id);
+
+        if (guestInfo && guestAccessToken) {
+            try {
+                await this.sendOrderEmail(orderDetail, {
+                    ...guestInfo,
+                    orderAccessToken: guestAccessToken,
+                });
+            } catch (err) {
+                // Non-critical: log for debugging but don't break order flow
+                console.error('[ORDER EMAIL ERROR]', err?.message || err);
+            }
+        }
+
+        return orderDetail;
     },
 
     // ⭐⭐⭐ Lấy chi tiết đơn hàng — FULL SHIP + PAYMENT + WEATHER
@@ -494,6 +512,81 @@ module.exports = {
         return orders;
     },
 
+    async requestOrderLookupOtp(orderId) {
+        const order = await orderRepository.findByIdWithLookupAccess(orderId);
+        if (!order) {
+            return null;
+        }
+
+        const user = await userRepository.findById(order.userId);
+        if (!user?.email) {
+            throw new Error('ORDER_LOOKUP_OTP_RECIPIENT_NOT_FOUND');
+        }
+
+        const otp = genOtp6();
+        const otpHash = sha256(otp);
+        const expiresAt = new Date(Date.now() + ORDER_LOOKUP_OTP_TTL_MINUTES * 60 * 1000);
+
+        await orderRepository.updateLookupOtp(orderId, {
+            orderLookupOtpHash: otpHash,
+            orderLookupOtpExpiresAt: expiresAt,
+            orderLookupOtpSentTo: user.email,
+            orderLookupOtpAttempts: 0,
+            orderLookupOtpVerifiedAt: null,
+        });
+
+        await sendOrderLookupOtpEmail(order, user, otp);
+
+        return {
+            orderId: order._id.toString(),
+            sentTo: user.email,
+            expiresAt,
+        };
+    },
+
+    async verifyOrderLookupOtp(orderId, otp) {
+        const order = await orderRepository.findByIdWithLookupAccess(orderId);
+        if (!order) {
+            return null;
+        }
+
+        const normalizedOtp = String(otp || '').trim();
+        if (!normalizedOtp || normalizedOtp.length !== 6) {
+            throw Object.assign(new Error('Invalid OTP'), { status: 400 });
+        }
+
+        const expiredAt = order.orderLookupOtpExpiresAt ? new Date(order.orderLookupOtpExpiresAt) : null;
+        if (!order.orderLookupOtpHash || !expiredAt) {
+            throw Object.assign(new Error('OTP not requested'), { status: 400 });
+        }
+        if (expiredAt.getTime() < Date.now()) {
+            await orderRepository.clearLookupOtp(orderId);
+            throw Object.assign(new Error('OTP expired'), { status: 400 });
+        }
+
+        const attempts = Number(order.orderLookupOtpAttempts || 0);
+        if (attempts >= 5) {
+            throw Object.assign(new Error('Too many OTP attempts'), { status: 429 });
+        }
+
+        if (sha256(normalizedOtp) !== order.orderLookupOtpHash) {
+            await orderRepository.updateLookupOtp(orderId, {
+                orderLookupOtpAttempts: attempts + 1,
+            });
+            throw Object.assign(new Error('OTP incorrect'), { status: 400 });
+        }
+
+        await orderRepository.updateLookupOtp(orderId, {
+            orderLookupOtpHash: null,
+            orderLookupOtpExpiresAt: null,
+            orderLookupOtpSentTo: order.orderLookupOtpSentTo || null,
+            orderLookupOtpVerifiedAt: new Date(),
+            orderLookupOtpAttempts: attempts + 1,
+        });
+
+        return order;
+    },
+
     // Lấy đơn của user với pagination và filters
     async getOrdersByUser(userId, options = {}) {
         const Order = require('../models/order.model');
@@ -508,25 +601,75 @@ module.exports = {
         } = options;
         
         const skip = (page - 1) * limit;
-        
-        // Build match stage
+
+        // Build match stage - hard scope to the authenticated owner only
         const matchStage = { userId: new mongoose.Types.ObjectId(userId) };
         if (status && status !== 'all') {
             matchStage.status = status;
         }
-        
+
+        const searchTerm = String(search || '').trim().replace(/^#/, '');
+        const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const hasSearch = Boolean(searchTerm);
+        const searchRegex = hasSearch ? new RegExp(escapedSearchTerm, 'i') : null;
+
         // Build sort stage
         let sortStage = { createdAt: -1 }; // default: newest first
         if (sortBy === 'date-asc') sortStage = { createdAt: 1 };
         else if (sortBy === 'total-desc') sortStage = { totalAmount: -1 };
         else if (sortBy === 'total-asc') sortStage = { totalAmount: 1 };
-        
-        // Get total count for pagination
-        const totalOrders = await Order.countDocuments(matchStage);
-        
-        // Use aggregation to avoid N+1 query problem
-        const ordersWithItems = await Order.aggregate([
+
+        const searchStages = hasSearch ? [
+            {
+                $addFields: {
+                    orderIdString: { $toString: '$_id' },
+                },
+            },
+            {
+                $match: {
+                    $or: [
+                        { orderIdString: { $regex: searchRegex } },
+                        { 'user.email': { $regex: searchRegex } },
+                        { 'user.phone': { $regex: searchRegex } },
+                        { 'user.fullName': { $regex: searchRegex } },
+                        { 'address.phone': { $regex: searchRegex } },
+                        { 'address.fullNameOfReceiver': { $regex: searchRegex } },
+                    ],
+                },
+            },
+        ] : [];
+
+        const basePipeline = [
             { $match: matchStage },
+            {
+                $lookup: {
+                    from: 'addresses',
+                    localField: 'addressId',
+                    foreignField: '_id',
+                    as: 'address',
+                },
+            },
+            { $unwind: { path: '$address', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'userId',
+                    foreignField: '_id',
+                    as: 'user',
+                },
+            },
+            { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+            ...searchStages,
+        ];
+
+        const totalOrdersResult = await Order.aggregate([
+            ...basePipeline,
+            { $count: 'total' },
+        ]);
+        const totalOrders = totalOrdersResult[0]?.total || 0;
+
+        const ordersWithItems = await Order.aggregate([
+            ...basePipeline,
             { $sort: sortStage },
             { $skip: skip },
             { $limit: parseInt(limit) },
@@ -595,15 +738,6 @@ module.exports = {
             },
             {
                 $lookup: {
-                    from: 'addresses',
-                    localField: 'addressId',
-                    foreignField: '_id',
-                    as: 'address'
-                }
-            },
-            { $unwind: { path: '$address', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
                     from: 'discount_codes',
                     localField: 'discountCodeId',
                     foreignField: '_id',
@@ -664,7 +798,7 @@ module.exports = {
                 }
             }
         ]);
-        
+
         return {
             orders: ordersWithItems,
             total: totalOrders,
