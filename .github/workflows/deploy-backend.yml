@@ -1,46 +1,14 @@
-name: Deploy Backend to AWS EB
+name: Legacy Backend Deploy (AWS disabled)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
-      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  disabled:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Navigate to backend folder
-        run: cd backend
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20    # 🔥 FIX HERE
-
-      - name: Install dependencies
+      - name: Print notice
         run: |
-          cd backend
-          npm install
-
-      - name: Zip application
-        run: |
-          cd backend
-          zip -r ../app.zip . -x "*.git*"
-
-      - name: Deploy to Elastic Beanstalk
-        uses: einaregilsson/beanstalk-deploy@v20
-        with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: MilkyBloomBackend
-          environment_name: MilkyBloomToyStore
-          version_label: ${{ github.sha }}
-          region: us-east-1
-          deployment_package: app.zip
+          echo "AWS backend deploy is disabled."
+          echo "Use render.yaml to deploy milkybloom-backend on Render."
