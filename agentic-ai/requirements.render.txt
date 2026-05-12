@@ -1,0 +1,10 @@
+# Slim runtime requirements for Render free tier.
+# Heavy ML/data-training deps stay in python/requirements.txt and are skipped here.
+aiohttp>=3.9.0
+langchain-core>=0.2.0
+langgraph>=0.2.0
+numpy>=1.26.0
+qdrant-client>=1.8.0
+python-dotenv>=1.0.0
+rich>=13.7.0
+websockets>=12.0.0

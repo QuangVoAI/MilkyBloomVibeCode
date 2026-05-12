@@ -14,6 +14,7 @@ const passport = require('passport');
 const {
   getAllowedCorsOrigins,
   getSessionSecret,
+  isRenderOrigin,
 } = require('./config/runtime.js');
 const {
   apiCacheMiddleware, 
@@ -48,7 +49,7 @@ app.use(compression({
 const allowedOrigins = getAllowedCorsOrigins();
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || isRenderOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error(`CORS origin not allowed: ${origin}`));

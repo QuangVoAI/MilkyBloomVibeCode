@@ -1,7 +1,34 @@
 const normalizeUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
 
+const hasScheme = (value) => /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+
+const resolveWebSocketUrl = (value) => {
+    const trimmed = normalizeUrl(value);
+    if (!trimmed) return '';
+    if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
+        return trimmed;
+    }
+    if (trimmed.startsWith('http://')) {
+        return `ws://${trimmed.slice('http://'.length)}`;
+    }
+    if (trimmed.startsWith('https://')) {
+        return `wss://${trimmed.slice('https://'.length)}`;
+    }
+    if (!hasScheme(trimmed)) {
+        const protocol = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(trimmed)
+            ? 'ws'
+            : 'wss';
+        return `${protocol}://${trimmed}`;
+    }
+    return trimmed;
+};
+
 const getAgenticWsUrl = () =>
-    normalizeUrl(process.env.AGENTIC_AI_WS_URL || process.env.CHAT_AGENTIC_WS_URL || 'ws://127.0.0.1:8788');
+    resolveWebSocketUrl(
+        process.env.AGENTIC_AI_WS_URL ||
+        process.env.CHAT_AGENTIC_WS_URL ||
+        'ws://127.0.0.1:8788',
+    );
 
 const streamAgenticChat = async ({
     message,

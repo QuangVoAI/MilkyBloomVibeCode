@@ -48,21 +48,25 @@ def retrieve(
     Returns:
         List[dict] — mỗi dict chứa text, doc_title, policy_id, category, rrf_score, compensation_limit
     """
-    model = get_embed_model()
-    qdrant = _get_qdrant()
+    try:
+        model = get_embed_model()
+        qdrant = _get_qdrant()
 
-    # Embed query
-    query_vector = model.encode(query, normalize_embeddings=True)
+        # Embed query
+        query_vector = model.encode(query, normalize_embeddings=True)
 
-    # Hybrid search
-    results = hybrid_search(
-        query_vector=np.array(query_vector),
-        query_text=query,
-        qdrant=qdrant,
-        top_k=top_k,
-    )
+        # Hybrid search
+        results = hybrid_search(
+            query_vector=np.array(query_vector),
+            query_text=query,
+            qdrant=qdrant,
+            top_k=top_k,
+        )
 
-    return results
+        return results
+    except Exception as exc:
+        console.print(f"[yellow]⚠️ Retrieve fallback (empty result): {exc}[/]")
+        return []
 
 
 def retrieve_and_rerank(
@@ -125,4 +129,3 @@ def format_evidence(documents: list[dict]) -> str:
         )
 
     return "\n---\n".join(parts)
-

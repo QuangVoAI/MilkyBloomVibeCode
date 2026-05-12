@@ -98,7 +98,7 @@ async def handle_ws(websocket):
 
 
 async def main():
-    port = int(os.getenv("AGENTIC_WS_PORT", "8788"))
+    port = int(os.getenv("PORT", os.getenv("AGENTIC_WS_PORT", "8788")))
     if os.getenv("AGENTIC_WARMUP", "false").lower() == "true":
         startup_warmup()
 

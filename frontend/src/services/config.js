@@ -1,9 +1,31 @@
 const normalizeApiBaseUrl = (value) => value.replace(/\/+$/, '');
 
+const hasScheme = (value) => /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+
+const resolveConfiguredBaseUrl = (value, { localProtocol = 'http', remoteProtocol = 'https' } = {}) => {
+  const trimmed = String(value || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  if (hasScheme(trimmed)) return normalizeApiBaseUrl(trimmed);
+
+  const protocol = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(trimmed)
+    ? localProtocol
+    : remoteProtocol;
+
+  return normalizeApiBaseUrl(`${protocol}://${trimmed}`);
+};
+
+const ensureApiPath = (value) => {
+  const normalized = normalizeApiBaseUrl(value);
+  return normalized.endsWith('/api') ? normalized : `${normalized}/api`;
+};
+
 const resolveApiBaseUrl = () => {
   const configured = import.meta.env.VITE_API_URL?.trim();
   if (configured) {
-    return normalizeApiBaseUrl(configured);
+    return ensureApiPath(resolveConfiguredBaseUrl(configured, {
+      localProtocol: 'http',
+      remoteProtocol: 'https',
+    }));
   }
 
   if (import.meta.env.DEV) {

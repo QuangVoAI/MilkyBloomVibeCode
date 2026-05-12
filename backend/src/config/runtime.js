@@ -9,6 +9,20 @@ const normalizeUrl = (value) => {
     return value.trim().replace(/\/+$/, '');
 };
 
+const hasScheme = (value) => /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+
+const normalizeHostedUrl = (value, { localProtocol = 'http', remoteProtocol = 'https' } = {}) => {
+    const trimmed = normalizeUrl(value);
+    if (!trimmed) return '';
+    if (hasScheme(trimmed)) return trimmed;
+
+    const protocol = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(trimmed)
+        ? localProtocol
+        : remoteProtocol;
+
+    return `${protocol}://${trimmed}`;
+};
+
 const parseList = (value) =>
     String(value || '')
         .split(',')
@@ -19,13 +33,14 @@ const isProduction = () => process.env.NODE_ENV === 'production';
 const isDevelopment = () => !isProduction();
 
 const getFrontendUrl = () =>
-    normalizeUrl(process.env.FRONTEND_URL) ||
+    normalizeHostedUrl(process.env.FRONTEND_URL) ||
     (isDevelopment() ? LOCAL_FRONTEND_URL : '');
 
 const getBackendUrl = () =>
-    normalizeUrl(
+    normalizeHostedUrl(
         process.env.BACKEND_URL ||
             process.env.BACKEND_BASE_URL ||
+            process.env.RENDER_EXTERNAL_URL ||
             process.env.BASE_URL,
     ) || (isDevelopment() ? getLocalBackendUrl() : '');
 
@@ -82,6 +97,9 @@ const getAllowedCorsOrigins = () => {
     return [...new Set([...defaults, frontendUrl, ...configured].filter(Boolean))];
 };
 
+const isRenderOrigin = (origin) =>
+    /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.onrender\.com$/i.test(origin || '');
+
 const isProviderEnabled = (flagName, fallback = true) => {
     const raw = process.env[flagName];
     if (raw == null || raw === '') return fallback;
@@ -100,6 +118,7 @@ module.exports = {
     getApiBaseUrl,
     getBackendUrl,
     getCookieDomain,
+    isRenderOrigin,
     getFrontendUrl,
     getSessionSecret,
     hasEnvValues,

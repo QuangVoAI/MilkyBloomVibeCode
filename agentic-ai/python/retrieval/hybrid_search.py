@@ -88,30 +88,34 @@ def hybrid_search(
     """
     if qdrant is None:
         qdrant = QdrantWrapper()
-    
-    console.print(f"[cyan]🔍 Hybrid Search (dense:{dense_weight} + sparse:{sparse_weight})...[/]")
-    
-    # Dense search (semantic)
-    dense_results = qdrant.search_dense(query_vector, top_k=top_k * 2)
-    console.print(f"[dim]  Dense: {len(dense_results)} results[/]")
-    
-    # Sparse search (keyword/BM25)
-    sparse_results = qdrant.search_sparse(query_text, top_k=top_k * 2)
-    console.print(f"[dim]  Sparse: {len(sparse_results)} results[/]")
-    
-    # Fuse bằng RRF
-    fused = reciprocal_rank_fusion(
-        dense_results, sparse_results,
-        dense_weight=dense_weight,
-        sparse_weight=sparse_weight,
-    )
-    
-    # Lấy top_k
-    results = fused[:top_k]
-    
-    console.print(f"[green]✅ Hybrid Search: {len(results)} kết quả (từ {len(fused)} unique)[/]")
-    
-    return results
+
+    try:
+        console.print(f"[cyan]🔍 Hybrid Search (dense:{dense_weight} + sparse:{sparse_weight})...[/]")
+
+        # Dense search (semantic)
+        dense_results = qdrant.search_dense(query_vector, top_k=top_k * 2)
+        console.print(f"[dim]  Dense: {len(dense_results)} results[/]")
+
+        # Sparse search (keyword/BM25)
+        sparse_results = qdrant.search_sparse(query_text, top_k=top_k * 2)
+        console.print(f"[dim]  Sparse: {len(sparse_results)} results[/]")
+
+        # Fuse bằng RRF
+        fused = reciprocal_rank_fusion(
+            dense_results, sparse_results,
+            dense_weight=dense_weight,
+            sparse_weight=sparse_weight,
+        )
+
+        # Lấy top_k
+        results = fused[:top_k]
+
+        console.print(f"[green]✅ Hybrid Search: {len(results)} kết quả (từ {len(fused)} unique)[/]")
+
+        return results
+    except Exception as exc:
+        console.print(f"[yellow]⚠️ Hybrid Search fallback (empty result): {exc}[/]")
+        return []
 
 
 if __name__ == "__main__":

@@ -286,6 +286,37 @@ python ws_server.py
 - `FEATHERLESS_API_KEY`
 - `FEATHERLESS_BASE_URL=https://api.featherless.ai/v1`
 
+## Deploy Nhanh Trên Render
+
+Repo đã có sẵn [render.yaml](render.yaml) để deploy free 3 phần:
+
+- `milkybloom-frontend` = static site React/Vite
+- `milkybloom-backend` = Node/Express API + socket.io
+- `milkybloom-agentic` = EmpathAI WebSocket service
+
+### Cách dùng
+
+1. Tạo một Render Blueprint từ repo này.
+2. Render sẽ tự link `VITE_API_URL` từ backend và `AGENTIC_AI_WS_URL` từ agentic service.
+3. Sau khi services lên, thêm các secret env cần thiết trong dashboard của Render.
+
+### Secret env cần nhập trên Render
+
+- `MONGO_URI`
+- `JWT_SECRET`
+- `SESSION_SECRET`
+- `AI_INTERNAL_SERVICE_KEY`
+- `ORDER_LOOKUP_JWT_SECRET`
+- `GROQ_API_KEY`
+- `FEATHERLESS_API_KEY` nếu muốn fallback
+- Các key tích hợp khác nếu bạn đang dùng: `SMTP_*`, `GOOGLE_*`, `FACEBOOK_*`, `MOMO_*`, `ZALOPAY_*`, `VIETMAP_API_KEY`, `OPENWEATHER_API_KEY`, `LANGFUSE_*`, `QDRANT_URL` nếu có vector DB riêng
+
+### Ghi chú
+
+- Frontend config có thể nhận `VITE_API_URL` dạng full URL hoặc hostname, và sẽ tự chuẩn hóa sang HTTPS.
+- Backend config có thể nhận `AGENTIC_AI_WS_URL` dạng full `ws(s)://...` hoặc `https://...`, và sẽ tự chuyển sang `wss://...` khi cần.
+- `agentic-ai/ws_server.py` sẽ tự dùng `PORT` của Render.
+
 ## Tài Liệu Liên Quan
 
 - [Frontend README](frontend/README.md)
