@@ -10,3 +10,5 @@ node_modules/
 dist/
 coverage/
 popmart-scraper/
+.DS_Store
+agentic-ai/runtime/
