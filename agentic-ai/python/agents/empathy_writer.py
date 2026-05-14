@@ -15,12 +15,13 @@ from agents.llm_client import (
     GROQ_MODEL_FAST,
     FEATHERLESS_MODEL_FAST,
 )
-from agents.prompt_registry import prompt_header
+from agents.prompt_registry import prompt_header, brand_voice_block
 from agents.response_postprocess import normalize_vietnamese_output, should_rewrite_to_vietnamese
 from config import EMPATHY_MODE
 from tools.order_tool import extract_order_id, extract_phone_number
 
 EMPATHY_SYSTEM_PROMPT = f"""{prompt_header('empathy')}
+{brand_voice_block('support', 'order')}
 Bạn là EmpathAI - trợ lý CSKH của MyKingdom (chuỗi cửa hàng đồ chơi trẻ em hàng đầu Việt Nam).
 
 THÔNG TIN LIÊN HỆ MYKINGDOM:
@@ -83,12 +84,14 @@ PHONG CÁCH PHẢN HỒI:
 
 CASUAL_SYSTEM_PROMPT = (
     f"{prompt_header('casual')}\n"
+    f"{brand_voice_block('casual')}\n"
     "Bạn là EmpathAI, trợ lý CSKH thân thiện. "
     "Trả lời ngắn gọn, lịch sự, tự nhiên, chỉ dùng tiếng Việt. "
     "Nếu khách hỏi về sản phẩm/dịch vụ, khuyên họ mô tả cụ thể hơn."
 )
 
 INQUIRY_SYSTEM_PROMPT = f"""{prompt_header('inquiry')}
+{brand_voice_block('sales', 'catalog', 'loyalty')}
 Bạn là EmpathAI - trợ lý CSKH của MyKingdom, thân thiện và chuyên nghiệp.
 
 KHẢ NĂNG THỰC THI:

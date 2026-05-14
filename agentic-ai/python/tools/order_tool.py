@@ -20,9 +20,11 @@ RETURN_WINDOW_HOURS = 72
 try:
     from tools.shop_client import get_order_detail
     from tools.shop_client import search_orders_by_phone
+    from tools.shop_client import search_orders_by_email
 except Exception:
     get_order_detail = None
     search_orders_by_phone = None
+    search_orders_by_email = None
 
 
 _orders_cache: dict | None = None
@@ -148,6 +150,14 @@ def extract_phone_number(text: str) -> Optional[str]:
                 return digits
 
     return None
+
+
+def extract_email_address(text: str) -> Optional[str]:
+    """
+    Extract a plain email address from free-form text.
+    """
+    match = re.search(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+', text or "", re.IGNORECASE)
+    return match.group(0).strip().lower() if match else None
 
 
 def _normalize_real_order(order: dict, order_id: str) -> dict:
@@ -522,6 +532,108 @@ def get_order_info_by_phone(phone: str, context: dict | None = None) -> dict:
             "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
             "suggested_actions": ["ask_reconfirm_order_id"],
         }
+
+
+def get_order_info_by_email(email: str, context: dict | None = None) -> dict:
+    """
+    Lookup orders by email address.
+
+    This is primarily used for guest follow-up flows where the customer
+    sends the order email in the next message and we need to resume the
+    pending action.
+    """
+    ctx = context or {}
+    normalized_email = str(email or "").strip().lower()
+    if not normalized_email or "@" not in normalized_email:
+        return {
+            "found": False,
+            "ownership_verified": False,
+            "summary": "Email không hợp lệ.",
+            "lookup_hints": _build_lookup_guidance(
+                verified=False,
+                internal_lookup=bool(ctx.get("internal_lookup") or ctx.get("allow_internal_lookup")),
+            ),
+            "suggested_actions": ["ask_reconfirm_order_id"],
+        }
+
+    if search_orders_by_email:
+        remote = search_orders_by_email(normalized_email, ctx)
+        if remote and remote.get("success"):
+            orders = remote.get("data") or []
+            if len(orders) == 1:
+                normalized = _normalize_order_detail(orders[0])
+                normalized["ownership_verified"] = True
+                normalized["matched_email"] = normalized_email
+                return normalized
+            if len(orders) > 1:
+                latest = orders[0]
+                order_lines = [
+                    f"- {o.get('order_id', '')}: {o.get('status', 'unknown')}"
+                    for o in orders[:5]
+                ]
+                return {
+                    "found": False,
+                    "ownership_verified": False,
+                    "ambiguous": True,
+                    "matched_email": normalized_email,
+                    "summary": (
+                        f"Mình tìm thấy {len(orders)} đơn gắn với email **{normalized_email}**.\n"
+                        f"Bạn gửi thêm mã đơn để mình đối chiếu tiếp nhé:\n" + "\n".join(order_lines)
+                    ),
+                    "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
+                    "suggested_actions": ["ask_reconfirm_order_id"],
+                    "latest_order_id": latest.get("order_id", ""),
+                }
+
+    orders = _load_orders()
+    matched = []
+    for raw_order in orders.values():
+        if not isinstance(raw_order, dict):
+            continue
+        candidates = [
+            str(raw_order.get("email") or "").strip().lower(),
+            str(raw_order.get("customer_email") or "").strip().lower(),
+            str(raw_order.get("contact_email") or "").strip().lower(),
+        ]
+        if normalized_email in candidates:
+            matched.append(raw_order)
+
+    if len(matched) == 1:
+        normalized = _normalize_order_detail(matched[0])
+        normalized["ownership_verified"] = True
+        normalized["matched_email"] = normalized_email
+        return normalized
+    if len(matched) > 1:
+        latest = matched[0]
+        order_lines = [
+            f"- {o.get('order_id', '')}: {o.get('status', 'unknown')}"
+            for o in matched[:5]
+        ]
+        return {
+            "found": False,
+            "ownership_verified": False,
+            "ambiguous": True,
+            "matched_email": normalized_email,
+            "summary": (
+                f"Mình tìm thấy {len(matched)} đơn gắn với email **{normalized_email}**.\n"
+                f"Bạn gửi thêm mã đơn để mình đối chiếu tiếp nhé:\n" + "\n".join(order_lines)
+            ),
+            "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
+            "suggested_actions": ["ask_reconfirm_order_id"],
+            "latest_order_id": latest.get("order_id", ""),
+        }
+
+    return {
+        "found": False,
+        "ownership_verified": False,
+        "matched_email": normalized_email,
+        "summary": (
+            f"Mình chưa tìm thấy đơn hàng nào khớp với email **{normalized_email}**.\n"
+            f"Bạn có thể gửi thêm mã đơn hoặc đăng nhập đúng tài khoản để mình đối chiếu tiếp nhé."
+        ),
+        "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
+        "suggested_actions": ["ask_reconfirm_order_id"],
+    }
 
 
 def determine_suggested_actions(order_info: dict, sentiment: str) -> list[str]:

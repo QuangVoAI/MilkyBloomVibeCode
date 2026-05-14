@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-/**
- * Navigation and Layout Tests
- * Tests: Navbar, footer, routing, responsive design
- */
-
 test.describe('Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -16,7 +11,6 @@ test.describe('Navigation', () => {
   });
 
   test('should have working navigation links', async ({ page }) => {
-    // Home link - use JavaScript click to bypass viewport check
     const homeLink = page.getByRole('link', { name: /home/i }).first();
     if (await homeLink.isVisible({ timeout: 3000 })) {
       await homeLink.evaluate(el => el.click());
@@ -52,11 +46,10 @@ test.describe('Navigation', () => {
   });
 
   test('should show login/profile link based on auth state', async ({ page }) => {
-    // When not logged in, should show login link or profile icon
     const authLink = page.locator('[href*="login"], [href*="auth"], [data-testid="user-menu"], [class*="profile"]').first();
     
     const isVisible = await authLink.isVisible({ timeout: 5000 }).catch(() => false);
-    expect(isVisible || true).toBe(true); // Soft check
+    expect(isVisible || true).toBe(true);
   });
 });
 
@@ -75,7 +68,7 @@ test.describe('Footer', () => {
     const links = footer.locator('a');
     
     const count = await links.count();
-    expect(count).toBeGreaterThanOrEqual(0); // Footer exists
+    expect(count).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -83,8 +76,7 @@ test.describe('Routing', () => {
   test('should handle 404 for unknown routes', async ({ page }) => {
     await page.goto('/this-page-does-not-exist-12345');
     await page.waitForLoadState('networkidle');
-    
-    // Should either show 404 page or redirect to home
+
     const currentUrl = page.url();
     const has404 = await page.getByText(/404|not found|page.*exist/i).first()
       .isVisible({ timeout: 5000 }).catch(() => false);
@@ -99,8 +91,7 @@ test.describe('Routing', () => {
     for (const route of protectedRoutes) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
-      
-      // Should either redirect to login or show login prompt
+
       const currentUrl = page.url();
       const isRedirected = !currentUrl.includes(route) || currentUrl.includes('login');
       const showsLogin = await page.getByText(/login|sign in/i).first()
@@ -116,12 +107,10 @@ test.describe('Responsive Design', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    
-    // Page should render without horizontal scroll issues
+
     const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
     const viewportWidth = await page.evaluate(() => window.innerWidth);
-    
-    // Body should not be significantly wider than viewport
+
     expect(bodyWidth).toBeLessThanOrEqual(viewportWidth + 20);
   });
 
@@ -129,12 +118,10 @@ test.describe('Responsive Design', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    
-    // Look for hamburger menu or mobile nav toggle
+
     const mobileMenu = page.locator('[data-testid="mobile-menu"], [class*="hamburger"], [class*="menu-toggle"], button[class*="menu"]').first();
     
     const isVisible = await mobileMenu.isVisible({ timeout: 5000 }).catch(() => false);
-    // Soft check - design may vary
     expect(isVisible || true).toBe(true);
   });
 
@@ -142,8 +129,7 @@ test.describe('Responsive Design', () => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    
-    // Page should render correctly
+
     const body = page.locator('body');
     await expect(body).toBeVisible();
   });

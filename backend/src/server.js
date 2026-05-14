@@ -56,7 +56,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Session-Id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Session-Id', 'X-Guest-Session-Id'],
   exposedHeaders: ['X-Instance-ID'], // Allow frontend to read custom headers
 }));
 

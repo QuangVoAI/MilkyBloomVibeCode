@@ -129,6 +129,8 @@ module.exports = {
                         ...basePayload,
                         shopContext: {
                             auth_token: authToken,
+                            guest_session_id: payload.guestSessionId || payload.guest_session_id || '',
+                            guest_info: payload.guestInfo || payload.guest_info || {},
                             user_id: decodedUser?.id || decodedUser?._id || '',
                             email: decodedUser?.email || '',
                             user_name: decodedUser?.fullName || decodedUser?.name || '',

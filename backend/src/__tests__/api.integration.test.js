@@ -1,8 +1,3 @@
-/**
- * API Integration Tests
- * Tests backend API endpoints using supertest
- */
-
 const request = require('supertest');
 
 const BASE_URL = process.env.TEST_API_BASE_URL;
@@ -114,7 +109,6 @@ describeIfApiTarget('Cart API Integration', () => {
         .get('/api/carts')
         .set('x-guest-session-id', sessionId);
 
-      // 200 = success, 401 = needs auth, 404 = not found, 429 = rate limited
       expect([200, 401, 404, 429]).toContain(response.status);
     });
 
@@ -145,7 +139,6 @@ describeIfApiTarget('Reviews API Integration', () => {
       const response = await request(BASE_URL)
         .get('/api/reviews/product/123456789012');
 
-      // 200 = success, 400 = bad request, 404 = not found, 429 = rate limited, 500 = server error (no DB)
       expect([200, 400, 404, 429, 500]).toContain(response.status);
     });
   });

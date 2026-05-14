@@ -133,7 +133,6 @@ def test_multi_turn_action():
     ))
 
     from tools.action_tool import detect_action_intent, resume_action_intent
-    from tools.order_tool import get_order_info
 
     # --- Turn 1: customer asks to change address, no order_id ---
     question_t1 = "Đổi địa chỉ giúp mình"
@@ -146,7 +145,13 @@ def test_multi_turn_action():
     assert intent_t1["needs_order_id"] is True, "Expected needs_order_id=True when no order"
 
     # --- Turn 2: customer provides order_id ---
-    order_info_mk001 = get_order_info("MK001")
+    order_info_mk001 = {
+        "found": True,
+        "order_id": "MK001",
+        "status": "processing",
+        "return_eligible": False,
+        "delivered_hours_ago": 0,
+    }
     pending = {"action": "update_address"}
     question_t2 = "MK001"
     intent_t2 = resume_action_intent(question_t2, order_info_mk001, pending)
@@ -196,6 +201,933 @@ def test_order_cache():
     console.print(f"  First load:  {delta_first:.2f}ms")
     console.print(f"  Second load: {delta_second:.2f}ms (cached)")
     console.print("\n[bold green]✓ Level 1c (Order Cache) hoàn thành[/]\n")
+
+
+# ══════════════════════════════════════════════════════
+# LEVEL 1d — Permission Matrix / Routing Scenario Test
+# ══════════════════════════════════════════════════════
+
+def test_permission_matrix():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1d — Permission Matrix Scenario Test[/]\n"
+        "[dim]Không cần API key[/]",
+        border_style="cyan"
+    ))
+
+    from agents.graph import _build_auth_profile, _infer_capability
+    from agents.permission_matrix import authorize_capability, authorize_action, summarize_permission_matrix
+
+    matrix = summarize_permission_matrix()
+    console.print(f"[dim]Capabilities configured:[/] {list(matrix['capabilities'].keys())}")
+
+    scenarios = [
+        {
+            "label": "Guest hỏi chính sách đổi trả",
+            "shop_context": {},
+            "question": "chính sách đổi trả của shop là gì?",
+            "intent": "INQUIRY",
+            "expected_capability": "inquiry",
+            "expected_scope": "guest",
+            "expected_allowed": True,
+        },
+        {
+            "label": "Guest hỏi điểm thưởng cá nhân",
+            "shop_context": {},
+            "question": "mình còn bao nhiêu điểm?",
+            "intent": "INQUIRY",
+            "expected_capability": "loyalty",
+            "expected_scope": "guest",
+            "expected_allowed": True,
+        },
+        {
+            "label": "Guest mở ticket hỗ trợ",
+            "shop_context": {},
+            "question": "tạo ticket hỗ trợ giúp mình",
+            "intent": "COMPLAINT",
+            "expected_capability": "support_ticket",
+            "expected_scope": "guest",
+            "expected_allowed": True,
+        },
+        {
+            "label": "Guest mua hàng mới",
+            "shop_context": {},
+            "question": "mình muốn đặt hàng mới 2 món",
+            "intent": "INQUIRY",
+            "expected_capability": "checkout",
+            "expected_scope": "guest",
+            "expected_allowed": True,
+        },
+        {
+            "label": "Guest quản lý đơn cũ",
+            "shop_context": {},
+            "question": "đổi địa chỉ cho đơn MK012 giúp mình",
+            "intent": "COMPLAINT",
+            "expected_capability": "order_management",
+            "expected_scope": "guest",
+            "expected_allowed": True,
+            "expected_action": "update_address",
+            "expected_action_allowed": False,
+        },
+        {
+            "label": "Logged-in xem điểm của mình",
+            "shop_context": {"user_id": "u_1", "auth_token": "token_123"},
+            "question": "mình còn bao nhiêu điểm?",
+            "intent": "INQUIRY",
+            "expected_capability": "loyalty",
+            "expected_scope": "logged_in",
+            "expected_allowed": True,
+        },
+        {
+            "label": "Logged-in đổi địa chỉ",
+            "shop_context": {"user_id": "u_1", "auth_token": "token_123", "ownership_verified": True},
+            "question": "đổi địa chỉ cho đơn MK012 giúp mình",
+            "intent": "COMPLAINT",
+            "expected_capability": "order_management",
+            "expected_scope": "logged_in",
+            "expected_allowed": True,
+            "expected_action": "update_address",
+            "expected_action_allowed": True,
+        },
+        {
+            "label": "Admin xử lý đơn",
+            "shop_context": {"user_id": "admin_1", "role": "admin", "auth_token": "token_admin"},
+            "question": "hủy đơn MK012 giúp mình",
+            "intent": "COMPLAINT",
+            "expected_capability": "order_management",
+            "expected_scope": "admin",
+            "expected_allowed": True,
+            "expected_action": "cancel_order",
+            "expected_action_allowed": True,
+        },
+    ]
+
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Scenario", style="cyan", max_width=32)
+    table.add_column("Scope", style="white")
+    table.add_column("Capability", style="white")
+    table.add_column("Allowed", style="bold")
+    table.add_column("Action", style="white")
+    table.add_column("Action Allowed", style="bold")
+
+    for scenario in scenarios:
+        auth = _build_auth_profile(scenario["shop_context"])
+        capability, reason = _infer_capability(
+            scenario["question"], [], scenario["intent"], auth
+        )
+        capability_rule = authorize_capability(capability, auth)
+        assert capability == scenario["expected_capability"], (
+            f"{scenario['label']}: expected capability {scenario['expected_capability']}, got {capability} ({reason})"
+        )
+        assert auth["user_scope"] == scenario["expected_scope"], (
+            f"{scenario['label']}: expected scope {scenario['expected_scope']}, got {auth['user_scope']}"
+        )
+        assert capability_rule["allowed"] == scenario["expected_allowed"], (
+            f"{scenario['label']}: expected allowed {scenario['expected_allowed']}, got {capability_rule['allowed']}"
+        )
+
+        action_name = scenario.get("expected_action", "")
+        action_allowed = "—"
+        if action_name:
+            action_rule = authorize_action(action_name, auth, {"found": True, "status": "processing"})
+            action_allowed = "✓" if action_rule.get("allowed") else "✗"
+            assert action_rule["allowed"] == scenario["expected_action_allowed"], (
+                f"{scenario['label']}: expected action_allowed {scenario['expected_action_allowed']}, got {action_rule['allowed']}"
+            )
+
+        table.add_row(
+            scenario["label"],
+            auth["user_scope"],
+            capability,
+            "✓" if capability_rule["allowed"] else "✗",
+            action_name or "—",
+            action_allowed,
+        )
+
+    console.print(table)
+    console.print("\n[bold green]✓ Level 1d (Permission Matrix) hoàn thành[/]\n")
+
+
+def test_guest_checkout_extraction():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1e — Guest Checkout Extraction Test[/]\n"
+        "[dim]Kiểm tra bot tự rút guestInfo từ một tin nhắn[/]",
+        border_style="cyan"
+    ))
+
+    from tools import checkout_tool
+
+    question = (
+        "Mình là Hoàng Minh, email hoangminh.test@gmail.com, "
+        "sđt 0901234567, địa chỉ 12 Lê Lợi, phường Bến Thành, quận 1, TP.HCM."
+    )
+    history = [
+        {"role": "assistant", "content": "Bạn gửi giúp mình thông tin đặt hàng nhé."},
+    ]
+    shop_context = {"guest_session_id": "guest_session_demo"}
+
+    extracted = checkout_tool._build_guest_info(question, history, shop_context)
+    assert extracted["fullName"] == "Hoàng Minh"
+    assert extracted["email"] == "hoangminh.test@gmail.com"
+    assert extracted["phone"] == "0901234567"
+    assert "12 Lê Lợi" in extracted["addressLine"]
+
+    original_guest_checkout = checkout_tool.guest_checkout_from_cart
+    captured = {}
+
+    def fake_guest_checkout(payload, context=None):
+        captured["payload"] = payload
+        captured["context"] = context or {}
+        return {
+            "success": True,
+            "message": "guest checkout ok",
+            "data": {"_id": "ORDER_DEMO_001"},
+        }
+
+    try:
+        checkout_tool.guest_checkout_from_cart = fake_guest_checkout
+        result = checkout_tool.start_checkout(question, history, shop_context)
+    finally:
+        checkout_tool.guest_checkout_from_cart = original_guest_checkout
+
+    assert result["ok"] is True
+    assert captured["payload"]["sessionId"] == "guest_session_demo"
+    assert captured["payload"]["guestInfo"]["fullName"] == "Hoàng Minh"
+    assert captured["payload"]["guestInfo"]["email"] == "hoangminh.test@gmail.com"
+    assert captured["payload"]["guestInfo"]["phone"] == "0901234567"
+    assert "12 Lê Lợi" in captured["payload"]["guestInfo"]["addressLine"]
+
+    console.print("[green]✓[/] Extracted guest info and assembled guest checkout payload correctly.")
+    console.print("\n[bold green]✓ Level 1e (Guest Checkout Extraction) hoàn thành[/]\n")
+
+
+def test_checkout_redirects_catalog_recommendations():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1e2 — Checkout Redirect Guard Test[/]\n"
+        "[dim]Kiểm tra các câu hỏi gợi ý sản phẩm theo ngân sách không rơi vào guest checkout[/]",
+        border_style="cyan"
+    ))
+
+    from tools import checkout_tool
+
+    original_checkout = checkout_tool.checkout_from_cart
+    original_guest_checkout = checkout_tool.guest_checkout_from_cart
+    called = {"checkout": False, "guest_checkout": False}
+
+    def fake_checkout(payload, context=None):
+        called["checkout"] = True
+        raise AssertionError("checkout_from_cart should not be called for catalog recommendation requests")
+
+    def fake_guest_checkout(payload, context=None):
+        called["guest_checkout"] = True
+        raise AssertionError("guest_checkout_from_cart should not be called for catalog recommendation requests")
+
+    phrases = [
+        "Gợi ý cho tôi món đồ dưới 300k",
+        "Gợi ý quà tặng dưới 300k",
+        "Tư vấn món đồ chơi dưới 300k",
+        "Món đồ dưới 300k nào hợp làm quà?",
+    ]
+
+    try:
+        checkout_tool.checkout_from_cart = fake_checkout
+        checkout_tool.guest_checkout_from_cart = fake_guest_checkout
+
+        for phrase in phrases:
+            called["checkout"] = False
+            called["guest_checkout"] = False
+            result = checkout_tool.start_checkout(
+                phrase,
+                history=[
+                    {"role": "assistant", "content": "Bạn gửi mình thông tin đặt hàng nhé."},
+                ],
+                shop_context={"guest_session_id": "guest_session_demo"},
+            )
+
+            assert result["ok"] is False, phrase
+            assert result.get("redirect_intent") == "catalog", phrase
+            assert not result.get("needs_guest_info"), phrase
+            assert not result.get("needs_guest_session"), phrase
+            assert not called["checkout"], phrase
+            assert not called["guest_checkout"], phrase
+            assert "đặt đơn" not in result.get("message", "").lower(), phrase
+            assert "email" not in result.get("message", "").lower(), phrase
+            assert "địa chỉ" not in result.get("message", "").lower(), phrase
+    finally:
+        checkout_tool.checkout_from_cart = original_checkout
+        checkout_tool.guest_checkout_from_cart = original_guest_checkout
+
+    console.print("[green]✓[/] Catalog recommendation phrases were redirected away from checkout.")
+    console.print("\n[bold green]✓ Level 1e2 (Checkout Redirect Guard) hoàn thành[/]\n")
+
+
+def test_guest_checkout_memory_latch():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1f — Guest Checkout Memory Latch Test[/]\n"
+        "[dim]Kiểm tra bot ghép info từ nhiều tin nhắn liên tiếp[/]",
+        border_style="cyan"
+    ))
+
+    from agents.graph import (
+        route_by_intent,
+        checkout_node,
+        _clear_guest_checkout_profile,
+        _get_guest_checkout_profile,
+    )
+    from tools import checkout_tool
+
+    session_id = "guest_latch_demo"
+    turns = [
+        "mình tên Hoàng Minh",
+        "email hoangminh.test@gmail.com",
+        "sđt 0901234567",
+        "địa chỉ 12 Lê Lợi, phường Bến Thành, quận 1, TP.HCM",
+    ]
+
+    _clear_guest_checkout_profile(session_id)
+
+    original_guest_checkout = checkout_tool.guest_checkout_from_cart
+    captured = {}
+
+    def fake_guest_checkout(payload, context=None):
+        captured["payload"] = payload
+        captured["context"] = context or {}
+        return {
+            "success": True,
+            "message": "guest checkout ok",
+            "data": {"_id": "ORDER_DEMO_002"},
+        }
+
+    try:
+        checkout_tool.guest_checkout_from_cart = fake_guest_checkout
+
+        for turn in turns:
+            route_by_intent({
+                "session_id": session_id,
+                "question": turn,
+                "history": [],
+                "shop_context": {},
+                "intent": "INQUIRY",
+                "capability": "",
+                "agent_trace": {},
+            })
+
+        cached = _get_guest_checkout_profile(session_id)
+        assert cached["fullName"] == "Hoàng Minh"
+        assert cached["email"] == "hoangminh.test@gmail.com"
+        assert cached["phone"] == "0901234567"
+        assert "12 Lê Lợi" in cached["addressLine"]
+
+        state = {
+            "session_id": session_id,
+            "question": "mình muốn đặt hàng mới giúp mình",
+            "history": [],
+            "shop_context": {"guest_session_id": "guest_session_demo"},
+            "agent_trace": {},
+        }
+        result = checkout_node(state)
+
+        assert result["checkout_result"]["ok"] is True
+        assert captured["payload"]["guestInfo"]["fullName"] == "Hoàng Minh"
+        assert captured["payload"]["guestInfo"]["email"] == "hoangminh.test@gmail.com"
+        assert captured["payload"]["guestInfo"]["phone"] == "0901234567"
+        assert "12 Lê Lợi" in captured["payload"]["guestInfo"]["addressLine"]
+        assert captured["payload"]["sessionId"] == "guest_session_demo"
+    finally:
+        checkout_tool.guest_checkout_from_cart = original_guest_checkout
+        _clear_guest_checkout_profile(session_id)
+
+    console.print("[green]✓[/] Guest info was latched across multiple turns and reused for checkout.")
+    console.print("\n[bold green]✓ Level 1f (Guest Checkout Memory Latch) hoàn thành[/]\n")
+
+
+def test_order_followup_memory():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1g — Order Follow-up Memory Test[/]\n"
+        "[dim]Kiểm tra bot nhớ mã đơn / trạng thái / địa chỉ qua nhiều lượt[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+
+    session_id = "order_followup_demo"
+    graph_mod._clear_order_profile(session_id)
+    graph_mod._remember_order_profile(
+        session_id,
+        {
+            "found": True,
+            "ownership_verified": True,
+            "order_id": "MK099",
+            "status": "shipping",
+            "address": "123 Nguyen Trai, Quan 1",
+            "summary": "Đơn **MK099** — 1 món — 159,000đ\nTrạng thái: shipping\nĐịa chỉ: 123 Nguyen Trai, Quan 1",
+            "lookup_hints": ["đăng nhập tài khoản đã đặt đơn"],
+        },
+        "mình đã xem đơn rồi",
+    )
+
+    captured = {}
+    original_get_order_info = graph_mod.get_order_info
+
+    def fake_get_order_info(order_id, context=None):
+        captured["order_id"] = order_id
+        return {
+            "found": True,
+            "ownership_verified": True,
+            "order_id": order_id,
+            "status": "shipping",
+            "address": "123 Nguyen Trai, Quan 1",
+            "summary": "Đơn **MK099** — 1 món — 159,000đ\nTrạng thái: shipping\nĐịa chỉ: 123 Nguyen Trai, Quan 1",
+            "suggested_actions": ["check_order_status"],
+            "raw": {},
+        }
+
+    try:
+        graph_mod.get_order_info = fake_get_order_info
+
+        route = graph_mod.route_by_intent({
+            "session_id": session_id,
+            "question": "đổi địa chỉ cho đơn đó giúp mình",
+            "history": [],
+            "capability": "",
+            "intent": "COMPLAINT",
+            "agent_trace": {},
+        })
+        assert route == "complaint"
+
+        result = graph_mod.order_lookup_node({
+            "session_id": session_id,
+            "question": "đổi địa chỉ cho đơn đó giúp mình",
+            "history": [],
+            "shop_context": {},
+            "sentiment": "neutral",
+            "agent_trace": {},
+        })
+
+        assert captured["order_id"] == "MK099"
+        assert result["order_info"]["order_id"] == "MK099"
+        assert result["order_info"]["status"] == "shipping"
+    finally:
+        graph_mod.get_order_info = original_get_order_info
+        graph_mod._clear_order_profile(session_id)
+
+    console.print("[green]✓[/] Order memory carried the last order across turns correctly.")
+    console.print("\n[bold green]✓ Level 1g (Order Follow-up Memory) hoàn thành[/]\n")
+
+
+def test_budget_catalog_routing():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1g2 — Budget Catalog Routing Test[/]\n"
+        "[dim]Kiểm tra câu hỏi gợi ý sản phẩm theo ngân sách không bị lôi sang đơn hàng cũ[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+
+    session_id = "budget_catalog_demo"
+    graph_mod._clear_order_profile(session_id)
+    graph_mod._remember_order_profile(
+        session_id,
+        {
+            "found": True,
+            "ownership_verified": True,
+            "order_id": "MK099",
+            "status": "shipping",
+            "address": "123 Nguyen Trai, Quan 1",
+            "summary": "Đơn **MK099** — 1 món — 159,000đ\nTrạng thái: shipping\nĐịa chỉ: 123 Nguyen Trai, Quan 1",
+            "lookup_hints": ["đăng nhập tài khoản đã đặt đơn"],
+        },
+        "mình đã xem đơn rồi",
+    )
+
+    try:
+        route = graph_mod.route_by_intent({
+            "session_id": session_id,
+            "question": "Gợi ý cho tôi món đồ dưới 300k",
+            "history": [
+                {"role": "user", "content": "đổi địa chỉ cho đơn đó giúp mình"},
+            ],
+            "capability": "",
+            "intent": "INQUIRY",
+            "agent_trace": {},
+        })
+        capability, reason = graph_mod._infer_capability(
+            "Gợi ý cho tôi món đồ dưới 300k",
+            [{"role": "user", "content": "đổi địa chỉ cho đơn đó giúp mình"}],
+            "INQUIRY",
+            graph_mod._build_auth_profile({}),
+        )
+
+        assert route == "catalog", f"Expected catalog route, got {route} ({reason})"
+        assert capability == "catalog", f"Expected catalog capability, got {capability} ({reason})"
+    finally:
+        graph_mod._clear_order_profile(session_id)
+
+    console.print("[green]✓[/] Budget-based product recommendation stays on the catalog path.")
+    console.print("\n[bold green]✓ Level 1g2 (Budget Catalog Routing) hoàn thành[/]\n")
+
+
+def test_budget_catalog_lookup_price_filter():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1g3 — Budget Catalog Lookup Filter Test[/]\n"
+        "[dim]Kiểm tra catalog tool lọc theo giá thay vì search nguyên văn câu hỏi[/]",
+        border_style="cyan"
+    ))
+
+    from tools import catalog_tool
+
+    original_search = catalog_tool.search_products
+    original_search_by_filters = catalog_tool.search_products_by_filters
+    calls = {"keyword": [], "filters": []}
+
+    def fake_search_products(query, context=None):
+        calls["keyword"].append((query, context or {}))
+        return {"success": True, "data": {"products": []}}
+
+    def fake_search_products_by_filters(context=None, **kwargs):
+        calls["filters"].append(kwargs)
+        return {
+            "success": True,
+            "data": {
+                "products": [
+                    {"name": "Bộ xếp hình mini", "minPrice": 120000, "maxPrice": 180000, "totalStock": 4},
+                    {"name": "Sách tô màu", "minPrice": 250000, "maxPrice": 250000, "totalStock": 2},
+                ]
+            },
+        }
+
+    try:
+        catalog_tool.search_products = fake_search_products
+        catalog_tool.search_products_by_filters = fake_search_products_by_filters
+
+        result = catalog_tool.lookup_live_catalog("Gợi ý cho tôi món đồ dưới 300k", {})
+
+        assert calls["filters"], "Expected price-filter search to be used"
+        first_call = calls["filters"][0]
+        assert first_call.get("max_price") == 300000
+        assert first_call.get("keyword") in (None, "")
+        assert not calls["keyword"], "Keyword-only search should not be needed when price filter already returns products"
+        assert result["found"] is True
+        assert ("300.000đ" in result["summary"]) or ("300,000đ" in result["summary"])
+        assert "Bộ xếp hình mini" in result["summary"]
+    finally:
+        catalog_tool.search_products = original_search
+        catalog_tool.search_products_by_filters = original_search_by_filters
+
+    console.print("[green]✓[/] Catalog lookup now uses budget-aware filtering.")
+    console.print("\n[bold green]✓ Level 1g3 (Budget Catalog Lookup Filter) hoàn thành[/]\n")
+
+
+def test_catalog_keyword_fallback_search():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1g4 — Catalog Keyword Fallback Test[/]\n"
+        "[dim]Kiểm tra catalog vẫn tìm được sản phẩm khi backend keyword search trả rỗng[/]",
+        border_style="cyan"
+    ))
+
+    from tools import catalog_tool
+
+    original_search = catalog_tool.search_products
+    original_search_by_filters = catalog_tool.search_products_by_filters
+    calls = {"keyword": [], "filters": []}
+
+    def fake_search_products(query, context=None):
+        calls["keyword"].append(query)
+        return {"success": True, "data": {"products": []}}
+
+    def fake_search_products_by_filters(context=None, **kwargs):
+        calls["filters"].append(kwargs)
+        return {
+            "success": True,
+            "data": {
+                "products": [
+                    {"name": "Stardust Picnic Box", "slug": "stardust-picnic-box", "description": "Giftable blind box", "minPrice": 159000, "maxPrice": 249000, "totalStock": 40},
+                    {"name": "Moon Parade Capsule", "slug": "moon-parade-capsule", "description": "Collectible capsule", "minPrice": 177000, "maxPrice": 267000, "totalStock": 26},
+                ]
+            },
+        }
+
+    try:
+        catalog_tool.search_products = fake_search_products
+        catalog_tool.search_products_by_filters = fake_search_products_by_filters
+
+        result = catalog_tool.lookup_live_catalog("Stardust Picnic Box", {})
+
+        assert calls["keyword"] == ["stardust picnic box"]
+        assert calls["filters"], "Expected fallback product list fetch"
+        assert result["found"] is True
+        assert len(result["products"]) == 1
+        assert result["products"][0]["name"] == "Stardust Picnic Box"
+        assert "Stardust Picnic Box" in result["summary"]
+    finally:
+        catalog_tool.search_products = original_search
+        catalog_tool.search_products_by_filters = original_search_by_filters
+
+    console.print("[green]✓[/] Catalog fallback matched product names locally.")
+    console.print("\n[bold green]✓ Level 1g4 (Catalog Keyword Fallback) hoàn thành[/]\n")
+
+
+def test_purchase_request_adds_product_to_guest_cart():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1g5 — Purchase Add-to-Cart Test[/]\n"
+        "[dim]Kiểm tra câu mua sản phẩm được thêm vào cart trước khi checkout[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+    from tools import checkout_tool
+
+    route = graph_mod.route_by_intent({
+        "session_id": "purchase_demo",
+        "question": "Mua Stardust Picnic Box giúp tôi",
+        "history": [],
+        "capability": "",
+        "intent": "INQUIRY",
+        "agent_trace": {},
+    })
+    capability, reason = graph_mod._infer_capability(
+        "Mua Stardust Picnic Box giúp tôi",
+        [],
+        "INQUIRY",
+        graph_mod._build_auth_profile({}),
+    )
+    assert capability == "checkout", f"Expected checkout capability, got {capability} ({reason})"
+    assert route == "checkout", f"Expected checkout route, got {route}"
+
+    originals = {
+        "lookup": checkout_tool.lookup_live_catalog,
+        "get_cart": checkout_tool.get_cart_by_session,
+        "create_cart": checkout_tool.create_cart,
+        "add_item": checkout_tool.add_item_to_cart,
+        "guest_checkout": checkout_tool.guest_checkout_from_cart,
+    }
+    captured = {}
+
+    def fake_lookup(question, context=None):
+        captured["lookup_question"] = question
+        return {
+            "found": True,
+            "products": [
+                {
+                    "name": "Stardust Picnic Box",
+                    "variants": [{"_id": "VARIANT_1", "stockQuantity": 5, "price": 159000}],
+                }
+            ],
+            "summary": "found",
+        }
+
+    def fake_get_cart(session_id, context=None):
+        captured["session_id"] = session_id
+        return {"_id": "CART_1", "items": []}
+
+    def fake_create_cart(payload, context=None):
+        captured["create_cart"] = payload
+        return {"_id": "CART_CREATED", "items": []}
+
+    def fake_add_item(cart_id, variant_id, quantity=1, context=None):
+        captured["add_item"] = (cart_id, variant_id, quantity)
+        return {"_id": cart_id, "items": [{"variantId": variant_id, "quantity": quantity}]}
+
+    def fake_guest_checkout(payload, context=None):
+        captured["guest_checkout"] = payload
+        return {"success": True, "message": "checkout ok", "data": {"_id": "ORDER_1"}}
+
+    try:
+        checkout_tool.lookup_live_catalog = fake_lookup
+        checkout_tool.get_cart_by_session = fake_get_cart
+        checkout_tool.create_cart = fake_create_cart
+        checkout_tool.add_item_to_cart = fake_add_item
+        checkout_tool.guest_checkout_from_cart = fake_guest_checkout
+
+        result = checkout_tool.start_checkout(
+            "Mua Stardust Picnic Box giúp tôi",
+            history=[],
+            shop_context={"guest_session_id": "guest_session_demo"},
+        )
+    finally:
+        checkout_tool.lookup_live_catalog = originals["lookup"]
+        checkout_tool.get_cart_by_session = originals["get_cart"]
+        checkout_tool.create_cart = originals["create_cart"]
+        checkout_tool.add_item_to_cart = originals["add_item"]
+        checkout_tool.guest_checkout_from_cart = originals["guest_checkout"]
+
+    assert captured["lookup_question"] == "Stardust Picnic Box"
+    assert captured["add_item"] == ("CART_1", "VARIANT_1", 1)
+    assert result["needs_guest_info"] is True
+    assert "đã thêm 1 x Stardust Picnic Box vào giỏ" in result["message"]
+    assert "email" in result["message"]
+
+    console.print("[green]✓[/] Purchase request added the product to guest cart and continued checkout.")
+    console.print("\n[bold green]✓ Level 1g5 (Purchase Add-to-Cart) hoàn thành[/]\n")
+
+
+def test_brand_voice_prompts():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1h — Brand Voice Prompt Test[/]\n"
+        "[dim]Kiểm tra lớp giọng thương hiệu đã được gắn vào prompt[/]",
+        border_style="cyan"
+    ))
+
+    from agents.prompt_registry import brand_voice_header, brand_voice_block
+    from agents.empathy_writer import EMPATHY_SYSTEM_PROMPT, CASUAL_SYSTEM_PROMPT, INQUIRY_SYSTEM_PROMPT
+
+    assert brand_voice_header() in EMPATHY_SYSTEM_PROMPT
+    assert brand_voice_header() in CASUAL_SYSTEM_PROMPT
+    assert brand_voice_header() in INQUIRY_SYSTEM_PROMPT
+    assert "hỗ trợ" in brand_voice_block("support").lower()
+    assert "đơn" in brand_voice_block("order").lower()
+    assert "bán hàng" in brand_voice_block("sales").lower()
+    assert "loyalty" in brand_voice_block("loyalty").lower()
+    assert "catalog" in brand_voice_block("catalog").lower()
+    assert "nhắn tin" in brand_voice_block("casual").lower()
+
+    console.print("[green]✓[/] Brand voice layer is present in all major prompts.")
+    console.print("\n[bold green]✓ Level 1h (Brand Voice Prompt) hoàn thành[/]\n")
+
+
+def test_catalog_followup_memory():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1i — Catalog Follow-up Memory Test[/]\n"
+        "[dim]Kiểm tra bot nhớ món khách đang xem qua nhiều lượt[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+
+    session_id = "catalog_followup_demo"
+    graph_mod._clear_catalog_profile(session_id)
+    graph_mod._remember_catalog_profile(
+        session_id,
+        {
+            "found": True,
+            "query": "Stardust Picnic Box",
+            "summary": "Mình vừa tìm thấy Stardust Picnic Box.",
+            "products": [{"name": "Stardust Picnic Box", "slug": "stardust-picnic-box"}],
+        },
+        "món này",
+    )
+
+    captured = {}
+    original_lookup = graph_mod.lookup_live_catalog
+
+    def fake_lookup(question, context=None):
+        captured["question"] = question
+        return {
+            "found": True,
+            "query": question,
+            "summary": "Mình tìm thấy Stardust Picnic Box.",
+            "products": [{"name": "Stardust Picnic Box", "slug": "stardust-picnic-box"}],
+            "suggested_actions": ["show_product_detail"],
+        }
+
+    try:
+        graph_mod.lookup_live_catalog = fake_lookup
+        result = graph_mod.catalog_lookup_node({
+            "session_id": session_id,
+            "question": "còn size nào?",
+            "history": [],
+            "shop_context": {},
+            "agent_trace": {},
+        })
+
+        assert "Stardust Picnic Box" in captured["question"]
+        assert result["catalog_info"]["found"] is True
+        assert "Stardust Picnic Box" in result["answer"]
+    finally:
+        graph_mod.lookup_live_catalog = original_lookup
+        graph_mod._clear_catalog_profile(session_id)
+
+    console.print("[green]✓[/] Catalog memory carried the last viewed product into the follow-up turn.")
+    console.print("\n[bold green]✓ Level 1i (Catalog Follow-up Memory) hoàn thành[/]\n")
+
+
+def test_catalog_selection_line_followup():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1j — Catalog Selection Line Follow-up Test[/]\n"
+        "[dim]Kiểm tra khách chọn một dòng sản phẩm trong danh sách gợi ý thì bot tra đúng món đó[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+
+    session_id = "catalog_selection_demo"
+    graph_mod._clear_catalog_profile(session_id)
+    graph_mod._remember_catalog_profile(
+        session_id,
+        {
+            "found": True,
+            "query": "Gợi ý dưới 300k",
+            "summary": "Mình gợi ý vài món dưới 300k.",
+            "products": [
+                {"name": "Stardust Picnic Box", "slug": "stardust-picnic-box"},
+                {"name": "Moon Parade Capsule", "slug": "moon-parade-capsule"},
+                {"name": "Nova Sprout Figure", "slug": "nova-sprout-figure"},
+            ],
+        },
+        "Gợi ý cho tôi món đồ dưới 300k",
+    )
+
+    captured = {}
+    original_lookup = graph_mod.lookup_live_catalog
+
+    def fake_lookup(question, context=None):
+        captured["question"] = question
+        return {
+            "found": True,
+            "query": question,
+            "summary": "Mình tìm thấy Stardust Picnic Box.\n- Giá: 159.000đ đến 249.000đ\n- Tồn kho tổng: 40",
+            "products": [{"name": "Stardust Picnic Box", "slug": "stardust-picnic-box"}],
+            "suggested_actions": ["show_product_detail"],
+        }
+
+    try:
+        graph_mod.lookup_live_catalog = fake_lookup
+        selected_line = "• Stardust Picnic Box - 159.000đ - 249.000đ"
+        route = graph_mod.route_by_intent({
+            "session_id": session_id,
+            "question": selected_line,
+            "history": [],
+            "capability": "",
+            "intent": "INQUIRY",
+            "agent_trace": {},
+        })
+        result = graph_mod.catalog_lookup_node({
+            "session_id": session_id,
+            "question": selected_line,
+            "history": [],
+            "shop_context": {},
+            "agent_trace": {},
+        })
+
+        assert route == "catalog"
+        assert captured["question"] == "Stardust Picnic Box"
+        assert result["catalog_info"]["found"] is True
+        assert "Sleepover Joy Box" not in result["answer"]
+        assert "Dream Shelf Secrets" not in result["answer"]
+        assert "Stardust Picnic Box" in result["answer"]
+    finally:
+        graph_mod.lookup_live_catalog = original_lookup
+        graph_mod._clear_catalog_profile(session_id)
+
+    console.print("[green]✓[/] Catalog selection lines now drill into the chosen product.")
+    console.print("\n[bold green]✓ Level 1j (Catalog Selection Line Follow-up) hoàn thành[/]\n")
+
+
+def test_budget_purchase_requires_product_selection():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1k — Budget Purchase Selection Test[/]\n"
+        "[dim]Kiểm tra câu muốn mua theo ngân sách không hỏi thông tin giao hàng quá sớm[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+    from tools import checkout_tool
+
+    original_checkout_lookup = checkout_tool.lookup_live_catalog
+    original_graph_start_checkout = graph_mod.start_checkout
+
+    def fake_lookup(question, context=None):
+        return {
+            "found": True,
+            "query": question,
+            "summary": (
+                "Mình gợi ý vài món trong tầm 200.000đ:\n"
+                "• Stardust Picnic Box - 159.000đ - 249.000đ\n"
+                "• Mini Bloom Keychain - 99.000đ"
+            ),
+            "products": [
+                {"name": "Stardust Picnic Box", "slug": "stardust-picnic-box"},
+                {"name": "Mini Bloom Keychain", "slug": "mini-bloom-keychain"},
+            ],
+        }
+
+    try:
+        checkout_tool.lookup_live_catalog = fake_lookup
+        result = checkout_tool.start_checkout(
+            "tôi muốn mua món hàng dưới 200k",
+            history=[],
+            shop_context={"guest_session_id": "guest_budget_demo"},
+        )
+
+        assert result["needs_product_selection"] is True
+        assert result.get("needs_guest_info") is False
+        assert "họ tên" not in result["message"].lower()
+        assert "Stardust Picnic Box" in result["message"]
+        assert "chọn một món" in result["message"]
+
+        def fake_start_checkout(question, history=None, shop_context=None):
+            return result
+
+        graph_mod.start_checkout = fake_start_checkout
+        session_id = "budget_purchase_demo"
+        graph_mod._clear_catalog_profile(session_id)
+        node_result = graph_mod.checkout_node({
+            "session_id": session_id,
+            "question": "tôi muốn mua món hàng dưới 200k",
+            "history": [],
+            "shop_context": {"guest_session_id": "guest_budget_demo"},
+            "agent_trace": {},
+        })
+
+        assert "họ tên" not in node_result["answer"].lower()
+        assert "Stardust Picnic Box" in node_result["answer"]
+        assert graph_mod._get_catalog_profile(session_id).get("products")
+    finally:
+        checkout_tool.lookup_live_catalog = original_checkout_lookup
+        graph_mod.start_checkout = original_graph_start_checkout
+        graph_mod._clear_catalog_profile("budget_purchase_demo")
+
+    console.print("[green]✓[/] Budget purchase requests now ask the customer to pick a product first.")
+    console.print("\n[bold green]✓ Level 1k (Budget Purchase Selection) hoàn thành[/]\n")
+
+
+def test_checkout_progression_wins_over_catalog_history():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1l — Checkout Progression Routing Test[/]\n"
+        "[dim]Kiểm tra câu \"tiến hành đặt hàng\" thắng lịch sử gợi ý sản phẩm[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+    from tools import checkout_tool
+
+    history = [
+        {"role": "assistant", "content": "Mình gợi ý vài món trong tầm 400.000đ:"},
+        {"role": "assistant", "content": "Mình đã thêm Stardust Picnic Box vào giỏ rồi nè."},
+        {"role": "assistant", "content": "Mình đã thêm Candy Orbit Surprise vào giỏ rồi nè."},
+    ]
+
+    route = graph_mod.route_by_intent({
+        "session_id": "checkout_progression_demo",
+        "question": "Bây giờ tiến hành đặt hàng",
+        "history": history,
+        "shop_context": {"guest_session_id": "guest_progression_demo"},
+        "intent": "INQUIRY",
+        "capability": "",
+        "agent_trace": {},
+    })
+    assert route == "checkout", f"Expected checkout route, got {route}"
+
+    original_lookup = checkout_tool.lookup_live_catalog
+
+    def fake_lookup(*args, **kwargs):
+        raise AssertionError("lookup_live_catalog should not be called for checkout progression requests")
+
+    try:
+        checkout_tool.lookup_live_catalog = fake_lookup
+        result = checkout_tool.start_checkout(
+            "Bây giờ tiến hành đặt hàng",
+            history=history,
+            shop_context={"guest_session_id": "guest_progression_demo"},
+        )
+    finally:
+        checkout_tool.lookup_live_catalog = original_lookup
+
+    assert result.get("needs_product_selection") is not True
+    assert result.get("needs_guest_info") is True or result.get("needs_guest_session") is False
+    assert "Mình có thể tạo đơn cho khách" in result["message"]
+
+    console.print("[green]✓[/] Checkout progression beats stale catalog history.")
+    console.print("\n[bold green]✓ Level 1l (Checkout Progression Routing) hoàn thành[/]\n")
 
 
 # ══════════════════════════════════════════════════════
@@ -522,6 +1454,20 @@ if __name__ == "__main__":
         test_order_tool()
         test_multi_turn_action()
         test_order_cache()
+        test_permission_matrix()
+        test_guest_checkout_extraction()
+        test_checkout_redirects_catalog_recommendations()
+        test_guest_checkout_memory_latch()
+        test_order_followup_memory()
+        test_budget_catalog_routing()
+        test_budget_catalog_lookup_price_filter()
+        test_catalog_keyword_fallback_search()
+        test_purchase_request_adds_product_to_guest_cart()
+        test_brand_voice_prompts()
+        test_catalog_followup_memory()
+        test_catalog_selection_line_followup()
+        test_budget_purchase_requires_product_selection()
+        test_checkout_progression_wins_over_catalog_history()
 
     if run_l2:
         test_pipeline()

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { apiLimiter } = require('../middlewares/rateLimit.middleware.js');
 
 // Import Controllers
 const {
@@ -23,7 +24,7 @@ const optionalAuth = require('../middlewares/optionalAuth.middleware');
 // 1. ADMIN ROUTES (Quản lý toàn bộ)
 // ==========================================
 // Chỉ Admin mới được xem tất cả giỏ hàng hoặc xóa giỏ hàng bất kỳ
-router.get('/', authMiddleware, adminMiddleware, getAllCarts);
+router.get('/all', authMiddleware, adminMiddleware, getAllCarts);
 router.delete('/:cartId', authMiddleware, adminMiddleware, deleteCart);
 
 // ==========================================
@@ -38,6 +39,28 @@ router.get('/user/:userId', authMiddleware, getCartByUser);
 // Các route này hỗ trợ cả khách vãng lai (Session) và User
 // KHÔNG gắn authMiddleware cứng ở đây để Guest vẫn mua được hàng.
 // Logic lấy User ID đã được xử lý trong Controller (req.user || req.body.userId)
+router.get('/', apiLimiter, optionalAuth, (req, res, next) => {
+    const sessionId =
+        req.headers['x-guest-session-id'] ||
+        req.headers['x-session-id'] ||
+        req.query.sessionId ||
+        req.query.guestSessionId ||
+        req.body?.sessionId;
+
+    if (sessionId) {
+        req.params.sessionId = String(sessionId);
+        return getCartBySession(req, res, next);
+    }
+
+    if (req.user?._id) {
+        req.params.userId = String(req.user._id);
+        return getCartByUser(req, res, next);
+    }
+
+    return res.status(400).json({
+        message: 'No sessionId or authenticated user provided',
+    });
+});
 
 // Lấy giỏ hàng theo Session ID (Dành cho Guest)
 router.get('/session/:sessionId', getCartBySession);

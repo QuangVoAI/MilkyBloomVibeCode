@@ -4,9 +4,9 @@ const auth = require('../middlewares/auth.middleware');
 const optionalAuth = require('../middlewares/optionalAuth.middleware');
 const adminOnly = require('../middlewares/admin.middleware');
 const supportTicketController = require('../controllers/support-ticket.controller');
-const { strictApiLimiter } = require('../middlewares/rateLimit.middleware');
+const { apiLimiter } = require('../middlewares/rateLimit.middleware');
 
-router.post('/', strictApiLimiter, optionalAuth, supportTicketController.createTicket);
+router.post('/', apiLimiter, optionalAuth, supportTicketController.createTicket);
 router.get('/me', auth, supportTicketController.getMyTickets);
 router.get('/admin', auth, adminOnly, supportTicketController.adminListTickets);
 router.get('/admin/stats', auth, adminOnly, supportTicketController.adminTicketStats);

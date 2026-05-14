@@ -30,6 +30,13 @@ from agents.empathy_writer import (
     generate_empathy_streaming, generate_casual, generate_inquiry,
 )
 from agents.reviewer import review_with_retry, _check_banned_phrases, _is_repetitive
+from agents.permission_matrix import (
+    build_auth_profile as build_permission_auth_profile,
+    authorize_capability,
+    authorize_action,
+    get_capability_rule,
+    summarize_permission_matrix,
+)
 from agents.grader import grade_documents_node
 from agents.rewriter import rewrite_query_node
 from agents.llm_client import observe
@@ -37,12 +44,21 @@ from indexing.query_engine import retrieve_and_rerank_async, format_evidence
 from tools.order_tool import (
     extract_order_id,
     extract_phone_number,
+    extract_email_address,
     get_order_info,
     get_order_info_by_phone,
+    get_order_info_by_email,
     determine_suggested_actions,
 )
 from tools.catalog_tool import lookup_live_catalog
 from tools.checkout_tool import start_checkout
+from tools.checkout_tool import _extract_guest_info_from_text, _merge_guest_info
+from tools.shop_client import (
+    create_support_ticket,
+    get_loyalty_config,
+    get_my_loyalty,
+    redeem_loyalty_coins,
+)
 from tools.action_tool import detect_action_intent, execute_action, resume_action_intent
 
 from config import MAX_REWRITE_RETRIES
@@ -52,6 +68,18 @@ from agents.prompt_registry import prompt_meta, POLICY_VERSION
 # Session-level pending actions for multi-turn action execution
 # Format: {session_id: {"action": str, ...}}
 _session_pending_actions: dict[str, dict] = {}
+
+# Session-level guest checkout memory so a guest can split contact info across turns.
+# Format: {session_id: {"fullName": ..., "email": ..., "phone": ..., "addressLine": ...}}
+_session_guest_checkout_profiles: dict[str, dict] = {}
+
+# Session-level order memory so follow-up turns can refer back to the last order.
+# Format: {session_id: {"order_id": ..., "status": ..., "address": ..., ...}}
+_session_order_profiles: dict[str, dict] = {}
+
+# Session-level catalog memory so follow-up turns can reuse the last viewed product.
+# Format: {session_id: {"query": ..., "name": ..., "summary": ..., "products": [...], ...}}
+_session_catalog_profiles: dict[str, dict] = {}
 
 ORDER_CONTEXT_KEYWORDS = [
     "mã đơn",
@@ -80,6 +108,21 @@ CHECKOUT_KEYWORDS = [
     "tạo đơn",
     "xác nhận đơn",
     "đi đến thanh toán",
+    "tiến hành đặt hàng",
+    "tiến hành thanh toán",
+    "đặt hàng luôn",
+    "xác nhận đặt hàng",
+    "tiếp tục đặt hàng",
+]
+
+PURCHASE_ACTION_KEYWORDS = [
+    "mua",
+    "lấy",
+    "đặt",
+    "chốt",
+    "thêm vào giỏ",
+    "add to cart",
+    "buy",
 ]
 
 CATALOG_KEYWORDS = [
@@ -94,6 +137,58 @@ CATALOG_KEYWORDS = [
     "màu nào",
     "size nào",
     "mẫu nào",
+]
+
+CATALOG_RECOMMENDATION_HINTS = [
+    "gợi ý",
+    "đề xuất",
+    "tư vấn",
+    "chọn",
+    "món đồ",
+    "đồ chơi",
+    "quà",
+    "gift",
+    "budget",
+    "ngân sách",
+]
+
+LOYALTY_KEYWORDS = [
+    "loyalty",
+    "điểm",
+    "coin",
+    "coins",
+    "hạng",
+    "tier",
+    "thành viên",
+    "membership",
+    "tích điểm",
+    "điểm thưởng",
+    "đổi điểm",
+    "redeem",
+    "voucher thành viên",
+]
+
+LOYALTY_REDEEM_KEYWORDS = [
+    "đổi điểm",
+    "đổi coin",
+    "redeem",
+    "sử dụng điểm",
+    "trừ điểm",
+    "quy đổi điểm",
+]
+
+SUPPORT_TICKET_KEYWORDS = [
+    "tạo ticket",
+    "mở ticket",
+    "support ticket",
+    "nhờ hỗ trợ",
+    "liên hệ hỗ trợ",
+    "gặp nhân viên",
+    "nhân viên hỗ trợ",
+    "chat với người thật",
+    "live agent",
+    "human support",
+    "report issue",
 ]
 
 
@@ -112,9 +207,509 @@ def _is_checkout_request(text: str) -> bool:
     return any(keyword in q for keyword in CHECKOUT_KEYWORDS)
 
 
+def _is_checkout_progression_request(text: str) -> bool:
+    q = (text or "").lower()
+    progression_markers = [
+        "bây giờ tiến hành đặt hàng",
+        "tiến hành đặt hàng",
+        "tiến hành thanh toán",
+        "đặt hàng luôn",
+        "tiếp tục đặt hàng",
+        "xác nhận đặt hàng",
+        "xác nhận đơn",
+        "checkout",
+    ]
+    return any(marker in q for marker in progression_markers)
+
+
+def _is_purchase_request(text: str) -> bool:
+    q = (text or "").lower().strip()
+    if any(keyword in q for keyword in CHECKOUT_KEYWORDS):
+        return True
+    return bool(re.search(r"(?i)\b(?:mua|lấy|đặt|chốt|buy)\b\s+.{2,}", q))
+
+
 def _is_catalog_request(text: str) -> bool:
     q = (text or "").lower()
     return any(keyword in q for keyword in CATALOG_KEYWORDS)
+
+
+def _is_catalog_recommendation_request(text: str) -> bool:
+    q = (text or "").lower()
+    has_hint = any(keyword in q for keyword in CATALOG_RECOMMENDATION_HINTS)
+    has_budget = bool(re.search(r"\b(?:dưới|tầm|khoảng|budget)\s*\d[\d.,]*\s*(?:k|nghìn|ngàn|vnđ|đ)?", q))
+    has_price = bool(re.search(r"\b\d[\d.,]*\s*(?:k|nghìn|ngàn|vnđ|đ)\b", q))
+    return (has_hint and (has_budget or has_price)) or (has_hint and "dưới" in q)
+
+
+def _is_loyalty_request(text: str) -> bool:
+    q = (text or "").lower()
+    return any(keyword in q for keyword in LOYALTY_KEYWORDS)
+
+
+def _is_loyalty_redeem_request(text: str) -> bool:
+    q = (text or "").lower()
+    return any(keyword in q for keyword in LOYALTY_REDEEM_KEYWORDS)
+
+
+def _is_support_ticket_request(text: str) -> bool:
+    q = (text or "").lower()
+    return any(keyword in q for keyword in SUPPORT_TICKET_KEYWORDS)
+
+
+def _is_existing_order_issue(text: str) -> bool:
+    q = (text or "").lower()
+    markers = (
+        "đặt nhầm địa chỉ",
+        "nhầm địa chỉ",
+        "sai địa chỉ",
+        "đổi địa chỉ",
+        "thay đổi địa chỉ",
+        "sửa địa chỉ",
+        "cập nhật địa chỉ",
+        "hủy đơn",
+        "hủy đơn hàng",
+        "kiểm tra đơn",
+        "tra cứu đơn",
+        "theo dõi đơn",
+        "trạng thái đơn",
+        "đơn đâu",
+        "bao giờ giao",
+        "chưa nhận được hàng",
+        "chưa thấy giao",
+        "mã đơn",
+        "order id",
+        "tracking",
+        "muốn đổi trả",
+        "cần đổi trả",
+        "yêu cầu đổi trả",
+        "xin đổi trả",
+        "đổi trả đơn",
+        "muốn hoàn tiền",
+        "cần hoàn tiền",
+        "yêu cầu hoàn tiền",
+        "xin hoàn tiền",
+        "trả hàng đơn",
+        "muốn trả hàng",
+        "cần trả hàng",
+    )
+    return any(marker in q for marker in markers)
+
+
+def _is_return_policy_question(text: str) -> bool:
+    q = (text or "").lower()
+    policy_markers = (
+        "chính sách đổi trả",
+        "đổi trả như thế nào",
+        "đổi trả ra sao",
+        "được đổi trả không",
+        "điều kiện đổi trả",
+        "quy trình đổi trả",
+        "đổi trả bao lâu",
+        "trả hàng như thế nào",
+        "return policy",
+    )
+    if any(phrase in q for phrase in policy_markers):
+        return True
+    if "đổi trả hàng" in q and any(
+        phrase in q
+        for phrase in (
+            "cho tôi biết",
+            "cho mình biết",
+            "muốn biết",
+            "thông tin",
+            "chi tiết",
+            "chính xác",
+            "cụ thể",
+            "điều kiện",
+            "quy trình",
+            "bao lâu",
+        )
+    ):
+        return True
+    return False
+
+
+def _is_return_request(text: str) -> bool:
+    q = (text or "").lower()
+    if _is_return_policy_question(q):
+        return False
+    return any(
+        phrase in q
+        for phrase in (
+            "mình muốn đổi trả",
+            "muốn đổi trả",
+            "cần đổi trả",
+            "yêu cầu đổi trả",
+            "xin đổi trả",
+            "đổi trả đơn",
+            "mình muốn hoàn tiền",
+            "muốn hoàn tiền",
+            "cần hoàn tiền",
+            "yêu cầu hoàn tiền",
+            "xin hoàn tiền",
+            "mình muốn trả hàng",
+            "muốn trả hàng",
+            "cần trả hàng",
+            "return item",
+            "return order",
+            "refund",
+            "hoàn tiền",
+        )
+    )
+
+
+def _build_auth_profile(shop_context: dict | None) -> dict:
+    return build_permission_auth_profile(shop_context)
+
+
+def _extract_first_amount(text: str) -> int:
+    match = re.search(r"(\d[\d.,]*)", text or "")
+    if not match:
+        return 0
+    raw = match.group(1).replace(".", "").replace(",", "")
+    try:
+        return max(0, int(raw))
+    except Exception:
+        return 0
+
+
+def _remember_guest_checkout_profile(state: dict) -> dict:
+    session_id = str(state.get("session_id") or "").strip()
+    if not session_id:
+        return {}
+
+    shop_context = state.get("shop_context", {}) or {}
+    auth_profile = state.get("auth_state") or _build_auth_profile(shop_context)
+    if auth_profile.get("is_authenticated") or auth_profile.get("user_scope") in {"logged_in", "admin"}:
+        return _session_guest_checkout_profiles.get(session_id, {})
+
+    texts = [state.get("question", "") or ""]
+    history = state.get("history", []) or []
+    for msg in history[-6:]:
+        if isinstance(msg, dict):
+            if str(msg.get("role") or "user").lower() == "user":
+                texts.append(str(msg.get("content") or ""))
+
+    extracted: dict[str, str] = {}
+    for text in texts:
+        extracted = _merge_guest_info(extracted, _extract_guest_info_from_text(text))
+
+    if extracted:
+        existing = _session_guest_checkout_profiles.get(session_id, {})
+        _session_guest_checkout_profiles[session_id] = _merge_guest_info(existing, extracted)
+
+    return _session_guest_checkout_profiles.get(session_id, {})
+
+
+def _clear_guest_checkout_profile(session_id: str) -> None:
+    session_id = str(session_id or "").strip()
+    if session_id and session_id in _session_guest_checkout_profiles:
+        _session_guest_checkout_profiles.pop(session_id, None)
+
+
+def _get_guest_checkout_profile(session_id: str) -> dict:
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return {}
+    return dict(_session_guest_checkout_profiles.get(session_id, {}))
+
+
+def _remember_order_profile(session_id: str, order_info: dict | None, question: str = "") -> None:
+    session_id = str(session_id or "").strip()
+    if not session_id or not order_info or not order_info.get("order_id"):
+        return
+
+    existing = _session_order_profiles.get(session_id, {})
+    merged = {
+        **existing,
+        "order_id": order_info.get("order_id", existing.get("order_id", "")),
+        "status": order_info.get("status", existing.get("status", "")),
+        "address": order_info.get("address", existing.get("address", "")),
+        "summary": order_info.get("summary", existing.get("summary", "")),
+        "lookup_hints": order_info.get("lookup_hints", existing.get("lookup_hints", [])),
+        "found": bool(order_info.get("found", existing.get("found", False))),
+        "verified": bool(order_info.get("ownership_verified", existing.get("verified", False))),
+        "last_question": question or existing.get("last_question", ""),
+        "updated_at": time.time(),
+    }
+    _session_order_profiles[session_id] = merged
+
+
+def _get_order_profile(session_id: str) -> dict:
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return {}
+    return dict(_session_order_profiles.get(session_id, {}))
+
+
+def _clear_order_profile(session_id: str) -> None:
+    session_id = str(session_id or "").strip()
+    if session_id and session_id in _session_order_profiles:
+        _session_order_profiles.pop(session_id, None)
+
+
+def _has_order_followup_signal(text: str) -> bool:
+    text = (text or "").lower()
+    signals = [
+        "đơn đó",
+        "đơn này",
+        "đơn kia",
+        "đơn vừa rồi",
+        "đơn trước",
+        "đơn cũ",
+        "đơn trên",
+        "của mình",
+        "của tôi",
+        "đổi địa chỉ",
+        "cập nhật địa chỉ",
+        "sửa địa chỉ",
+        "hủy đơn",
+        "hủy giúp",
+        "hoàn tiền",
+        "đổi trả",
+        "trạng thái",
+        "theo dõi",
+        "kiểm tra",
+        "xem đơn",
+        "mã đơn",
+        "order",
+    ]
+    return any(sig in text for sig in signals)
+
+
+def _remember_catalog_profile(session_id: str, catalog_info: dict | None, question: str = "") -> None:
+    session_id = str(session_id or "").strip()
+    if not session_id or not catalog_info or not catalog_info.get("found"):
+        return
+
+    existing = _session_catalog_profiles.get(session_id, {})
+    products = catalog_info.get("products") or existing.get("products") or []
+    primary_name = ""
+    if isinstance(products, list) and products:
+        first = products[0] if isinstance(products[0], dict) else {}
+        primary_name = first.get("name") or first.get("slug") or ""
+    merged = {
+        **existing,
+        "query": catalog_info.get("query") or existing.get("query", ""),
+        "name": primary_name or existing.get("name", ""),
+        "summary": catalog_info.get("summary") or existing.get("summary", ""),
+        "products": products,
+        "last_question": question or existing.get("last_question", ""),
+        "updated_at": time.time(),
+    }
+    _session_catalog_profiles[session_id] = merged
+
+
+def _get_catalog_profile(session_id: str) -> dict:
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return {}
+    return dict(_session_catalog_profiles.get(session_id, {}))
+
+
+def _clear_catalog_profile(session_id: str) -> None:
+    session_id = str(session_id or "").strip()
+    if session_id and session_id in _session_catalog_profiles:
+        _session_catalog_profiles.pop(session_id, None)
+
+
+def _clean_catalog_selection_line(text: str) -> str:
+    line = str(text or "").strip()
+    if not line:
+        return ""
+    line = re.split(r"[\n\r]", line, maxsplit=1)[0].strip()
+    line = re.sub(r"^[\s>*•\-–—]+", "", line).strip()
+    line = re.sub(r"^\d+[\).]\s*", "", line).strip()
+    line = line.replace("**", "").replace("__", "").strip()
+    line = re.split(
+        r"\s+[-–—]\s+(?=\d{1,3}(?:[.,]\d{3})*(?:\s*(?:đ|d|vnd|vnđ))?|\d+\s*k\b)",
+        line,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+    line = re.sub(
+        r"\s+\d{1,3}(?:[.,]\d{3})*(?:\s*(?:đ|d|vnd|vnđ))?.*$",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    ).strip()
+    return line.strip(" '\"`.,:;!?")
+
+
+def _extract_catalog_selection_name(text: str, catalog_profile: dict | None = None) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+
+    products = []
+    if isinstance(catalog_profile, dict):
+        products = catalog_profile.get("products") or []
+
+    lower_raw = raw.lower()
+    for product in products if isinstance(products, list) else []:
+        if not isinstance(product, dict):
+            continue
+        name = str(product.get("name") or product.get("slug") or "").strip()
+        if name and name.lower() in lower_raw:
+            return name
+
+    has_product_line_shape = bool(
+        re.search(r"(^|\n)\s*(?:[>*•\-–—]|\d+[\).])\s*\S+", raw)
+        and re.search(r"\d{1,3}(?:[.,]\d{3})*(?:\s*(?:đ|d|vnd|vnđ))?|\d+\s*k\b", raw, re.IGNORECASE)
+    )
+    if not has_product_line_shape:
+        return ""
+
+    candidate = _clean_catalog_selection_line(raw)
+    if len(candidate) < 2:
+        return ""
+    if candidate.lower() in {"món", "sản phẩm", "item", "đồ"}:
+        return ""
+    return candidate
+
+
+def _has_catalog_followup_signal(text: str) -> bool:
+    text = (text or "").lower()
+    if _extract_catalog_selection_name(text):
+        return True
+    signals = [
+        "món này",
+        "mẫu này",
+        "sản phẩm này",
+        "con này",
+        "món vừa rồi",
+        "mẫu vừa rồi",
+        "hàng này",
+        "cái này",
+        "nó còn",
+        "còn size nào",
+        "còn màu nào",
+        "còn không",
+        "size nào",
+        "màu nào",
+        "giá bao nhiêu",
+        "tồn kho",
+        "chốt món này",
+        "đặt món này",
+        "thêm vào giỏ",
+    ]
+    return any(sig in text for sig in signals)
+
+
+def _brand_voice_opening(context: str, *, order_id: str = "", product_name: str = "") -> str:
+    context = (context or "").strip().lower()
+    if context == "support":
+        return "Mình mở ticket cho bạn rồi nè."
+    if context == "order":
+        if order_id:
+            return f"Mình tra được đơn {order_id} cho bạn rồi nè."
+        return "Mình tra được đơn của bạn rồi nè."
+    if context == "catalog":
+        if product_name:
+            return f"Mình vừa xem {product_name} cho bạn rồi nè."
+        return "Mình vừa xem món này cho bạn rồi nè."
+    if context == "loyalty":
+        return "Mình xem điểm của bạn rồi nè."
+    if context == "sales":
+        return "Mình gợi ý nhanh cho bạn nè."
+    return "Mình xử lý cho bạn rồi nè."
+
+
+def _infer_capability(question: str, history: list[dict], intent: str, auth_profile: dict) -> tuple[str, str]:
+    q = (question or "").lower()
+    recent = " ".join((m.get("content", "") or "") for m in history[-4:]).lower()
+    text = f"{q} {recent}"
+
+    if _is_catalog_recommendation_request(text):
+        return "catalog", "catalog_recommendation"
+
+    if _extract_catalog_selection_name(text):
+        return "catalog", "catalog_selection"
+
+    if _is_loyalty_request(text):
+        if _is_loyalty_redeem_request(text):
+            return "loyalty", "loyalty_redeem"
+        return "loyalty", "loyalty_view"
+
+    if _is_support_ticket_request(text):
+        return "support_ticket", "support_ticket_request"
+
+    if _is_return_policy_question(text) and not (extract_order_id(text) or extract_phone_number(text)):
+        return "inquiry", "return_policy_question"
+
+    if _is_return_request(text):
+        return "order_management", "return_request"
+
+    if has_order_context := (extract_order_id(text) or extract_phone_number(text) or _is_existing_order_issue(text)):
+        return "order_management", f"existing_order:{has_order_context}"
+
+    if _is_purchase_request(text) and not _is_catalog_recommendation_request(text):
+        return "checkout", "purchase_request"
+
+    if _is_checkout_request(text):
+        return "checkout", "checkout_keywords"
+
+    if _is_catalog_request(text):
+        return "catalog", "catalog_keywords"
+
+    if intent == "INQUIRY":
+        return "inquiry", "inquiry_intent"
+    if intent == "CASUAL":
+        return "casual", "casual_intent"
+    return "order_management", "default_fallback"
+
+
+def _format_loyalty_config_summary(config: dict) -> str:
+    tiers = config.get("tiers") or []
+    if not tiers:
+        return "Hệ thống loyalty hiện có nhưng mình chưa lấy được bảng quyền lợi chi tiết."
+
+    parts = []
+    for tier in tiers:
+        name = tier.get("name") or tier.get("tier") or "member"
+        min_spent = tier.get("minSpent")
+        coin_multiplier = tier.get("coinMultiplier")
+        shipping_discount = tier.get("shippingDiscount")
+        segment = f"{name}"
+        if min_spent is not None:
+            segment += f" từ {int(min_spent):,}đ"
+        if coin_multiplier is not None:
+            segment += f", hệ số điểm {coin_multiplier}x"
+        if shipping_discount is not None:
+            segment += f", giảm ship {shipping_discount}%"
+        parts.append(segment)
+
+    coin_rate = config.get("coinRate")
+    coin_value = config.get("coinValue")
+    header = []
+    if coin_rate is not None:
+        header.append(f"Quy đổi cơ bản: {int(coin_rate):,}đ = 1 coin")
+    if coin_value is not None:
+        header.append(f"1 coin = {coin_value}đ")
+    intro = " | ".join(header)
+    return intro + ("\n" if intro else "") + " • ".join(parts)
+
+
+def _format_loyalty_status(data: dict) -> str:
+    rank = str(data.get("loyaltyRank") or "none").lower()
+    points = int(data.get("loyaltyPoints") or 0)
+    lifetime_spent = int(data.get("lifetimeSpent") or 0)
+    spent_12m = int(data.get("spentLast12Months") or 0)
+    return (
+        f"Bạn đang ở hạng {rank}, có {points:,} coin.\n"
+        f"Tổng chi tiêu: {lifetime_spent:,}đ | 12 tháng gần nhất: {spent_12m:,}đ."
+    )
+
+
+def _format_return_policy_summary() -> str:
+    return (
+        "Chính sách đổi trả của MilkyBloom nè:\n"
+        "• Hàng còn niêm phong / còn điều kiện đổi trả: mình sẽ hỗ trợ theo từng đơn.\n"
+        "• Đổi trả theo đơn cụ thể: bạn gửi mã đơn hoặc email đặt hàng để mình kiểm tra điều kiện.\n"
+        "• Nếu sản phẩm lỗi / giao sai: mình sẽ ưu tiên xử lý nhanh hơn.\n"
+        "• Sau khi quá hạn quy định, một số đơn sẽ không còn đủ điều kiện đổi trả."
+    )
 
 
 # ================================================================
@@ -134,17 +729,43 @@ def order_lookup_node(state: AgentState) -> dict:
 
     order_id = extract_order_id(all_text)
     phone_number = extract_phone_number(all_text) if not order_id else None
+    email_address = extract_email_address(all_text) if not order_id and not phone_number else None
     order_info: dict = {}
     suggested_actions: list = []
     has_order_context = any(keyword in all_text.lower() for keyword in ORDER_CONTEXT_KEYWORDS)
 
     pending_action_intent: dict = {}
     session_id = state.get("session_id", "")
+    cached_order = _get_order_profile(session_id)
 
     if order_id:
         order_info = get_order_info(order_id, shop_context)
     elif phone_number:
         order_info = get_order_info_by_phone(phone_number, shop_context)
+    elif email_address:
+        order_info = get_order_info_by_email(email_address, shop_context)
+    elif cached_order and _has_order_followup_signal(all_text):
+        cached_order_id = cached_order.get("order_id", "")
+        if cached_order_id:
+            console.print(
+                f"[dim]  OrderLookup: using cached order '{cached_order_id}' for follow-up turn[/]"
+            )
+            order_id = cached_order_id
+            order_info = get_order_info(cached_order_id, shop_context)
+            if not order_info.get("found") and cached_order.get("found"):
+                order_info = {
+                    "found": True,
+                    "ownership_verified": bool(cached_order.get("verified")),
+                    "order_id": cached_order_id,
+                    "status": cached_order.get("status", ""),
+                    "address": cached_order.get("address", ""),
+                    "summary": cached_order.get("summary", ""),
+                    "lookup_hints": cached_order.get("lookup_hints", []),
+                    "suggested_actions": ["check_order_status"],
+                    "raw": {},
+                }
+                if cached_order.get("summary"):
+                    order_info["summary"] = cached_order["summary"]
     else:
         if has_order_context:
             lookup_hints = [
@@ -192,11 +813,15 @@ def order_lookup_node(state: AgentState) -> dict:
                 f"for session {session_id}[/]"
             )
 
+        if order_info.get("found") and session_id:
+            _remember_order_profile(session_id, order_info, question)
+
     elapsed = int((time.time() - t0) * 1000)
 
     return {
         "order_id": order_id or "",
         "phone_number": phone_number or "",
+        "email_address": email_address or "",
         "order_info": order_info,
         "suggested_actions": suggested_actions,
         "pending_action_intent": pending_action_intent,
@@ -204,6 +829,7 @@ def order_lookup_node(state: AgentState) -> dict:
             **(state.get("agent_trace") or {}),
             "order_id_extracted": order_id,
             "phone_extracted": phone_number,
+            "email_extracted": email_address,
             "order_found": bool(order_info.get("found")),
             "order_status": order_info.get("status", ""),
             "order_lookup_ms": elapsed,
@@ -215,8 +841,17 @@ def catalog_lookup_node(state: AgentState) -> dict:
     """Node: Tra cứu catalog live để trả lời tồn kho / sản phẩm."""
     t0 = time.time()
     question = state["question"]
+    session_id = state.get("session_id", "")
+    cached_catalog = _get_catalog_profile(session_id)
     shop_context = state.get("shop_context", {}) or {}
-    catalog_info = lookup_live_catalog(question, shop_context)
+    lookup_question = question
+    selected_product_name = _extract_catalog_selection_name(question, cached_catalog)
+    if selected_product_name:
+        lookup_question = selected_product_name
+    elif cached_catalog and _has_catalog_followup_signal(question):
+        base_name = cached_catalog.get("name") or cached_catalog.get("query") or ""
+        lookup_question = f"{base_name} {question}".strip()
+    catalog_info = lookup_live_catalog(lookup_question, shop_context)
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(
@@ -225,6 +860,16 @@ def catalog_lookup_node(state: AgentState) -> dict:
     )
 
     answer = catalog_info.get("summary") or "Mình chưa tìm được sản phẩm phù hợp."
+    if catalog_info.get("found"):
+        products = catalog_info.get("products") or []
+        product_name = ""
+        if isinstance(products, list) and len(products) == 1:
+            first = products[0] if isinstance(products[0], dict) else {}
+            product_name = first.get("name") or first.get("slug") or ""
+        opening_context = "catalog" if product_name else "sales"
+        answer = f"{_brand_voice_opening(opening_context, product_name=product_name)}\n{answer}"
+    if catalog_info.get("found") and session_id:
+        _remember_catalog_profile(session_id, catalog_info, question)
 
     return {
         "catalog_info": catalog_info,
@@ -236,6 +881,169 @@ def catalog_lookup_node(state: AgentState) -> dict:
             "catalog_found": catalog_info.get("found", False),
             "catalog_query": catalog_info.get("query", ""),
             "catalog_lookup_ms": elapsed,
+            "catalog_followup_memory_used": bool(selected_product_name or (cached_catalog and _has_catalog_followup_signal(question))),
+            "catalog_selected_product": selected_product_name,
+        },
+    }
+
+
+def loyalty_node(state: AgentState) -> dict:
+    """Node: Trả lời loyalty cho guest / logged-in theo quyền truy cập."""
+    t0 = time.time()
+    question = state.get("question", "")
+    shop_context = state.get("shop_context", {}) or {}
+    auth_profile = state.get("auth_state") or _build_auth_profile(shop_context)
+    text = question.lower()
+    wants_redeem = _is_loyalty_redeem_request(text)
+    amount = _extract_first_amount(text) if wants_redeem else 0
+
+    answer = ""
+    loyalty_info: dict = {}
+
+    if not auth_profile.get("is_authenticated"):
+        if wants_redeem or any(keyword in text for keyword in ("mình có bao nhiêu điểm", "điểm của mình", "hạng của mình")):
+            answer = (
+                "Phần điểm thưởng cá nhân cần bạn đăng nhập để mình kiểm tra đúng tài khoản nhé.\n"
+                "Nếu bạn muốn, mình có thể nói nhanh cách tích điểm và các hạng loyalty trước."
+            )
+        else:
+            config_res = get_loyalty_config(shop_context)
+            config = config_res.get("data") if isinstance(config_res, dict) else {}
+            answer = (
+                "Đây là cách loyalty của MilkyBloom hoạt động nè:\n"
+                f"{_format_loyalty_config_summary(config if isinstance(config, dict) else {})}"
+            )
+        elapsed = int((time.time() - t0) * 1000)
+        return {
+            "answer": answer,
+            "loyalty_info": loyalty_info,
+            "reviewer_triggered": False,
+            "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+            "agent_trace": {
+                **(state.get("agent_trace") or {}),
+                "loyalty_scope": auth_profile.get("user_scope", "guest"),
+                "loyalty_ms": elapsed,
+                "loyalty_mode": "guest_info",
+            },
+        }
+
+    if wants_redeem:
+        if amount <= 0:
+            answer = (
+                "Bạn muốn đổi bao nhiêu coin vậy? "
+                "Bạn gửi mình con số cụ thể, mình kiểm tra và trừ điểm giúp bạn."
+            )
+            elapsed = int((time.time() - t0) * 1000)
+            return {
+                "answer": answer,
+                "loyalty_info": loyalty_info,
+                "reviewer_triggered": False,
+                "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+                "agent_trace": {
+                    **(state.get("agent_trace") or {}),
+                    "loyalty_scope": auth_profile.get("user_scope", "logged_in"),
+                    "loyalty_ms": elapsed,
+                    "loyalty_mode": "needs_amount",
+                },
+            }
+
+        redeem_res = redeem_loyalty_coins(amount, shop_context)
+        if redeem_res.get("success"):
+            balance = redeem_res.get("data", {}).get("balance", 0)
+            answer = f"Mình đã đổi {amount:,} coin cho bạn rồi nhé. Số dư hiện tại là {balance:,} coin."
+        else:
+            answer = redeem_res.get("message") or "Mình chưa đổi điểm được lúc này."
+
+        elapsed = int((time.time() - t0) * 1000)
+        return {
+            "answer": answer,
+            "loyalty_info": loyalty_info,
+            "reviewer_triggered": False,
+            "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+            "agent_trace": {
+                **(state.get("agent_trace") or {}),
+                "loyalty_scope": auth_profile.get("user_scope", "logged_in"),
+                "loyalty_ms": elapsed,
+                "loyalty_mode": "redeem",
+            },
+        }
+
+    loyalty_res = get_my_loyalty(shop_context)
+    if loyalty_res.get("success"):
+        loyalty_info = loyalty_res.get("data") or {}
+        answer = _format_loyalty_status(loyalty_info)
+    else:
+        answer = loyalty_res.get("message") or "Mình chưa lấy được thông tin loyalty của bạn."
+
+    answer = f"{_brand_voice_opening('loyalty')}\n{answer}" if answer else answer
+
+    elapsed = int((time.time() - t0) * 1000)
+    return {
+        "answer": answer,
+        "loyalty_info": loyalty_info,
+        "reviewer_triggered": False,
+        "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+        "agent_trace": {
+            **(state.get("agent_trace") or {}),
+            "loyalty_scope": auth_profile.get("user_scope", "logged_in"),
+            "loyalty_ms": elapsed,
+            "loyalty_mode": "profile",
+        },
+    }
+
+
+def support_ticket_node(state: AgentState) -> dict:
+    """Node: Tạo support ticket riêng cho yêu cầu cần người thật xử lý."""
+    t0 = time.time()
+    question = state.get("question", "")
+    shop_context = state.get("shop_context", {}) or {}
+    auth_profile = state.get("auth_state") or _build_auth_profile(shop_context)
+
+    subject = "Yêu cầu hỗ trợ từ chatbot"
+    description = question.strip() or "Khách hàng cần hỗ trợ trực tiếp"
+    payload = {
+        "subject": subject,
+        "description": description,
+        "sourceMessage": question,
+        "channel": "chat",
+        "userId": auth_profile.get("user_id") or None,
+        "contactName": shop_context.get("user_name") or shop_context.get("full_name") or "",
+        "contactEmail": shop_context.get("email") or "",
+        "contactPhone": shop_context.get("phone") or "",
+        "metadata": {
+            "user_scope": auth_profile.get("user_scope", "guest"),
+            "capability": "support_ticket",
+        },
+    }
+
+    ticket_res = create_support_ticket(payload, shop_context)
+    if ticket_res.get("success"):
+        ticket = ticket_res.get("data") or {}
+        ticket_number = ticket_res.get("ticketNumber") or ticket.get("ticketNumber") or ticket.get("ticket_number") or ""
+        ticket_id = ticket_res.get("ticketId") or ticket.get("_id") or ticket.get("id") or ""
+        answer = _brand_voice_opening("support")
+        if ticket_number:
+            answer += f" Mã ticket: {ticket_number}."
+        answer += " Nếu cần, mình có thể theo dõi tiếp giúp bạn."
+    else:
+        ticket_number = ""
+        ticket_id = ""
+        answer = ticket_res.get("message") or "Mình chưa tạo ticket hỗ trợ được lúc này."
+
+    elapsed = int((time.time() - t0) * 1000)
+    return {
+        "answer": answer,
+        "ticket_info": ticket_res if isinstance(ticket_res, dict) else {},
+        "reviewer_triggered": False,
+        "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
+        "agent_trace": {
+            **(state.get("agent_trace") or {}),
+            "ticket_scope": auth_profile.get("user_scope", "guest"),
+            "ticket_ms": elapsed,
+            "ticket_number": ticket_number,
+            "ticket_id": ticket_id,
+            "ticket_success": bool(ticket_res.get("success")),
+            "capability": "support_ticket",
         },
     }
 
@@ -243,6 +1051,12 @@ def catalog_lookup_node(state: AgentState) -> dict:
 def _format_checkout_message(result: dict) -> str:
     if result.get("needs_login"):
         return result.get("message") or "Mình cần bạn đăng nhập trước khi checkout nhé."
+    if result.get("needs_guest_session"):
+        return result.get("message") or "Mình cần mã phiên giỏ hàng của khách để tạo đơn."
+    if result.get("needs_product_selection"):
+        return result.get("message") or "Mình cần bạn chọn sản phẩm muốn mua trước khi tạo đơn."
+    if result.get("needs_guest_info"):
+        return result.get("message") or "Mình cần thêm họ tên, email, số điện thoại và địa chỉ nhận hàng của khách."
     if result.get("needs_address"):
         return result.get("message") or "Mình cần địa chỉ giao hàng đã lưu để tạo đơn."
     if result.get("ok"):
@@ -253,21 +1067,53 @@ def _format_checkout_message(result: dict) -> str:
         if order_id:
             message += f"\nMã đơn: {order_id}"
         return message
-    return result.get("message") or "Mình chưa thể tạo đơn lúc này."
+
+    message = str(result.get("message") or "").strip()
+    if message:
+        lowered = message.lower()
+        if "cart is empty" in lowered or "empty cart" in lowered or "giỏ hàng trống" in lowered:
+            return (
+                "Mình chưa thấy sản phẩm nào trong giỏ hàng để tạo đơn. "
+                "Nếu bạn đang muốn đổi địa chỉ cho đơn vừa đặt, bạn gửi mã đơn hoặc email đặt hàng giúp mình nhé."
+            )
+        return message
+
+    return "Mình chưa thể tạo đơn lúc này."
 
 
 def checkout_node(state: AgentState) -> dict:
     """Node: Checkout assistant dùng cart thật của user đang đăng nhập."""
     t0 = time.time()
     question = state["question"]
+    session_id = state.get("session_id", "")
+    history = state.get("history", [])
     shop_context = state.get("shop_context", {}) or {}
-    checkout_result = start_checkout(question, shop_context)
+    cached_guest_profile = _get_guest_checkout_profile(session_id)
+    if cached_guest_profile:
+        merged_guest_profile = _merge_guest_info(
+            cached_guest_profile,
+            shop_context.get("guest_info") or shop_context.get("guestInfo") or {},
+        )
+        shop_context = {
+            **shop_context,
+            "guest_info": merged_guest_profile,
+        }
+    checkout_result = start_checkout(question, history, shop_context)
+    catalog_info = checkout_result.get("catalog_info") or {}
+    if catalog_info:
+        _remember_catalog_profile(session_id, catalog_info, question)
     answer = _format_checkout_message(checkout_result)
+    if checkout_result.get("ok"):
+        answer = f"{_brand_voice_opening('sales')}\n{answer}" if answer else answer
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  CheckoutNode: {checkout_result.get('ok', False)} ({elapsed}ms)[/]")
 
+    if checkout_result.get("ok"):
+        _clear_guest_checkout_profile(session_id)
+
     return {
         "checkout_result": checkout_result,
+        "catalog_info": catalog_info,
         "answer": answer,
         "reviewer_triggered": False,
         "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
@@ -275,6 +1121,7 @@ def checkout_node(state: AgentState) -> dict:
             **(state.get("agent_trace") or {}),
             "checkout_ok": checkout_result.get("ok", False),
             "checkout_ms": elapsed,
+            "guest_checkout_memory_used": bool(cached_guest_profile),
         },
     }
 
@@ -290,6 +1137,7 @@ def action_executor_node(state: AgentState) -> dict:
     session_id = state.get("session_id", "")
     pending = state.get("pending_action_intent", {})
     shop_context = state.get("shop_context", {}) or {}
+    auth_profile = state.get("auth_state") or _build_auth_profile(shop_context)
     order_id = state.get("order_id", "")
     phone_number = state.get("phone_number", "")
     identifier_only = bool(re.fullmatch(r"[\d\+\-\s\(\)]{8,}", question.strip()))
@@ -315,11 +1163,34 @@ def action_executor_node(state: AgentState) -> dict:
     else:
         action_intent = detect_action_intent(question, order_info)
 
+    def _followup_prompt(action_name: str, needs_more_info: bool = False) -> str:
+        if action_name in {"request_refund", "process_return", "cancel_order", "check_order_status", "update_address"}:
+            if needs_more_info:
+                return (
+                    "Mình có thể xử lý tiếp, nhưng mình cần thêm thông tin của đơn trước nhé. "
+                    "Bạn gửi mình mã đơn hoặc email đặt hàng là mình kiểm tra ngay."
+                )
+            return (
+                "Mình cần xác minh đúng đơn trước khi làm tiếp. "
+                "Bạn gửi mình mã đơn hoặc email đặt hàng nhé."
+            )
+        return "Mình cần thêm thông tin trước khi xử lý tiếp nhé."
+
     action = action_intent.get("action", "no_action")
     action_conf = action_intent.get("confidence", {}) if isinstance(action_intent, dict) else {}
+    authorization = authorize_action(action, auth_profile, order_info)
+    has_pending_action = bool(pending and pending.get("action"))
+    verified_followup = bool(has_pending_action and order_info.get("found") and order_info.get("ownership_verified"))
 
-    # Save pending action for next turn if we need order_id or more info
-    if action != "no_action" and session_id:
+    # Save pending action whenever we still need the user to provide order
+    # identity or missing details. This keeps the follow-up flow alive even
+    # when the action itself is not yet permitted.
+    can_store_pending = (
+        bool(action_intent.get("needs_order_id") or action_intent.get("needs_more_info"))
+        or authorization.get("allowed", False)
+        or authorization.get("mode") == "needs_verification"
+    )
+    if action != "no_action" and session_id and can_store_pending:
         if action_intent.get("needs_order_id") or action_intent.get("needs_more_info"):
             _session_pending_actions[session_id] = {"action": action}
             console.print(
@@ -328,7 +1199,22 @@ def action_executor_node(state: AgentState) -> dict:
             )
 
     action_result: dict = {}
-    if action == "check_order_status" and order_info.get("found"):
+    followup_needed = bool(action_intent.get("needs_order_id") or action_intent.get("needs_more_info"))
+    if not authorization.get("allowed") and action != "no_action" and not (followup_needed or verified_followup):
+        action_result = {
+            "success": False,
+            "blocked": True,
+            "action": action,
+            "message": authorization.get("reason") or "Mình chưa thể thực hiện thao tác này.",
+            "ticket_id": None,
+            "updated_fields": {},
+            "permission_mode": authorization.get("mode", "blocked"),
+        }
+        console.print(
+            f"[dim]  ActionExecutor: {action} -> BLOCKED by permission matrix "
+            f"({authorization.get('mode', 'blocked')})[/]"
+        )
+    elif action == "check_order_status" and order_info.get("found"):
         action_result = {
             "success": True,
             "action": action,
@@ -340,7 +1226,14 @@ def action_executor_node(state: AgentState) -> dict:
             f"[dim]  ActionExecutor: {action} -> OK "
             f"(order: {order_info.get('order_id', '-')})[/]"
         )
-    elif action != "no_action" and not action_intent.get("needs_order_id") and not action_intent.get("needs_more_info"):
+    elif action != "no_action" and verified_followup:
+        action_result = execute_action(action_intent, order_info, shop_context)
+        status = "OK" if action_result.get("success") else ("BLOCKED" if action_result.get("blocked") else "FAIL")
+        console.print(
+            f"[dim]  ActionExecutor: {action} -> {status} "
+            f"(ticket: {action_result.get('ticket_id', '-')})[/]"
+        )
+    elif action != "no_action" and not followup_needed:
         action_result = execute_action(action_intent, order_info, shop_context)
         status = "OK" if action_result.get("success") else ("BLOCKED" if action_result.get("blocked") else "FAIL")
         console.print(
@@ -348,6 +1241,18 @@ def action_executor_node(state: AgentState) -> dict:
             f"(ticket: {action_result.get('ticket_id', '-')})[/]"
         )
     else:
+        followup_message = _followup_prompt(action, bool(action_intent.get("needs_more_info")))
+        action_result = {
+            "success": False,
+            "blocked": False,
+            "action": action,
+            "message": followup_message,
+            "ticket_id": None,
+            "updated_fields": {},
+            "needs_order_id": bool(action_intent.get("needs_order_id")),
+            "needs_more_info": bool(action_intent.get("needs_more_info")),
+            "pending": True,
+        }
         console.print(f"[dim]  ActionExecutor: {action} -> {'PENDING' if action != 'no_action' else 'no action'}[/]")
 
     elapsed = int((time.time() - t0) * 1000)
@@ -370,6 +1275,8 @@ def action_executor_node(state: AgentState) -> dict:
             "action_fallback_used": action_conf.get("method") in {"keyword", "clarify"},
             "action_prompt_version": action_conf.get("prompt_version", ""),
             "action_policy_version": action_conf.get("policy_version", ""),
+            "permission_mode": authorization.get("mode", ""),
+            "permission_allowed": authorization.get("allowed", False),
             "action_pending_saved": session_id in _session_pending_actions,
             "action_executor_ms": elapsed,
         },
@@ -380,20 +1287,36 @@ def router_node(state: AgentState) -> dict:
     """Node 1: Classify intent (COMPLAINT / INQUIRY / CASUAL)."""
     t0 = time.time()
     question = state["question"]
+    shop_context = state.get("shop_context", {}) or {}
 
     history = state.get("history", [])
     contextualized_q = _build_contextualized_question(question, history)
 
     meta = classify_with_metadata(contextualized_q)
     intent = meta["intent"]
+    auth_profile = _build_auth_profile(shop_context)
+    capability, capability_reason = _infer_capability(question, history, intent, auth_profile)
+    permission_rule = authorize_capability(capability, auth_profile)
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(
-        f"[dim]  Router: {intent} ({elapsed}ms, confidence={meta.get('confidence', 0):.3f})[/]"
+        f"[dim]  Router: {intent} -> {capability} ({elapsed}ms, confidence={meta.get('confidence', 0):.3f})[/]"
     )
 
     return {
         "intent": intent,
+        "capability": capability,
+        "capability_reason": capability_reason,
+        "user_scope": auth_profile.get("user_scope", "guest"),
+        "is_authenticated": auth_profile.get("is_authenticated", False),
+        "ownership_verified": auth_profile.get("ownership_verified", False),
+        "permission_reason": (
+            permission_rule.get("reason")
+            or ("admin" if auth_profile.get("user_scope") == "admin"
+                else "authenticated" if auth_profile.get("is_authenticated")
+                else "guest")
+        ),
+        "auth_state": auth_profile,
         "router_confidence": meta.get("confidence", 0.0),
         "router_method": meta.get("method", ""),
         "router_semantic_scores": meta.get("semantic_scores", {}),
@@ -415,6 +1338,10 @@ def router_node(state: AgentState) -> dict:
             "router_semantic_margin": meta.get("semantic_margin", 0.0),
             "trace_id": state.get("trace_id", ""),
             "policy_version": POLICY_VERSION,
+            "user_scope": auth_profile.get("user_scope", "guest"),
+            "capability": capability,
+            "capability_reason": capability_reason,
+            "permission_mode": permission_rule.get("mode", ""),
             **meta.get("prompt_meta", {}),
         },
     }
@@ -454,6 +1381,11 @@ def clarify_node(state: AgentState) -> dict:
         answer = (
             "Mình chưa chắc ý bạn ở phần nào lắm. "
             "Bạn muốn mình kiểm tra đơn hàng, đổi địa chỉ, hoàn tiền hay đổi trả vậy?"
+        )
+    elif _is_loyalty_request(question) or "điểm" in recent or "hạng" in recent:
+        answer = (
+            "Mình chưa chắc bạn đang muốn xem điểm, hạng thành viên hay đổi điểm. "
+            "Bạn chọn một ý cụ thể giúp mình nhé."
         )
     else:
         answer = (
@@ -515,18 +1447,21 @@ async def empathy_writer_node(state: AgentState) -> dict:
     action_intent = state.get("action_intent", {})
     stream_callback = state.get("stream_callback")
 
-    answer = await generate_empathy_streaming(
-        question=question,
-        evidence_text=evidence_text,
-        sentiment=sentiment,
-        score=sentiment_score,
-        compensation=compensation,
-        order_info=order_info,
-        action_result=action_result,
-        action_intent=action_intent,
-        catalog_info=catalog_info,
-        stream_callback=stream_callback,
-    )
+    if action_result.get("pending") and action_result.get("message"):
+        answer = action_result["message"]
+    else:
+        answer = await generate_empathy_streaming(
+            question=question,
+            evidence_text=evidence_text,
+            sentiment=sentiment,
+            score=sentiment_score,
+            compensation=compensation,
+            order_info=order_info,
+            action_result=action_result,
+            action_intent=action_intent,
+            catalog_info=catalog_info,
+            stream_callback=stream_callback,
+        )
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  EmpathyWriter: {len(answer)} chars ({elapsed}ms)[/]")
@@ -550,8 +1485,12 @@ async def inquiry_writer_node(state: AgentState) -> dict:
     evidence_text = state.get("evidence_text", "")
     order_info = state.get("order_info", {})
     catalog_info = state.get("catalog_info", {})
+    capability_reason = str(state.get("capability_reason") or "").lower()
 
-    answer = await generate_inquiry(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
+    if "return_policy_question" in capability_reason or _is_return_policy_question(question):
+        answer = _format_return_policy_summary()
+    else:
+        answer = await generate_inquiry(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  InquiryWriter: {len(answer)} chars ({elapsed}ms)[/]")
@@ -605,41 +1544,36 @@ async def order_status_writer_node(state: AgentState) -> dict:
         )
     elif status == "delivered":
         answer = (
-            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            f"{_brand_voice_opening('order', order_id=order_id)}\n"
             "Đơn này đã được giao thành công rồi nè.\n"
             "Nếu bạn muốn, mình có thể xem tiếp phần hỗ trợ đổi trả hoặc bảo hành cho đơn này."
         )
     elif status == "shipping":
         answer = (
-            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            f"{_brand_voice_opening('order', order_id=order_id)}\n"
             "Đơn hiện đang trong trạng thái vận chuyển.\n"
             "Mình có thể giúp bạn theo dõi thêm nếu bạn muốn."
         )
     elif status == "processing":
         answer = (
-            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            f"{_brand_voice_opening('order', order_id=order_id)}\n"
             "Đơn hiện đang được xử lý / đóng gói.\n"
             "Khi đơn chuyển sang vận chuyển, mình sẽ báo bạn tiếp nha."
         )
     elif status == "cancelled":
         answer = (
-            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            f"{_brand_voice_opening('order', order_id=order_id)}\n"
             "Đơn này đã được hủy rồi.\n"
             "Nếu bạn cần mình xem thêm trạng thái hoàn tiền, mình kiểm tra tiếp cho bạn."
         )
     else:
         answer = (
-            f"Mình đã tra được đơn {order_id}{item_suffix} rồi nhé.\n"
+            f"{_brand_voice_opening('order', order_id=order_id)}\n"
             f"Trạng thái hiện tại của đơn là: {status or 'không rõ'}."
         )
 
     if customer_name and customer_name not in answer:
         answer = f"Chào {customer_name}! " + answer
-
-    stream_callback = state.get("stream_callback")
-    if stream_callback:
-        for chunk in [line for line in answer.split("\n") if line]:
-            await stream_callback(chunk + "\n")
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  OrderStatusWriter: {len(answer)} chars ({elapsed}ms)[/]")
@@ -712,8 +1646,75 @@ async def reviewer_node(state: AgentState) -> dict:
 # ================================================================
 
 def route_by_intent(state: AgentState) -> str:
+    _remember_guest_checkout_profile(state)
     intent = state.get("intent", "")
     trace = state.get("agent_trace", {}) or {}
+    session_id = state.get("session_id", "")
+    question = state.get("question", "")
+    history = state.get("history", [])
+    all_text = question + " " + " ".join(m.get("content", "") for m in history[-5:])
+    capability = state.get("capability", "")
+    has_order_clue = bool(extract_order_id(all_text) or extract_phone_number(all_text))
+    has_email_clue = bool(extract_email_address(all_text))
+    recent_order_context = any(
+        keyword in " ".join(m.get("content", "") for m in history[-4:]).lower()
+        for keyword in ORDER_CONTEXT_KEYWORDS
+    )
+    cached_order = _get_order_profile(session_id)
+    has_order_followup = bool(cached_order and _has_order_followup_signal(all_text))
+    cached_catalog = _get_catalog_profile(session_id)
+    has_catalog_followup = bool(cached_catalog and _has_catalog_followup_signal(all_text))
+    current_catalog_request = (
+        _is_catalog_request(all_text)
+        or _is_catalog_recommendation_request(all_text)
+        or bool(_extract_catalog_selection_name(all_text, cached_catalog))
+    )
+
+    if capability == "loyalty":
+        console.print("[dim]  Router: capability loyalty — forcing loyalty path[/]")
+        return "loyalty"
+    if capability == "support_ticket":
+        console.print("[dim]  Router: capability support_ticket — forcing support ticket path[/]")
+        return "support_ticket"
+    if capability == "checkout":
+        console.print("[dim]  Router: capability checkout — forcing checkout path[/]")
+        return "checkout"
+    if capability == "catalog":
+        console.print("[dim]  Router: capability catalog — forcing catalog path[/]")
+        return "catalog"
+    if capability == "order_management":
+        console.print("[dim]  Router: capability order_management — forcing COMPLAINT path[/]")
+        return "complaint"
+
+    explicit_checkout_request = _is_checkout_request(question) or _is_checkout_progression_request(question)
+    if explicit_checkout_request:
+        console.print("[dim]  Router: explicit checkout progression — forcing checkout path[/]")
+        return "checkout"
+
+    if has_order_followup and not current_catalog_request:
+        console.print(
+            f"[dim]  Router: cached order '{cached_order.get('order_id', '')}' + follow-up signal — forcing COMPLAINT path[/]"
+        )
+        return "complaint"
+
+    if has_email_clue and not (_is_catalog_request(question) or _is_purchase_request(question)):
+        console.print("[dim]  Router: detected email identifier — forcing COMPLAINT path[/]")
+        return "complaint"
+
+    if has_catalog_followup:
+        console.print(
+            f"[dim]  Router: cached catalog '{cached_catalog.get('name') or cached_catalog.get('query', '')}' + follow-up signal — forcing catalog path[/]"
+        )
+        return "catalog"
+
+    if current_catalog_request:
+        console.print("[dim]  Router: detected catalog / budget recommendation — forcing catalog path[/]")
+        return "catalog"
+
+    if capability == "inquiry":
+        console.print("[dim]  Router: capability inquiry — forcing inquiry path[/]")
+        return "inquiry"
+
     if (
         state.get("clarification_needed")
         or state.get("router_method") == "clarify"
@@ -722,17 +1723,15 @@ def route_by_intent(state: AgentState) -> str:
         or trace.get("router_clarify_reason")
     ):
         return "clarify"
-    session_id = state.get("session_id", "")
-    question = state.get("question", "")
-    history = state.get("history", [])
-    all_text = question + " " + " ".join(m.get("content", "") for m in history[-5:])
-    has_order_clue = bool(extract_order_id(all_text) or extract_phone_number(all_text))
-    recent_order_context = any(
-        keyword in " ".join(m.get("content", "") for m in history[-4:]).lower()
-        for keyword in ORDER_CONTEXT_KEYWORDS
-    )
 
-    if _is_checkout_request(all_text):
+    # Order / address / status flows should win over checkout so we do not
+    # accidentally try to create a new cart order when the user is talking
+    # about an existing order.
+    if (has_order_clue or recent_order_context or _is_existing_order_issue(all_text)) and not current_catalog_request:
+        console.print("[dim]  Router: detected order clue (order id / phone) — forcing COMPLAINT path[/]")
+        return "complaint"
+
+    if _is_purchase_request(all_text) and not current_catalog_request:
         console.print("[dim]  Router: detected checkout request — forcing checkout path[/]")
         return "checkout"
 
@@ -747,10 +1746,6 @@ def route_by_intent(state: AgentState) -> str:
             f"[dim]  Router: session {session_id} has pending action "
             f"'{_session_pending_actions[session_id].get('action')}' — forcing COMPLAINT path[/]"
         )
-        return "complaint"
-
-    if has_order_clue or recent_order_context:
-        console.print("[dim]  Router: detected order clue (order id / phone) — forcing COMPLAINT path[/]")
         return "complaint"
 
     if intent == "CASUAL":
@@ -781,6 +1776,8 @@ def build_graph() -> StateGraph:
     graph.add_node("router", router_node)
     graph.add_node("casual", casual_node)
     graph.add_node("catalog", catalog_lookup_node)
+    graph.add_node("loyalty", loyalty_node)
+    graph.add_node("support_ticket", support_ticket_node)
     graph.add_node("checkout", checkout_node)
     graph.add_node("clarify", clarify_node)
     graph.add_node("order_lookup", order_lookup_node)
@@ -805,6 +1802,8 @@ def build_graph() -> StateGraph:
         {
             "casual": "casual",
             "catalog": "catalog",
+            "loyalty": "loyalty",
+            "support_ticket": "support_ticket",
             "checkout": "checkout",
             "clarify": "clarify",
             "inquiry": "order_lookup_inquiry",
@@ -815,6 +1814,8 @@ def build_graph() -> StateGraph:
     # Casual -> END
     graph.add_edge("casual", END)
     graph.add_edge("catalog", END)
+    graph.add_edge("loyalty", END)
+    graph.add_edge("support_ticket", END)
     graph.add_edge("checkout", END)
     graph.add_edge("clarify", END)
 
@@ -828,6 +1829,12 @@ def build_graph() -> StateGraph:
         action_intent = state.get("action_intent") or {}
         order_info = state.get("order_info", {}) or {}
         if action_intent.get("action") == "check_order_status" and order_info.get("found"):
+            return "status"
+        if action_intent.get("action") == "check_order_status" and (
+            order_info.get("verification_required")
+            or order_info.get("order_id")
+            or state.get("order_id")
+        ):
             return "status"
         if (
             action_intent.get("needs_order_id")
@@ -951,6 +1958,13 @@ async def run_streaming(
         "question": question,
         "history": history or [],
         "shop_context": shop_context or {},
+        "user_scope": "guest",
+        "is_authenticated": False,
+        "ownership_verified": False,
+        "capability": "",
+        "capability_reason": "",
+        "permission_reason": "",
+        "auth_state": {},
         "intent": "",
         "sentiment": "",
         "sentiment_score": 0.0,

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: false, // Run tests sequentially for stateful flows
+  fullyParallel: false,
   forbidOnly: !!process.env.CI, // eslint-disable-line no-undef
   retries: process.env.CI ? 2 : 0, // eslint-disable-line no-undef
   workers: 1,
@@ -26,7 +26,6 @@ export default defineConfig({
     },
   ],
 
-  // Run local dev server before tests
   webServer: [
     {
       command: 'npm run dev',

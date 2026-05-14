@@ -76,6 +76,56 @@ def search_products(query: str, context: dict | None = None) -> dict:
     return _request_json("GET", "/products", ctx, params={"keyword": query})
 
 
+def search_products_by_filters(
+    context: dict | None = None,
+    *,
+    keyword: str | None = None,
+    min_price: float | int | None = None,
+    max_price: float | int | None = None,
+    page: int = 1,
+    limit: int = 20,
+    sort: str | None = None,
+    category_id: str | None = None,
+    min_rating: float | int | None = None,
+    is_featured: bool | None = None,
+) -> dict:
+    ctx = context or {}
+    params = {
+        "page": page,
+        "limit": limit,
+        "sort": sort,
+        "categoryId": category_id,
+        "minPrice": min_price,
+        "maxPrice": max_price,
+        "minRating": min_rating,
+        "isFeatured": "true" if is_featured else None if is_featured is None else "false",
+    }
+    if keyword:
+        params["keyword"] = keyword
+    return _request_json("GET", "/products", ctx, params=params)
+
+
+def get_cart_by_user(user_id: str, context: dict | None = None) -> dict:
+    return _request_json("GET", f"/carts/user/{user_id}", context or {})
+
+
+def get_cart_by_session(session_id: str, context: dict | None = None) -> dict:
+    return _request_json("GET", f"/carts/session/{session_id}", context or {})
+
+
+def create_cart(payload: dict, context: dict | None = None) -> dict:
+    return _request_json("POST", "/carts", context or {}, data=payload)
+
+
+def add_item_to_cart(cart_id: str, variant_id: str, quantity: int = 1, context: dict | None = None) -> dict:
+    return _request_json(
+        "POST",
+        f"/carts/{cart_id}/items",
+        context or {},
+        data={"variantId": variant_id, "quantity": max(1, int(quantity or 1))},
+    )
+
+
 def get_product_detail(product_id: str, context: dict | None = None) -> dict:
     ctx = context or {}
     return _request_json("GET", f"/products/{product_id}", ctx)
@@ -104,6 +154,31 @@ def get_default_address(user_id: str, context: dict | None = None) -> dict:
 def checkout_from_cart(payload: dict, context: dict | None = None) -> dict:
     ctx = context or {}
     return _request_json("POST", "/orders/checkout/cart", ctx, data=payload)
+
+
+def guest_checkout_from_cart(payload: dict, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("POST", "/orders/checkout/cart/guest", ctx, data=payload)
+
+
+def get_loyalty_config(context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", "/loyalty/config", ctx)
+
+
+def get_my_loyalty(context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", "/loyalty/me", ctx)
+
+
+def get_my_loyalty_points(limit: int = 50, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("GET", "/loyalty/points", ctx, params={"limit": limit})
+
+
+def redeem_loyalty_coins(amount: int, context: dict | None = None) -> dict:
+    ctx = context or {}
+    return _request_json("POST", "/loyalty/redeem", ctx, data={"amount": amount})
 
 
 def create_support_ticket(payload: dict, context: dict | None = None) -> dict:

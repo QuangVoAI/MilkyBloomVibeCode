@@ -160,6 +160,8 @@ CREATE_TICKET_PATTERNS = [
 ]
 
 ADDRESS_EXTRACT_PATTERNS = [
+    r"địa chỉ(?:\s+(?:đúng|mới))?\s+là\s+(.+)$",
+    r"địa chỉ(?:\s+(?:đúng|mới))?:\s*(.+)$",
     r"địa chỉ(?:\s+(?:đúng|mới))?\s+là\s+(.{10,100}?)(?:\.|$|\n)",
     r"địa chỉ(?:\s+(?:đúng|mới))?:\s*(.{10,100}?)(?:\.|$|\n)",
     r"giao\s+(?:đến|tới)\s+(?:địa chỉ\s+)?(.{10,100}?)(?:\.|,\s*bạn|$|\n)",
@@ -297,6 +299,7 @@ def _extract_new_address(text: str) -> Optional[str]:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
             addr = m.group(1).strip().strip("\"'\u2018\u2019\u201c\u201d").rstrip(".,")
+            addr = re.sub(r"\s+(?:nhé|nha|ạ|giúp mình|giùm mình)\s*$", "", addr, flags=re.IGNORECASE).strip()
             if len(addr) > 5:
                 return addr
     return None

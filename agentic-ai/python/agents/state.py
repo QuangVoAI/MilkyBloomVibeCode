@@ -14,6 +14,14 @@ class AgentState(TypedDict, total=False):
     history: list[dict]         # Chat history [{role, content}, ...]
     shop_context: dict          # Real shop access context (auth, email, user_id, etc.)
 
+    # --- Triage / Permission ---
+    user_scope: str             # guest | logged_in | admin
+    is_authenticated: bool
+    ownership_verified: bool
+    capability: str             # catalog | checkout | order_management | loyalty | inquiry | casual | clarify
+    capability_reason: str
+    permission_reason: str
+
     # --- Router Output ---
     intent: str                 # "COMPLAINT" | "INQUIRY" | "CASUAL"
 

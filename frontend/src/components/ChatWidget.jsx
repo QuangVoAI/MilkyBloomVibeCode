@@ -1,6 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MessageCircle, Send, Sparkles, Ticket, Trash2, X } from "lucide-react";
+import {
+  ArrowRight,
+  CreditCard,
+  Eye,
+  Hash,
+  Mail,
+  MessageCircle,
+  Send,
+  ShoppingCart,
+  Sparkles,
+  Ticket,
+  Trash2,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useCartContext } from "@/context/CartProvider";
 import { socketService } from "@/services/socket.service";
 import "./ChatWidget.css";
 
@@ -108,8 +123,134 @@ const getUserRoleFromStorage = () => {
   }
 };
 
+const getUserEmailFromStorage = () => {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return parsed?.email || parsed?.user?.email || "";
+  } catch {
+    return "";
+  }
+};
+
+const EMAIL_TEXT_PATTERN = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/i;
+const ORDER_ID_TEXT_PATTERN = /\b(?:MK|ORD|DH)[-_]?\d{3,8}\b/i;
+const PHONE_TEXT_PATTERN =
+  /(?:\+?84|0)(?:[\s.-]?\d){9}\b/;
+
+const getMessageEmail = (text) => {
+  const match = String(text || "").trim().match(EMAIL_TEXT_PATTERN);
+  return match ? match[0].toLowerCase() : "";
+};
+
+const getMessageOrderId = (text) => {
+  const match = String(text || "").trim().match(ORDER_ID_TEXT_PATTERN);
+  return match ? match[0].toUpperCase().replace(/[-_]/g, "") : "";
+};
+
+const getMessagePhone = (text) => {
+  const match = String(text || "").trim().match(PHONE_TEXT_PATTERN);
+  if (!match) return "";
+  return match[0].replace(/[^\d+]/g, "");
+};
+
+const isEmailLookupText = (text) => Boolean(getMessageEmail(text));
+const isOrderLookupText = (text) => Boolean(getMessageOrderId(text));
+const isPhoneLookupText = (text) => Boolean(getMessagePhone(text));
+
+const formatVnd = (value) => {
+  if (value == null || value === "") return "chưa rõ";
+  const raw =
+    typeof value === "object" && value.$numberDecimal != null
+      ? value.$numberDecimal
+      : value;
+  const number = Number(raw);
+  if (!Number.isFinite(number)) return "chưa rõ";
+  return `${Math.round(number).toLocaleString("vi-VN")}đ`;
+};
+
+const getProductRouteId = (product) =>
+  product?.slug || product?._id || product?.id || "";
+
+const getVariantId = (variant) => variant?._id || variant?.id || "";
+
+const firstFromArray = (value) => (Array.isArray(value) && value.length ? value[0] : "");
+
+const getProductImage = (product) => {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const variantImage = firstFromArray(
+    variants.find((variant) => firstFromArray(variant?.imageUrls))?.imageUrls,
+  );
+  return (
+    firstFromArray(product?.imageUrls) ||
+    product?.imageUrl ||
+    product?.thumbnail ||
+    product?.coverImage ||
+    variantImage ||
+    "/placeholder-product.png"
+  );
+};
+
+const getVariantLabel = (variant) => {
+  const attrs = Array.isArray(variant?.attributes) ? variant.attributes : [];
+  const attrText = attrs
+    .map((attr) =>
+      attr?.name && attr?.value ? `${attr.name}: ${attr.value}` : attr?.value || "",
+    )
+    .filter(Boolean)
+    .join(", ");
+  return attrText || variant?.sku || "Biến thể";
+};
+
+const getAvailableVariants = (product) => {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  return variants.filter((variant) => {
+    const stock = Number(variant?.stockQuantity ?? variant?.stock ?? 0);
+    return getVariantId(variant) && stock > 0;
+  });
+};
+
+const getActionLabel = (action) => {
+  switch (action) {
+    case "process_return":
+      return "đổi trả";
+    case "cancel_order":
+      return "hủy đơn";
+    case "request_refund":
+      return "hoàn tiền";
+    case "update_address":
+      return "đổi địa chỉ";
+    default:
+      return "";
+  }
+};
+
+const getQuickContactEmail = (meta) =>
+  meta?.emailAddress ||
+  meta?.orderInfo?.matched_email ||
+  meta?.orderInfo?.raw?.email ||
+  meta?.orderInfo?.raw?.customer_email ||
+  meta?.orderInfo?.raw?.contact_email ||
+  getUserEmailFromStorage();
+
+const getQuickOrderId = (meta) =>
+  meta?.orderId ||
+  meta?.orderInfo?.order_id ||
+  meta?.orderInfo?.raw?._id ||
+  meta?.orderInfo?.raw?.id ||
+  "";
+
+const normalizeCatalogCards = (catalogInfo) => {
+  const products = Array.isArray(catalogInfo?.products) ? catalogInfo.products : [];
+  return products
+    .filter((product) => product && (product.name || getProductRouteId(product)))
+    .slice(0, 4);
+};
+
 const ChatWidget = () => {
   const navigate = useNavigate();
+  const { addItem } = useCartContext();
   const [open, setOpen] = useState(false);
   const [isPresented, setIsPresented] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -120,12 +261,17 @@ const ChatWidget = () => {
   const [hydrated, setHydrated] = useState(false);
   const [chatPhase, setChatPhase] = useState("idle");
   const [launchSloganIndex, setLaunchSloganIndex] = useState(0);
+  const [cartActionLoading, setCartActionLoading] = useState("");
+  const [composerHint, setComposerHint] = useState("");
+  const [activeLookupChip, setActiveLookupChip] = useState("");
   const messagesRef = useRef(null);
+  const inputRef = useRef(null);
   const sheetRef = useRef(null);
   const assistantIndexRef = useRef(null);
   const streamingSessionIdRef = useRef("");
   const chatSessionIdRef = useRef("");
   const closeTimerRef = useRef(null);
+  const navigationTimerRef = useRef(null);
 
   const openChat = () => {
     if (closeTimerRef.current) {
@@ -139,12 +285,43 @@ const ChatWidget = () => {
 
   const closeChat = () => {
     if (!isPresented || isClosing) return;
+    if (navigationTimerRef.current) {
+      window.clearTimeout(navigationTimerRef.current);
+      navigationTimerRef.current = null;
+    }
     setIsClosing(true);
     closeTimerRef.current = window.setTimeout(() => {
       setOpen(false);
       setIsPresented(false);
       setIsClosing(false);
       closeTimerRef.current = null;
+    }, 320);
+  };
+
+  const closeChatAndNavigate = (path) => {
+    if (!path) return;
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    if (navigationTimerRef.current) {
+      window.clearTimeout(navigationTimerRef.current);
+      navigationTimerRef.current = null;
+    }
+
+    if (!isPresented || isClosing) {
+      navigate(path);
+      return;
+    }
+
+    setIsClosing(true);
+    navigationTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+      setIsPresented(false);
+      setIsClosing(false);
+      closeTimerRef.current = null;
+      navigationTimerRef.current = null;
+      navigate(path);
     }, 320);
   };
 
@@ -271,24 +448,38 @@ const ChatWidget = () => {
           const next = [...current];
           const target = next[assistantIndexRef.current];
           if (!target) return current;
-          next[assistantIndexRef.current] = {
-            ...target,
-            content: data.reply,
-            meta: {
-              ...(target.meta || {}),
-              ticketId: data.ticket_id || data.action_result?.ticket_id || "",
-              ticketNumber:
-                data.ticket_number ||
-                data.action_result?.updated_fields?.ticket_number ||
-                "",
+            next[assistantIndexRef.current] = {
+              ...target,
+              content: data.reply,
+              meta: {
+                ...(target.meta || {}),
+                orderId: data.order_id || data.order_info?.order_id || "",
+                emailAddress:
+                  data.email_address ||
+                  data.order_info?.matched_email ||
+                  data.order_info?.raw?.email ||
+                  data.order_info?.raw?.customer_email ||
+                  data.order_info?.raw?.contact_email ||
+                  "",
+                orderInfo: data.order_info || {},
+                ticketId: data.ticket_id || data.action_result?.ticket_id || "",
+                ticketNumber:
+                  data.ticket_number ||
+                  data.action_result?.updated_fields?.ticket_number ||
+                  "",
               traceId: data.trace_id || "",
               intent: data.intent || "",
               routerConfidence: confidence,
-              routerMethod: data.router_method || "",
-              actionConfidence: Number(data.action_confidence || 0),
-              actionMethod: data.action_method || "",
-              clarificationNeeded: Boolean(data.clarification_needed),
-            },
+                routerMethod: data.router_method || "",
+                actionConfidence: Number(data.action_confidence || 0),
+                actionMethod: data.action_method || "",
+                actionResult: data.action_result || {},
+                pendingActionIntent: data.pending_action_intent || {},
+                clarificationNeeded: Boolean(data.clarification_needed),
+                catalogProducts: normalizeCatalogCards(
+                  data.catalog_info || data.checkout_result?.catalog_info,
+                ),
+              },
           };
           return next;
         });
@@ -366,6 +557,9 @@ const ChatWidget = () => {
       if (closeTimerRef.current) {
         window.clearTimeout(closeTimerRef.current);
       }
+      if (navigationTimerRef.current) {
+        window.clearTimeout(navigationTimerRef.current);
+      }
     };
   }, []);
 
@@ -389,6 +583,10 @@ const ChatWidget = () => {
       history: nextMessages.slice(-MAX_HISTORY),
       provider: provider === "auto" ? "agentic" : provider,
       sessionId,
+      guestSessionId:
+        localStorage.getItem("sessionId") ||
+        localStorage.getItem("guestSessionId") ||
+        "",
       authToken: localStorage.getItem("authToken") || "",
     });
   };
@@ -401,6 +599,8 @@ const ChatWidget = () => {
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setInput("");
+    setComposerHint("");
+    setActiveLookupChip("");
     setLoading(true);
     sendViaWebSocket(trimmed, nextMessages, options);
   };
@@ -410,9 +610,351 @@ const ChatWidget = () => {
     await sendMessage(input);
   };
 
+  const focusComposer = () => {
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange?.(
+        inputRef.current.value.length,
+        inputRef.current.value.length,
+      );
+    });
+  };
+
+  const handleLookupChipClick = async (message, actionType) => {
+    const meta = message?.meta || {};
+    if (actionType === "order_id") {
+      const orderId = getQuickOrderId(meta);
+      if (!orderId) {
+        toast.info("Mình chưa tìm thấy mã đơn trong tin nhắn này.");
+        return;
+      }
+      setInput(orderId);
+      setComposerHint("Mã đơn đã được điền sẵn, bấm gửi để tra đơn");
+      setActiveLookupChip("order_id");
+      focusComposer();
+      return;
+    }
+
+    if (actionType === "phone") {
+      const phone = getMessagePhone(message?.content || "");
+      if (!phone) {
+        toast.info("Mình chưa tìm thấy số điện thoại trong tin nhắn này.");
+        return;
+      }
+      setInput(phone);
+      setComposerHint("Số điện thoại đã được điền sẵn, bấm gửi để tra đơn");
+      setActiveLookupChip("phone");
+      focusComposer();
+      return;
+    }
+
+    if (actionType === "email") {
+      const email = getQuickContactEmail(meta) || getMessageEmail(message?.content || "");
+      if (!email) {
+        toast.info("Mình chưa tìm thấy email trong tin nhắn này.");
+        return;
+      }
+      setComposerHint("");
+      setActiveLookupChip("email");
+      await sendMessage(email);
+    }
+  };
+
+  const handleViewProduct = (product) => {
+    const routeId = getProductRouteId(product);
+    if (!routeId) {
+      toast.error("Mình chưa có link chi tiết cho sản phẩm này.");
+      return;
+    }
+    closeChatAndNavigate(`/products/${routeId}`);
+  };
+
+  const handleCartProductAction = async (product, variant, { buyNow = false } = {}) => {
+    const variantId = getVariantId(variant);
+    const actionKey = `${variantId || getProductRouteId(product)}-${buyNow ? "buy" : "add"}`;
+    if (!variantId) {
+      toast.info("Bạn mở chi tiết sản phẩm để chọn biến thể trước nhé.");
+      handleViewProduct(product);
+      return;
+    }
+
+    setCartActionLoading(actionKey);
+    try {
+      await addItem(variantId, 1);
+      const variantText = getVariantLabel(variant);
+      toast.success(`${product?.name || "Sản phẩm"} (${variantText}) đã vào giỏ.`);
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: buyNow
+            ? `Mình đã thêm ${product?.name || "sản phẩm này"} vào giỏ. Mình đưa bạn sang trang checkout nhé.`
+            : `Mình đã thêm ${product?.name || "sản phẩm này"} vào giỏ rồi nè.`,
+          meta: {},
+        },
+      ]);
+      if (buyNow) {
+        navigate("/checkout");
+      }
+    } catch (error) {
+      toast.error(error?.message || "Mình chưa thêm được sản phẩm vào giỏ.");
+    } finally {
+      setCartActionLoading("");
+    }
+  };
+
+  const handleQuickFollowupAction = async (message, actionType) => {
+    const meta = message?.meta || {};
+    if (actionType === "order_id") {
+      const orderId = getQuickOrderId(meta);
+      if (!orderId) {
+        toast.info("Mình chưa có mã đơn trong ngữ cảnh này.");
+        return;
+      }
+      await sendMessage(orderId);
+      return;
+    }
+
+    if (actionType === "email") {
+      const email = getQuickContactEmail(meta);
+      if (!email) {
+        toast.info("Mình chưa có email trong ngữ cảnh này.");
+        return;
+      }
+      await sendMessage(email);
+      return;
+    }
+
+    if (actionType === "continue") {
+      const pendingAction = meta?.pendingActionIntent?.action || meta?.actionResult?.action || "";
+      const actionLabel = getActionLabel(pendingAction);
+      await sendMessage(actionLabel ? `tiếp tục ${actionLabel}` : "xử lý tiếp");
+    }
+  };
+
+  const renderFollowupActions = (message) => {
+    const meta = message?.meta || {};
+    const actionResult = meta?.actionResult || {};
+    const pendingAction = meta?.pendingActionIntent || {};
+    const actionName = pendingAction.action || actionResult.action || "";
+    const shouldShow =
+      message.role === "assistant" &&
+      ["process_return", "cancel_order", "request_refund", "update_address"].includes(actionName) &&
+      (actionResult.pending || actionResult.needs_order_id || actionResult.needs_more_info || pendingAction.action);
+
+    if (!shouldShow) return null;
+
+    const orderId = getQuickOrderId(meta);
+    const email = getQuickContactEmail(meta);
+    const canContinue = Boolean(orderId || email || actionResult.success || actionResult.pending);
+
+    return (
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-rose-100 pt-3">
+        <button
+          type="button"
+          onClick={() => handleQuickFollowupAction(message, "order_id")}
+          className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 transition hover:border-rose-300 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <Hash className="h-3.5 w-3.5" />
+          Gửi mã đơn
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQuickFollowupAction(message, "email")}
+          className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 transition hover:border-rose-300 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <Mail className="h-3.5 w-3.5" />
+          Gửi email
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQuickFollowupAction(message, "continue")}
+          disabled={!canContinue}
+          className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <ArrowRight className="h-3.5 w-3.5" />
+          Xử lý tiếp
+        </button>
+      </div>
+    );
+  };
+
+  const renderLookupChip = (message, { type, label, toneClass, icon: Icon }) => {
+    const meta = message?.meta || {};
+    const content = message?.content || "";
+    let value = "";
+
+    if (type === "order_id") {
+      value = getMessageOrderId(content) || getQuickOrderId(meta);
+    } else if (type === "phone") {
+      value = getMessagePhone(content);
+    } else if (type === "email") {
+      value = getMessageEmail(content);
+    }
+
+    if (!value) return null;
+
+    const isActive = activeLookupChip === type;
+    const iconClassName = isActive
+      ? "h-3 w-3 text-amber-700 animate-pulse"
+      : "h-3 w-3 opacity-80";
+
+    return (
+      <button
+        type="button"
+        onClick={() => handleLookupChipClick(message, type)}
+        className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.08)] transition hover:brightness-98 ${
+          isActive
+            ? `${toneClass} ring-2 ring-offset-1 ring-amber-300 shadow-[0_0_0_1px_rgba(251,191,36,0.35),0_10px_20px_rgba(15,23,42,0.12)]`
+            : toneClass
+        }`}
+      >
+        <Icon className={iconClassName} />
+        {label}
+      </button>
+    );
+  };
+
+  const renderProductCards = (products = []) => {
+    if (!products.length) return null;
+
+    return (
+      <div className="mt-3 space-y-2">
+        {products.map((product, productIndex) => {
+          const routeId = getProductRouteId(product);
+          const variants = getAvailableVariants(product);
+          const fallbackVariant = variants[0] || null;
+          const minPrice = product.minPrice ?? product.price;
+          const maxPrice = product.maxPrice;
+          const priceText =
+            maxPrice && maxPrice !== minPrice
+              ? `${formatVnd(minPrice)} - ${formatVnd(maxPrice)}`
+              : formatVnd(minPrice);
+
+          return (
+            <div
+              key={`${routeId || product.name || "product"}-${productIndex}`}
+              className="rounded-[20px] border border-white/70 bg-white/72 p-3 shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
+            >
+              <div className="flex items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleViewProduct(product)}
+                  className="group relative h-[86px] w-[86px] shrink-0 overflow-hidden rounded-[18px] border border-white/80 bg-gradient-to-br from-rose-50 to-sky-50 shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+                  aria-label={`Xem ${product.name || "sản phẩm"}`}
+                >
+                  <img
+                    src={getProductImage(product)}
+                    alt={product.name || "Sản phẩm MilkyBloom"}
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.src = "/placeholder-product.png";
+                    }}
+                  />
+                  <span className="absolute inset-x-2 bottom-2 rounded-full bg-white/82 px-2 py-0.5 text-[10px] font-bold text-slate-700 opacity-0 shadow-sm transition group-hover:opacity-100">
+                    Xem
+                  </span>
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-bold tracking-[-0.02em] text-slate-950">
+                        {product.name || "Sản phẩm MilkyBloom"}
+                      </div>
+                      <div className="mt-0.5 text-[13px] font-semibold text-rose-600">
+                        {priceText}
+                      </div>
+                      {product.totalStock != null && (
+                        <div className="mt-0.5 text-[12px] text-slate-500">
+                          Tồn kho: {product.totalStock}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleViewProduct(product)}
+                      disabled={!routeId}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white/85 px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 transition hover:border-rose-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Xem
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {variants.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {variants.slice(0, 3).map((variant) => {
+                    const variantId = getVariantId(variant);
+                    const addKey = `${variantId}-add`;
+                    const buyKey = `${variantId}-buy`;
+                    return (
+                      <div
+                        key={variantId}
+                        className="rounded-2xl border border-rose-100/80 bg-rose-50/55 p-2"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0 text-[12px] text-slate-700">
+                            <span className="font-semibold text-slate-900">
+                              {getVariantLabel(variant)}
+                            </span>
+                            <span className="ml-1 text-slate-500">
+                              {formatVnd(variant.price)} · còn {variant.stockQuantity ?? variant.stock ?? "?"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleCartProductAction(product, variant)}
+                              disabled={Boolean(cartActionLoading)}
+                              className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
+                            >
+                              <ShoppingCart className="h-3 w-3" />
+                              {cartActionLoading === addKey ? "Đang thêm" : "Thêm"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCartProductAction(product, variant, { buyNow: true })
+                              }
+                              disabled={Boolean(cartActionLoading)}
+                              className="inline-flex items-center gap-1 rounded-full bg-rose-500 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-rose-600 disabled:cursor-wait disabled:opacity-60"
+                            >
+                              <CreditCard className="h-3 w-3" />
+                              {cartActionLoading === buyKey ? "Đang mua" : "Mua"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCartProductAction(product, fallbackVariant)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white transition hover:bg-slate-800"
+                  >
+                    <ShoppingCart className="h-3.5 w-3.5" />
+                    Chọn biến thể
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const handleClear = () => {
     setMessages([WELCOME_MESSAGE]);
     setInput("");
+    setComposerHint("");
+    setActiveLookupChip("");
     setLoading(false);
     setChatPhase("idle");
     streamingSessionIdRef.current = "";
@@ -595,6 +1137,9 @@ const ChatWidget = () => {
                 const isAssistant = message.role === "assistant";
                 const isTyping =
                   isAssistant && loading && index === assistantIndexRef.current;
+                const emailLookupMessage = isUser && isEmailLookupText(message.content);
+                const hasOrderId = isUser && isOrderLookupText(message.content);
+                const hasPhone = isUser && isPhoneLookupText(message.content);
                 return (
                   <div
                     key={`${message.role}-${index}`}
@@ -610,6 +1155,30 @@ const ChatWidget = () => {
                       <div className="whitespace-pre-wrap">
                         {message.content || (isTyping ? "Đang suy nghĩ" : "")}
                       </div>
+                      {emailLookupMessage &&
+                        renderLookupChip(message, {
+                          type: "email",
+                          label: "Tra đơn bằng email",
+                          toneClass: "border-sky-200 bg-sky-50 text-sky-700",
+                          icon: Mail,
+                        })}
+                      {hasOrderId &&
+                        renderLookupChip(message, {
+                          type: "order_id",
+                          label: "Gửi mã đơn",
+                          toneClass: "border-rose-200 bg-rose-50 text-rose-700",
+                          icon: Hash,
+                        })}
+                      {hasPhone &&
+                        renderLookupChip(message, {
+                          type: "phone",
+                          label: "Gửi số điện thoại",
+                          toneClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+                          icon: MessageCircle,
+                        })}
+                      {isAssistant &&
+                        renderProductCards(message.meta?.catalogProducts || [])}
+                      {isAssistant && renderFollowupActions(message)}
                       {isTyping && (
                         <div className="mt-2 flex items-center gap-1.5">
                           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:-0.2s]" />
@@ -643,11 +1212,24 @@ const ChatWidget = () => {
             <div className="chat-widget-sheet__composer border-t border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.86))] px-4 py-4 backdrop-blur-[22px]">
               <form onSubmit={handleSubmit} className="flex items-stretch gap-2">
                 <textarea
+                  ref={inputRef}
                   value={input}
-                  onChange={(event) => setInput(event.target.value)}
+                  onChange={(event) => {
+                    setInput(event.target.value);
+                    if (composerHint) {
+                      setComposerHint("");
+                    }
+                    if (activeLookupChip) {
+                      setActiveLookupChip("");
+                    }
+                  }}
                   rows={2}
-                  placeholder="Type to MilkyBloom"
-                  className="chat-widget-siri-input h-[78px] flex-1 resize-none rounded-[24px] border border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.995),rgba(255,240,246,0.96))] px-4 py-4 text-[17px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_rgba(15,23,42,0.05)] outline-none transition placeholder:text-slate-600 focus:border-rose-300/80 focus:ring-2 focus:ring-rose-100/80 sm:h-[82px] sm:text-[18px]"
+                  placeholder={composerHint || "Type to MilkyBloom"}
+                  className={`chat-widget-siri-input h-[78px] flex-1 resize-none rounded-[24px] px-4 py-4 text-[17px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_rgba(15,23,42,0.05)] outline-none transition placeholder:text-slate-600 focus:ring-2 sm:h-[82px] sm:text-[18px] ${
+                    activeLookupChip
+                      ? "border-amber-300 bg-[linear-gradient(180deg,rgba(255,252,231,0.995),rgba(254,243,199,0.9))] focus:border-amber-400 focus:ring-amber-100/80"
+                      : "border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.995),rgba(255,240,246,0.96))] focus:border-rose-300/80 focus:ring-rose-100/80"
+                  }`}
                 />
                 <button
                   type="submit"

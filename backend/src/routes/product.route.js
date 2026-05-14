@@ -22,10 +22,10 @@ const { uploadProductImages } = require('../middlewares/upload.middleware.js');
 const authMiddleware = require('../middlewares/auth.middleware.js');
 const adminOnly = require('../middlewares/admin.middleware.js');
 const optionalAuth = require('../middlewares/optionalAuth.middleware.js');
-const { strictApiLimiter } = require('../middlewares/rateLimit.middleware.js');
+const { apiLimiter, strictApiLimiter } = require('../middlewares/rateLimit.middleware.js');
 const router = express.Router();
 
-router.get("/", optionalAuth, getAllProducts);
+router.get("/", apiLimiter, optionalAuth, getAllProducts);
 router.get("/autocomplete", autocompleteProducts); //trả mảng tên sản phẩm cho ô search suggestion
 router.get("/slug/:slug", getProductBySlug);
 router.get("/price/range", getProductByPrice);

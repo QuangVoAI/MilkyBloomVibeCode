@@ -12,7 +12,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from agents.model_registry import get_embed_model, get_embed_cached
 from agents.prompt_registry import prompt_meta
-from tools.order_tool import extract_order_id, extract_phone_number
+from tools.order_tool import extract_email_address, extract_order_id, extract_phone_number
 from utils.console import console
 
 _complaint_centroid = None
@@ -48,6 +48,7 @@ INQUIRY_KEYWORDS = [
     "hỗ trợ thanh toán", "có hỗ trợ", "thanh toán cod",
     "ưu đãi", "khuyến mãi", "giảm giá",
     "bảo hành",
+    "loyalty", "điểm", "coin", "coins", "hạng", "tier", "thành viên", "membership", "tích điểm", "điểm thưởng", "đổi điểm", "redeem",
     "size", "còn size", "bảng size", "size 39", "size 40",
 ]
 
@@ -149,7 +150,7 @@ def _ensure_centroids():
 
 
 COMPLAINT_FAST = [
-    "khiếu nại", "phàn nàn", "bức xúc", "hoàn tiền", "đổi trả",
+    "khiếu nại", "phàn nàn", "bức xúc", "hoàn tiền",
     "bồi thường", "lừa đảo", "ăn cướp",
     "hỏng", "hư", "lỗi", "bể", "nát", "sai",
     "giao trễ", "giao sai", "mất hàng", "không nhận",
@@ -179,7 +180,7 @@ INQUIRY_FAST = [
     "hướng dẫn", "tư vấn", "chính sách", "quy định",
     "phí ship", "thanh toán", "trả góp",
     "ưu đãi", "giảm giá", "khuyến mãi", "phiếu giảm", "voucher",
-    "tích điểm", "thành viên", "mypoints",
+    "tích điểm", "thành viên", "mypoints", "loyalty", "điểm", "coin", "coins", "hạng", "tier", "đổi điểm", "redeem",
     "thanh toán cod", "hỗ trợ thanh toán", "còn size", "size 39",
     "size 40", "bảng size", "bảo hành", "cod",
     "chính sách đổi trả", "có sẵn hàng", "còn hàng", "giao nhanh trong ngày",
@@ -195,6 +196,8 @@ CASUAL_FAST = [
 INQUIRY_OVERRIDE_FAST = [
     "chính sách đổi trả", "có sẵn hàng", "còn hàng", "bảo hành",
     "khuyến mãi", "giao nhanh trong ngày", "giao trong ngày", "thanh toán cod",
+    "đổi trả hàng", "đổi trả", "trả hàng", "return policy", "quy trình đổi trả",
+    "đổi lại hàng", "điều kiện đổi trả", "được đổi trả",
 ]
 
 CASUAL_OVERRIDE_FAST = [
@@ -222,8 +225,8 @@ INTENT_MARGIN_THRESHOLDS = {
 def _fast_classify(question):
     q = _normalize_text(question)
 
-    # Pure identifiers or explicit phone/order inputs should never be casual.
-    if extract_order_id(question) or extract_phone_number(question) or _looks_like_identifier_only(question):
+    # Pure identifiers or explicit phone/order/email inputs should never be casual.
+    if extract_order_id(question) or extract_phone_number(question) or extract_email_address(question) or _looks_like_identifier_only(question):
         return "COMPLAINT"
 
     if _looks_like_noise(question):
