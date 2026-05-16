@@ -3,10 +3,9 @@ Order Tool — Công cụ tra cứu đơn hàng cho EmpathAI Agentic Pipeline.
 
 Chức năng:
   - extract_order_id(text)       : Regex extract mã đơn từ tin nhắn khách
-  - get_order_info(order_id)     : Lookup mock DB, tính toán trạng thái đổi trả
-  - determine_suggested_actions  : Đề xuất action hệ thống (create_ticket, escalate...)
+  - get_order_info(order_id)     : Lookup backend thật, trả về trạng thái đơn
+  - determine_suggested_actions  : Đề xuất action hệ thống (manual_review, escalate...)
 """
-import json
 import re
 import sys
 from pathlib import Path
@@ -14,21 +13,22 @@ from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-ORDERS_DB_PATH = Path(__file__).parent.parent.parent / "data" / "mock_orders.json"
-RETURN_WINDOW_HOURS = 72
-
 try:
     from tools.shop_client import get_order_detail
-    from tools.shop_client import search_orders_by_phone
-    from tools.shop_client import search_orders_by_email
 except Exception:
     get_order_detail = None
+
+try:
+    from tools.shop_client import search_orders_by_phone
+except Exception:
     search_orders_by_phone = None
+
+try:
+    from tools.shop_client import search_orders_by_email
+except Exception:
     search_orders_by_email = None
 
 
-_orders_cache: dict | None = None
-_orders_mtime: float = 0.0
 GUEST_ORDER_ACCESS_TOKEN_HINT = "mã truy cập đơn hàng"
 
 ORDER_LOOKUP_HELP = {
@@ -63,35 +63,6 @@ def _format_lookup_guidance(hints: list[str]) -> str:
     return ", ".join(hints[:-1]) + f", hoặc {hints[-1]}"
 
 
-def _load_orders() -> dict:
-    """Load mock order database from JSON file (cached in memory, reload on file change)."""
-    global _orders_cache, _orders_mtime
-    try:
-        mtime = ORDERS_DB_PATH.stat().st_mtime
-        if _orders_cache is not None and mtime == _orders_mtime:
-            return _orders_cache
-        with open(ORDERS_DB_PATH, "r", encoding="utf-8") as f:
-            _orders_cache = json.load(f)
-            _orders_mtime = mtime
-            return _orders_cache
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError:
-        return {}
-
-
-def _save_orders(orders: dict) -> None:
-    """Save mock order database to JSON file and update in-memory cache."""
-    global _orders_cache, _orders_mtime
-    with open(ORDERS_DB_PATH, "w", encoding="utf-8") as f:
-        json.dump(orders, f, ensure_ascii=False, indent=2)
-    _orders_cache = orders
-    try:
-        _orders_mtime = ORDERS_DB_PATH.stat().st_mtime
-    except FileNotFoundError:
-        _orders_mtime = 0.0
-
-
 def extract_order_id(text: str) -> Optional[str]:
     """
     Regex extract mã đơn hàng từ tin nhắn của khách.
@@ -107,8 +78,11 @@ def extract_order_id(text: str) -> Optional[str]:
         r'\bMK[-_]?\d{3,8}\b',
         r'\bORD[-_]?\d{3,8}\b',
         r'\bDH[-_]?\d{3,8}\b',
+        r'(?:mã\s+đơn|đơn\s+hàng|đơn\s+số|order\s+id|mã\s+order)\s*[:#]?\s*([a-f0-9]{24})\b',
+        r'#([a-f0-9]{24})\b',
         r'(?:mã\s+đơn|đơn\s+hàng|đơn\s+số|order\s+id|mã\s+order)\s*[:#]?\s*([A-Z]{2,3}[-_]?\d{3,8})',
         r'#([A-Z]{2,3}[-_]?\d{3,8})',
+        r'\b[a-f0-9]{24}\b',
         r'(?:mã\s+đơn|đơn\s+hàng|mã\s+order)\s*[:#]?\s*(\d{5,10})',
     ]
 
@@ -116,7 +90,11 @@ def extract_order_id(text: str) -> Optional[str]:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             raw = (match.group(1) if match.lastindex and match.lastindex >= 1 else match.group(0))
-            order_id = raw.upper().replace("-", "").replace("_", "").strip()
+            compact = raw.replace("-", "").replace("_", "").strip()
+            if re.fullmatch(r"[a-fA-F0-9]{24}", compact):
+                order_id = compact.lower()
+            else:
+                order_id = compact.upper()
             return order_id
 
     return None
@@ -158,6 +136,13 @@ def extract_email_address(text: str) -> Optional[str]:
     """
     match = re.search(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+', text or "", re.IGNORECASE)
     return match.group(0).strip().lower() if match else None
+
+
+def _normalize_order_id_for_lookup(order_id: str) -> str:
+    compact = str(order_id or "").strip()
+    if re.fullmatch(r"[a-fA-F0-9]{24}", compact):
+        return compact.lower()
+    return compact.upper()
 
 
 def _normalize_real_order(order: dict, order_id: str) -> dict:
@@ -225,7 +210,7 @@ def get_order_info(order_id: str, context: dict | None = None) -> dict:
       summary: str  (tóm tắt ngắn gọn cho LLM)
       raw: dict  (toàn bộ dữ liệu gốc)
     """
-    order_id = order_id.upper().strip()
+    order_id = _normalize_order_id_for_lookup(order_id)
 
     ctx = context or {}
     verified = bool(
@@ -233,6 +218,10 @@ def get_order_info(order_id: str, context: dict | None = None) -> dict:
         or ctx.get("access_token")
         or ctx.get("order_access_token")
         or ctx.get("orderAccessToken")
+        or ctx.get("order_lookup_token")
+        or ctx.get("orderLookupToken")
+        or ctx.get("lookup_token")
+        or ctx.get("lookupToken")
     )
     lookup_hints = _build_lookup_guidance(verified=verified, internal_lookup=bool(ctx.get("internal_lookup") or ctx.get("allow_internal_lookup")))
     if not verified:
@@ -249,7 +238,16 @@ def get_order_info(order_id: str, context: dict | None = None) -> dict:
             "suggested_actions": ["request_access_token"],
         }
 
-    if get_order_detail and (ctx.get("auth_token") or ctx.get("access_token") or ctx.get("order_access_token") or ctx.get("orderAccessToken")):
+    if get_order_detail and (
+        ctx.get("auth_token")
+        or ctx.get("access_token")
+        or ctx.get("order_access_token")
+        or ctx.get("orderAccessToken")
+        or ctx.get("order_lookup_token")
+        or ctx.get("orderLookupToken")
+        or ctx.get("lookup_token")
+        or ctx.get("lookupToken")
+    ):
         remote = get_order_detail(order_id, ctx)
         if remote and remote.get("success"):
             try:
@@ -298,120 +296,22 @@ def get_order_info(order_id: str, context: dict | None = None) -> dict:
                 "suggested_actions": ["request_access_token"],
             }
 
-    orders = _load_orders()
-
-    if order_id not in orders:
-        return {
-            "found": False,
-            "ownership_verified": False,
-            "order_id": order_id,
-            "summary": (
-                f"Không tìm thấy đơn hàng với mã **{order_id}** trong hệ thống.\n"
-                f"Bạn có thể thử { _format_lookup_guidance(lookup_hints) }."
-            ),
-            "lookup_hints": lookup_hints,
-            "suggested_actions": ["ask_reconfirm_order_id"],
-        }
-
-    raw = orders[order_id]
-    result: dict = {
-        "found": True,
-        "ownership_verified": True,
-        "order_id": raw["order_id"],
-        "customer_name": raw.get("customer_name", ""),
-        "status": raw.get("status", "unknown"),
-        "items": raw.get("items", []),
-        "total": raw.get("total", 0),
-        "address": raw.get("address", ""),
-        "note": raw.get("note", ""),
-        "raw": raw,
-        "suggested_actions": [],
+    return {
+        "found": False,
+        "ownership_verified": False,
+        "verification_required": True,
+        "order_id": order_id,
+        "summary": (
+            f"Mình chưa thể tra cứu đơn **{order_id}** vì chưa kết nối được backend đơn hàng thật.\n"
+            f"Bạn giúp mình { _format_lookup_guidance(lookup_hints) } rồi thử lại nhé."
+        ),
+        "lookup_hints": lookup_hints,
+        "suggested_actions": ["request_access_token"],
     }
-
-    items_str = ", ".join(f"{i['name']} (x{i['qty']})" for i in result["items"])
-    total_str = f"{result['total']:,}đ"
-
-    status = result["status"]
-
-    if status == "shipping":
-        carrier = raw.get("carrier", "đơn vị vận chuyển")
-        tracking = raw.get("tracking_code", "")
-        delay_note = raw.get("delay_note", "")
-        delay_text = f" ⚠️ {delay_note}" if delay_note else ""
-        result["summary"] = (
-            f"Đơn **{order_id}** — {items_str} — {total_str}\n"
-            f"🚚 Đang vận chuyển qua {carrier} (mã vận đơn: {tracking}){delay_text}\n"
-            f"📍 Giao đến: {result['address']}"
-        )
-        result["return_eligible"] = False
-        if delay_note:
-            result["suggested_actions"] = ["create_ticket", "notify_carrier"]
-        else:
-            result["suggested_actions"] = ["track_shipment"]
-
-    elif status == "delivered":
-        hours_ago = raw.get("delivered_hours_ago", 0)
-        within_window = hours_ago <= RETURN_WINDOW_HOURS
-        result["return_eligible"] = within_window
-        result["delivered_hours_ago"] = hours_ago
-
-        if within_window:
-            hours_left = RETURN_WINDOW_HOURS - hours_ago
-            deadline_note = f"✅ Còn **{hours_left} giờ** trong thời hạn đổi trả 72 giờ"
-            result["suggested_actions"] = ["process_return", "create_exchange_ticket"]
-        else:
-            overage = hours_ago - RETURN_WINDOW_HOURS
-            deadline_note = f"⛔ Đã quá thời hạn **{overage} giờ** so với cửa sổ đổi trả 72 giờ"
-            result["suggested_actions"] = ["create_ticket", "escalate_to_supervisor"]
-
-        result["return_deadline_note"] = deadline_note
-        result["summary"] = (
-            f"Đơn **{order_id}** — {items_str} — {total_str}\n"
-            f"✅ Đã giao {hours_ago} giờ trước\n"
-            f"{deadline_note}\n"
-            f"📍 Địa chỉ: {result['address']}"
-        )
-
-    elif status == "processing":
-        result["summary"] = (
-            f"Đơn **{order_id}** — {items_str} — {total_str}\n"
-            f"⏳ Đang xử lý / đóng gói, chưa bàn giao vận chuyển\n"
-            f"📍 Giao đến: {result['address']}"
-        )
-        result["return_eligible"] = False
-        result["suggested_actions"] = ["cancel_order"]
-
-    elif status == "cancelled":
-        refund_status = raw.get("refund_status", "processing")
-        if refund_status == "completed":
-            refund_completed_at = raw.get("refund_completed_at", "")
-            refund_amount = raw.get("refund_amount", raw.get("total", 0))
-            refund_line = (
-                f"💳 Hoàn tiền: ✅ ĐÃ HOÀN TẤT — {refund_amount:,}đ"
-                + (f" (ngày {refund_completed_at})" if refund_completed_at else "")
-            )
-        else:
-            refund_days = raw.get("refund_days_remaining", 5)
-            refund_line = f"💳 Hoàn tiền: đang xử lý — dự kiến {refund_days} ngày làm việc"
-        result["summary"] = (
-            f"Đơn **{order_id}** — {items_str} — {total_str}\n"
-            f"❌ Đã hủy ({raw.get('cancelled_reason', '')})\n"
-            f"{refund_line}"
-        )
-        result["return_eligible"] = False
-        result["suggested_actions"] = ["check_refund_status"]
-
-    else:
-        result["summary"] = (
-            f"Đơn **{order_id}** — {items_str} — {total_str}\n"
-            f"Trạng thái: {status}"
-        )
-
-    return result
 
 
 def _normalize_order_detail(order: dict) -> dict:
-    order_id = str(order.get("order_id") or order.get("_id") or "").upper().strip()
+    order_id = _normalize_order_id_for_lookup(order.get("order_id") or order.get("_id") or "")
     if not order_id:
         return {"found": False, "summary": "Không có mã đơn hàng hợp lệ."}
 
@@ -533,6 +433,15 @@ def get_order_info_by_phone(phone: str, context: dict | None = None) -> dict:
             "suggested_actions": ["ask_reconfirm_order_id"],
         }
 
+    return {
+        "found": False,
+        "ownership_verified": False,
+        "matched_phone": normalized_phone,
+        "summary": "Mình chưa thể tra cứu theo số điện thoại vì client backend đơn hàng chưa sẵn sàng.",
+        "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
+        "suggested_actions": ["ask_reconfirm_order_id"],
+    }
+
 
 def get_order_info_by_email(email: str, context: dict | None = None) -> dict:
     """
@@ -585,52 +494,11 @@ def get_order_info_by_email(email: str, context: dict | None = None) -> dict:
                     "latest_order_id": latest.get("order_id", ""),
                 }
 
-    orders = _load_orders()
-    matched = []
-    for raw_order in orders.values():
-        if not isinstance(raw_order, dict):
-            continue
-        candidates = [
-            str(raw_order.get("email") or "").strip().lower(),
-            str(raw_order.get("customer_email") or "").strip().lower(),
-            str(raw_order.get("contact_email") or "").strip().lower(),
-        ]
-        if normalized_email in candidates:
-            matched.append(raw_order)
-
-    if len(matched) == 1:
-        normalized = _normalize_order_detail(matched[0])
-        normalized["ownership_verified"] = True
-        normalized["matched_email"] = normalized_email
-        return normalized
-    if len(matched) > 1:
-        latest = matched[0]
-        order_lines = [
-            f"- {o.get('order_id', '')}: {o.get('status', 'unknown')}"
-            for o in matched[:5]
-        ]
-        return {
-            "found": False,
-            "ownership_verified": False,
-            "ambiguous": True,
-            "matched_email": normalized_email,
-            "summary": (
-                f"Mình tìm thấy {len(matched)} đơn gắn với email **{normalized_email}**.\n"
-                f"Bạn gửi thêm mã đơn để mình đối chiếu tiếp nhé:\n" + "\n".join(order_lines)
-            ),
-            "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
-            "suggested_actions": ["ask_reconfirm_order_id"],
-            "latest_order_id": latest.get("order_id", ""),
-        }
-
     return {
         "found": False,
         "ownership_verified": False,
         "matched_email": normalized_email,
-        "summary": (
-            f"Mình chưa tìm thấy đơn hàng nào khớp với email **{normalized_email}**.\n"
-            f"Bạn có thể gửi thêm mã đơn hoặc đăng nhập đúng tài khoản để mình đối chiếu tiếp nhé."
-        ),
+        "summary": "Mình chưa tìm thấy đơn hàng nào khớp với email này trên backend thật.",
         "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
         "suggested_actions": ["ask_reconfirm_order_id"],
     }
@@ -641,10 +509,10 @@ def determine_suggested_actions(order_info: dict, sentiment: str) -> list[str]:
     Tổng hợp suggested actions dựa trên trạng thái đơn + cảm xúc khách.
 
     Actions hệ thống có thể xuất ra:
-      - create_ticket          : Tạo ticket hỗ trợ
+      - manual_review          : Chuyển xử lý thủ công/nội bộ
       - escalate_to_supervisor : Leo thang lên supervisor
       - process_return         : Xử lý đổi trả
-      - create_exchange_ticket : Tạo ticket đổi hàng
+      - create_exchange_request: Tạo yêu cầu đổi hàng
       - cancel_order           : Hủy đơn
       - notify_carrier         : Thông báo cho vận chuyển
       - check_refund_status    : Kiểm tra trạng thái hoàn tiền
@@ -656,7 +524,7 @@ def determine_suggested_actions(order_info: dict, sentiment: str) -> list[str]:
     if sentiment in ("toxic", "frustrated"):
         if "escalate_to_supervisor" not in actions:
             actions.append("escalate_to_supervisor")
-        if "create_ticket" not in actions:
-            actions.append("create_ticket")
+        if "manual_review" not in actions:
+            actions.append("manual_review")
 
     return list(dict.fromkeys(actions))

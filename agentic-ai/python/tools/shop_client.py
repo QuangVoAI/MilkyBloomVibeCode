@@ -1,8 +1,7 @@
 """
 Shop API client for agentic-ai.
 
-Uses the real MilkyBloom backend as the source of truth when available.
-Falls back to the legacy mock data path when SHOP_API_BASE_URL is not set.
+Uses the real MilkyBloom backend as the source of truth.
 """
 from __future__ import annotations
 
@@ -50,7 +49,9 @@ def _request_json(method: str, path: str, context: dict | None = None, data: dic
     service_key = os.getenv("AI_INTERNAL_SERVICE_KEY", "")
     if auth_token:
         headers["Authorization"] = f"Bearer {auth_token}"
-    elif service_key:
+    if service_key and ((context or {}).get("internal_lookup") or (context or {}).get("allow_internal_lookup")):
+        headers["X-Internal-Service-Key"] = service_key
+    elif service_key and not auth_token:
         headers["X-Internal-Service-Key"] = service_key
 
     payload = None if data is None else json.dumps(data).encode("utf-8")
@@ -194,6 +195,20 @@ def get_order_detail(order_id: str, context: dict | None = None) -> dict:
     if ctx.get("auth_token"):
         return _request_json("GET", f"/orders/{order_id}", ctx)
 
+    lookup_token = (
+        ctx.get("order_lookup_token")
+        or ctx.get("orderLookupToken")
+        or ctx.get("lookup_token")
+        or ctx.get("lookupToken")
+    )
+    if lookup_token:
+        return _request_json(
+            "GET",
+            f"/orders/{order_id}/guest",
+            ctx,
+            params={"lookupToken": lookup_token},
+        )
+
     access_token = (
         ctx.get("access_token")
         or ctx.get("order_access_token")
@@ -226,6 +241,20 @@ def search_orders_by_phone(phone: str, context: dict | None = None) -> dict:
             "ownership_verified": False,
         }
     return _request_json("GET", "/orders/guest/search", ctx, params={"phone": phone})
+
+
+def search_orders_by_email(email: str, context: dict | None = None) -> dict:
+    """
+    Search guest/user orders by email address against the real shop backend.
+    """
+    ctx = context or {}
+    if not (ctx.get("internal_lookup") or ctx.get("allow_internal_lookup")):
+        return {
+            "success": False,
+            "message": "Email lookup is internal-only and requires explicit ownership verification.",
+            "ownership_verified": False,
+        }
+    return _request_json("GET", "/orders/guest/search", ctx, params={"email": email})
 
 
 def get_user(user_id: str, context: dict | None = None) -> dict:

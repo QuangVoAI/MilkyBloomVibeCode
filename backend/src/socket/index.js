@@ -34,15 +34,20 @@ module.exports = {
         });
 
         io.on('connection', (socket) => {
-            const authToken = socket.handshake.auth?.token || socket.handshake.query?.token || '';
-            let decodedUser = null;
-            if (authToken && process.env.JWT_SECRET) {
-                try {
-                    decodedUser = jwt.verify(authToken, process.env.JWT_SECRET);
-                } catch (_err) {
-                    decodedUser = null;
+            const connectionAuthToken = socket.handshake.auth?.token || socket.handshake.query?.token || '';
+
+            const decodeUserToken = (token) => {
+                if (!token || !process.env.JWT_SECRET) {
+                    return null;
                 }
-            }
+                try {
+                    return jwt.verify(token, process.env.JWT_SECRET);
+                } catch (_err) {
+                    return null;
+                }
+            };
+
+            const connectionDecodedUser = decodeUserToken(connectionAuthToken);
 
             // --- QUAN TRỌNG: SỰ KIỆN JOIN ROOM ---
             // Khi Frontend login xong, nó sẽ gửi event này kèm userId
@@ -76,6 +81,14 @@ module.exports = {
                 const provider = String(payload.provider || 'agentic').toLowerCase();
                 const effectiveProvider = provider === 'auto' ? 'agentic' : provider;
                 const providerLabel = effectiveProvider === 'agentic' ? 'Groq' : effectiveProvider;
+                const payloadAuthToken = payload.authToken || payload.auth_token || '';
+                const messageAuthToken = payloadAuthToken || connectionAuthToken;
+                const decodedUser = decodeUserToken(messageAuthToken) || (
+                    messageAuthToken === connectionAuthToken ? connectionDecodedUser : null
+                );
+                const verifiedAuthToken = !process.env.JWT_SECRET || decodedUser
+                    ? messageAuthToken
+                    : '';
 
                 console.log(
                     `[chat_message] session=${sessionId} provider=${provider} effective=${effectiveProvider} label=${providerLabel} message="${message.slice(0, 80)}"`
@@ -128,11 +141,12 @@ module.exports = {
                     await streamAgenticChat({
                         ...basePayload,
                         shopContext: {
-                            auth_token: authToken,
+                            auth_token: verifiedAuthToken,
+                            order_lookup_token: payload.orderLookupToken || payload.order_lookup_token || '',
                             guest_session_id: payload.guestSessionId || payload.guest_session_id || '',
                             guest_info: payload.guestInfo || payload.guest_info || {},
                             user_id: decodedUser?.id || decodedUser?._id || '',
-                            email: decodedUser?.email || '',
+                            email: decodedUser?.email || payload.guestEmail || payload.guest_email || '',
                             user_name: decodedUser?.fullName || decodedUser?.name || '',
                             phone: decodedUser?.phone || '',
                             role: decodedUser?.role || '',

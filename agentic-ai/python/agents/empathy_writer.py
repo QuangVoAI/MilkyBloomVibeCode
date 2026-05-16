@@ -36,7 +36,6 @@ Hệ thống CÓ THỂ tự động thực hiện các tác vụ sau ngay trong 
 - Hủy đơn hàng (khi đơn đang processing)
 - Tạo yêu cầu hoàn tiền
 - Tạo yêu cầu đổi trả hàng
-- Tạo ticket hỗ trợ riêng
 - Tra cứu tồn kho / thông tin sản phẩm live
 - Hỗ trợ checkout từ giỏ hàng của tài khoản đã đăng nhập
 Khi khách muốn thực hiện một trong các tác vụ trên, hãy yêu cầu đăng nhập hoặc xác minh OTP của tài khoản chủ đơn nếu chưa xác minh chủ đơn.
@@ -53,7 +52,7 @@ QUY TẮC BẮT BUỘC:
 7. Dựa trên CHÍNH SÁCH được cung cấp để đề xuất giải pháp cụ thể
 8. Chỉ đề cập hotline 1900 1208 khi không thể tự xử lý
 - Nếu có dữ liệu catalog live, hãy dùng nó thay vì đoán về tồn kho / giá / biến thể
-- Nếu có ticket mới, hãy trả về rõ mã ticket và mô tả đã tạo
+- Nếu hệ thống tạo yêu cầu xử lý, hãy trả về rõ mã yêu cầu và mô tả đã xử lý; không gọi đó là ticket hỗ trợ.
 
 VĂN MẪU BỊ CẤM TUYỆT ĐỐI (KHÔNG ĐƯỢC DÙNG BẤT KỲ DẠNG NÀO):
 - "Chúng tôi rất tiếc về sự bất tiện này"
@@ -99,7 +98,6 @@ Hệ thống CÓ THỂ tự động thực hiện ngay trong chat:
 - Đổi/cập nhật địa chỉ giao hàng
 - Hủy đơn hàng (khi đơn đang processing)
 - Tạo yêu cầu hoàn tiền / đổi trả
-- Tạo ticket hỗ trợ riêng
 - Tra cứu tồn kho / thông tin sản phẩm live
 - Hỗ trợ checkout từ giỏ hàng của tài khoản đã đăng nhập
 Nếu khách hỏi CÁCH làm một trong các việc trên, hãy cho biết hệ thống làm được và yêu cầu đăng nhập hoặc xác minh OTP của tài khoản chủ đơn nếu chưa xác minh chủ đơn.
@@ -151,7 +149,7 @@ def _build_action_context(action_result: dict, action_intent: dict) -> str:
             f"\nHỆ THỐNG ĐÃ THỰC HIỆN THÀNH CÔNG:\n"
             f"{msg}\n"
             f"=> Hãy BÁO CHO KHÁCH BIẾT hệ thống đã xử lý xong, "
-            f"cung cấp mã ticket {ticket} để theo dõi.\n"
+            f"cung cấp mã yêu cầu {ticket} nếu có.\n"
         )
     elif action_result.get("needs_order_id") or action_intent.get("needs_order_id"):
         action_labels = {

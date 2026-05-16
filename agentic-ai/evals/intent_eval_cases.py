@@ -63,13 +63,13 @@ BASE_CASES = [
     {
         "question": "Mình cần tạo ticket hỗ trợ vì sản phẩm bị lỗi",
         "expected_intent": "COMPLAINT",
-        "expected_action": "create_ticket",
+        "expected_action": "no_action",
         "order_info": {"found": False},
     },
     {
         "question": "Đơn giao sai màu rồi, xử lý giúp mình",
         "expected_intent": "COMPLAINT",
-        "expected_action": "create_ticket",
+        "expected_action": "process_return",
         "order_info": {"found": True, "status": "delivered", "order_id": "MK006"},
     },
     {
@@ -93,7 +93,7 @@ BASE_CASES = [
     {
         "question": "Sản phẩm lỗi quá, xử lý cho mình với",
         "expected_intent": "COMPLAINT",
-        "expected_action": "create_ticket",
+        "expected_action": "no_action",
         "order_info": {"found": False},
     },
     {

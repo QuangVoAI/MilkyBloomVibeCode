@@ -45,7 +45,7 @@ def test_guest_scenarios():
 
     capability, _ = _infer_capability("tạo ticket hỗ trợ giúp mình", [], "COMPLAINT", auth)
     rule = authorize_capability(capability, auth)
-    assert capability == "support_ticket"
+    assert capability == "inquiry"
     assert rule["allowed"] is True
 
 

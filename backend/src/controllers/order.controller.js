@@ -262,15 +262,18 @@ module.exports = {
                     message: 'Internal lookup only',
                 });
             }
-            const { phone } = req.query;
-            if (!phone) {
+            const phone = String(req.query.phone || '').trim();
+            const email = String(req.query.email || '').trim().toLowerCase();
+            if (!phone && !email) {
                 return res.status(400).json({
                     success: false,
-                    message: 'phone is required',
+                    message: 'phone or email is required',
                 });
             }
 
-            const orders = await orderService.getOrdersByPhone(phone);
+            const orders = email
+                ? await orderService.getOrdersByEmail(email)
+                : await orderService.getOrdersByPhone(phone);
             return res.json({
                 success: true,
                 count: orders.length,

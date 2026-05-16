@@ -17,6 +17,8 @@ import time
 import sys
 import re
 import uuid
+import unicodedata
+from contextlib import nullcontext
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -63,6 +65,12 @@ from tools.action_tool import detect_action_intent, execute_action, resume_actio
 
 from config import MAX_REWRITE_RETRIES
 from utils.console import console
+from utils.observability import (
+    flush_langfuse,
+    get_langfuse,
+    redact_for_langfuse,
+    update_current_span_safe,
+)
 from agents.prompt_registry import prompt_meta, POLICY_VERSION
 
 # Session-level pending actions for multi-turn action execution
@@ -192,6 +200,114 @@ SUPPORT_TICKET_KEYWORDS = [
 ]
 
 
+def _normalize_vi_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFD", text or "")
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = normalized.replace("Đ", "d").replace("đ", "d")
+    return re.sub(r"\s+", " ", normalized).strip().lower()
+
+
+def _contains_vi(text: str, markers: tuple[str, ...] | list[str]) -> bool:
+    normalized = _normalize_vi_text(text)
+    return any(_normalize_vi_text(marker) in normalized for marker in markers)
+
+
+def _is_cancel_policy_question(text: str) -> bool:
+    q = _normalize_vi_text(text)
+    if not q:
+        return False
+    if any(marker in q for marker in ("huy don", "huy order", "cancel order", "cancel don")):
+        policy_markers_ascii = (
+            "cach",
+            "huong dan",
+            "lam sao",
+            "the nao",
+            "ra sao",
+            "quy trinh",
+            "chinh sach",
+            "dieu kien",
+            "duoc khong",
+            "co duoc",
+            "muon hoi",
+            "hoi ve",
+            "cho minh hoi",
+            "cho toi hoi",
+            "thong tin",
+        )
+        action_markers_ascii = (
+            "giup minh",
+            "giup toi",
+            "ho minh",
+            "ho toi",
+            "don nay",
+            "don do",
+            "vua dat",
+            "khong mua nua",
+            "khong con nhu cau",
+            "thoi huy",
+            "huy di",
+            "huy luon",
+        )
+        action_requested = any(
+            re.search(rf"\b{re.escape(marker)}\b", q)
+            for marker in action_markers_ascii
+        )
+        if any(marker in q for marker in policy_markers_ascii) and not action_requested:
+            return True
+    has_cancel_topic = any(
+        _normalize_vi_text(phrase) in q
+        for phrase in (
+            "hủy đơn",
+            "hủy đơn hàng",
+            "cancel order",
+            "cancel don",
+            "hủy order",
+        )
+    )
+    if not has_cancel_topic:
+        return False
+    policy_markers = (
+        "cách",
+        "hướng dẫn",
+        "làm sao",
+        "thế nào",
+        "như thế nào",
+        "ra sao",
+        "quy trình",
+        "chính sách",
+        "điều kiện",
+        "được không",
+        "có được",
+        "muốn hỏi",
+        "hỏi về",
+        "cho mình hỏi",
+        "cho tôi hỏi",
+        "thông tin",
+    )
+    action_markers = (
+        "giúp mình",
+        "giúp tôi",
+        "hộ mình",
+        "hộ tôi",
+        "đừng mình",
+        "đừng tôi",
+        "đơn này",
+        "đơn đó",
+        "vừa đặt",
+        "không mua nữa",
+        "thôi hủy",
+        "hủy đi",
+        "hủy luôn",
+    )
+    return any(_normalize_vi_text(marker) in q for marker in policy_markers) and not any(
+        _normalize_vi_text(marker) in q for marker in action_markers
+    )
+
+
+def _is_order_policy_question(text: str) -> bool:
+    return _is_return_policy_question(text) or _is_cancel_policy_question(text)
+
+
 def _join_lookup_hints(hints: list[str]) -> str:
     if not hints:
         return ""
@@ -258,7 +374,24 @@ def _is_support_ticket_request(text: str) -> bool:
 
 
 def _is_existing_order_issue(text: str) -> bool:
-    q = (text or "").lower()
+    q = _normalize_vi_text(text)
+    if any(
+        marker in q
+        for marker in (
+            "huy don",
+            "huy order",
+            "cancel order",
+            "doi dia chi",
+            "hoan tien",
+            "doi tra",
+            "tra hang",
+            "kiem tra don",
+            "tra cuu don",
+            "theo doi don",
+            "trang thai don",
+        )
+    ):
+        return True
     markers = (
         "đặt nhầm địa chỉ",
         "nhầm địa chỉ",
@@ -293,7 +426,9 @@ def _is_existing_order_issue(text: str) -> bool:
         "muốn trả hàng",
         "cần trả hàng",
     )
-    return any(marker in q for marker in markers)
+    if "khong con nhu cau" in q or "khong muon mua nua" in q or "khong can hang nua" in q:
+        return True
+    return any(_normalize_vi_text(marker) in q for marker in markers)
 
 
 def _is_return_policy_question(text: str) -> bool:
@@ -600,7 +735,7 @@ def _has_catalog_followup_signal(text: str) -> bool:
 def _brand_voice_opening(context: str, *, order_id: str = "", product_name: str = "") -> str:
     context = (context or "").strip().lower()
     if context == "support":
-        return "Mình mở ticket cho bạn rồi nè."
+        return "Mình ghi nhận yêu cầu hỗ trợ cho bạn rồi nè."
     if context == "order":
         if order_id:
             return f"Mình tra được đơn {order_id} cho bạn rồi nè."
@@ -616,42 +751,81 @@ def _brand_voice_opening(context: str, *, order_id: str = "", product_name: str 
     return "Mình xử lý cho bạn rồi nè."
 
 
+def _is_general_inquiry_request(text: str) -> bool:
+    q = _normalize_vi_text(text)
+    markers = (
+        "khuyen mai",
+        "uu dai",
+        "giam gia",
+        "ma giam gia",
+        "voucher",
+        "sale",
+        "chinh sach",
+        "huong dan",
+        "cho minh hoi",
+        "cho toi hoi",
+        "muon biet",
+        "lam sao",
+        "the nao",
+        "bao gia",
+        "gia bao nhieu",
+        "con hang",
+        "bao hanh",
+        "phi ship",
+        "thanh toan",
+    )
+    return any(marker in q for marker in markers)
+
+
 def _infer_capability(question: str, history: list[dict], intent: str, auth_profile: dict) -> tuple[str, str]:
     q = (question or "").lower()
     recent = " ".join((m.get("content", "") or "") for m in history[-4:]).lower()
-    text = f"{q} {recent}"
+    current = q
+    combined = f"{q} {recent}"
 
-    if _is_catalog_recommendation_request(text):
+    # Capability should be led by the current message. History is useful for
+    # ambiguous follow-ups, but using it for every detector makes old topics
+    # leak into fresh questions.
+    if _is_catalog_recommendation_request(current):
         return "catalog", "catalog_recommendation"
 
-    if _extract_catalog_selection_name(text):
+    if _extract_catalog_selection_name(current):
         return "catalog", "catalog_selection"
 
-    if _is_loyalty_request(text):
-        if _is_loyalty_redeem_request(text):
+    if _is_loyalty_request(current):
+        if _is_loyalty_redeem_request(current):
             return "loyalty", "loyalty_redeem"
         return "loyalty", "loyalty_view"
 
-    if _is_support_ticket_request(text):
-        return "support_ticket", "support_ticket_request"
+    if _is_support_ticket_request(current):
+        return "inquiry", "support_contact_request"
 
-    if _is_return_policy_question(text) and not (extract_order_id(text) or extract_phone_number(text)):
+    if intent != "INQUIRY" and _is_general_inquiry_request(current) and not _is_existing_order_issue(current):
+        return "inquiry", "fresh_inquiry"
+
+    if _is_return_policy_question(current) and not (extract_order_id(current) or extract_phone_number(current)):
         return "inquiry", "return_policy_question"
 
-    if _is_return_request(text):
+    if _is_cancel_policy_question(current) and not (extract_order_id(current) or extract_phone_number(current)):
+        return "inquiry", "cancel_policy_question"
+
+    if _is_return_request(current):
         return "order_management", "return_request"
 
-    if has_order_context := (extract_order_id(text) or extract_phone_number(text) or _is_existing_order_issue(text)):
+    if has_order_context := (extract_order_id(current) or extract_phone_number(current) or _is_existing_order_issue(current)):
         return "order_management", f"existing_order:{has_order_context}"
 
-    if _is_purchase_request(text) and not _is_catalog_recommendation_request(text):
+    if _is_purchase_request(current) and not _is_catalog_recommendation_request(current):
         return "checkout", "purchase_request"
 
-    if _is_checkout_request(text):
+    if _is_checkout_request(current):
         return "checkout", "checkout_keywords"
 
-    if _is_catalog_request(text):
+    if _is_catalog_request(current):
         return "catalog", "catalog_keywords"
+
+    if not current.strip() and _is_catalog_recommendation_request(combined):
+        return "catalog", "catalog_recommendation_followup"
 
     if intent == "INQUIRY":
         return "inquiry", "inquiry_intent"
@@ -712,27 +886,48 @@ def _format_return_policy_summary() -> str:
     )
 
 
+def _format_cancel_policy_summary() -> str:
+    return (
+        "C\u00e1ch h\u1ee7y \u0111\u01a1n h\u00e0ng c\u1ee7a MilkyBloom n\u00e8:\n"
+        "- N\u1ebfu \u0111\u01a1n c\u00f2n \u0111ang x\u1eed l\u00fd / ch\u01b0a b\u00e0n giao v\u1eadn chuy\u1ec3n, m\u00ecnh c\u00f3 th\u1ec3 h\u1ed7 tr\u1ee3 ki\u1ec3m tra v\u00e0 h\u1ee7y theo t\u1eebng \u0111\u01a1n.\n"
+        "- B\u1ea1n g\u1eedi m\u00e3 \u0111\u01a1n, email \u0111\u1eb7t h\u00e0ng, ho\u1eb7c \u0111\u0103ng nh\u1eadp t\u00e0i kho\u1ea3n \u0111\u00e3 \u0111\u1eb7t \u0111\u01a1n \u0111\u1ec3 m\u00ecnh x\u00e1c minh.\n"
+        "- N\u1ebfu \u0111\u01a1n \u0111\u00e3 chuy\u1ec3n sang v\u1eadn chuy\u1ec3n, m\u00ecnh s\u1ebd ki\u1ec3m tra ph\u01b0\u01a1ng \u00e1n ph\u00f9 h\u1ee3p nh\u01b0 theo d\u00f5i giao h\u00e0ng, t\u1eeb ch\u1ed1i nh\u1eadn h\u00e0ng, ho\u1eb7c x\u1eed l\u00fd ho\u00e0n ti\u1ec1n khi \u0111\u01a1n \u0111\u01b0\u1ee3c tr\u1ea3 v\u1ec1 kho."
+    )
+
+
+def _format_support_contact_summary() -> str:
+    return (
+        "M\u00ecnh c\u00f3 th\u1ec3 ghi nh\u1eadn y\u00eau c\u1ea7u h\u1ed7 tr\u1ee3, nh\u01b0ng c\u1ea7n x\u00e1c minh \u0111\u00fang \u0111\u01a1n tr\u01b0\u1edbc \u0111\u00e3. "
+        "B\u1ea1n g\u1eedi m\u00ecnh m\u00e3 \u0111\u01a1n ho\u1eb7c email \u0111\u1eb7t h\u00e0ng nh\u00e9. N\u1ebfu b\u1ea1n \u0111\u00e3 \u0111\u0103ng nh\u1eadp t\u00e0i kho\u1ea3n \u0111\u1eb7t \u0111\u01a1n, "
+        "m\u00ecnh s\u1ebd ki\u1ec3m tra ti\u1ebfp theo th\u00f4ng tin t\u00e0i kho\u1ea3n \u0111\u00f3."
+    )
+
+
 # ================================================================
 # Graph Nodes
 # ================================================================
 
 def order_lookup_node(state: AgentState) -> dict:
-    """Node: Trích xuất mã đơn hàng từ tin nhắn + tra cứu trong mock DB."""
+    """Node: Trích xuất mã đơn hàng từ tin nhắn + tra cứu backend thật."""
     t0 = time.time()
     question = state["question"]
     history = state.get("history", [])
     shop_context = state.get("shop_context", {}) or {}
 
-    all_text = question + " " + " ".join(
-        m.get("content", "") for m in history[-5:]
-    )
+    current_order_policy_question = _is_order_policy_question(question)
 
-    order_id = extract_order_id(all_text)
-    phone_number = extract_phone_number(all_text) if not order_id else None
-    email_address = extract_email_address(all_text) if not order_id and not phone_number else None
+    order_id = extract_order_id(question)
+    phone_number = extract_phone_number(question) if not order_id else None
+    email_address = extract_email_address(question) if not order_id and not phone_number else None
     order_info: dict = {}
     suggested_actions: list = []
-    has_order_context = any(keyword in all_text.lower() for keyword in ORDER_CONTEXT_KEYWORDS)
+    has_order_context = (
+        not current_order_policy_question
+        and (
+            any(keyword in question.lower() for keyword in ORDER_CONTEXT_KEYWORDS)
+            or _is_existing_order_issue(question)
+        )
+    )
 
     pending_action_intent: dict = {}
     session_id = state.get("session_id", "")
@@ -741,10 +936,10 @@ def order_lookup_node(state: AgentState) -> dict:
     if order_id:
         order_info = get_order_info(order_id, shop_context)
     elif phone_number:
-        order_info = get_order_info_by_phone(phone_number, shop_context)
+        order_info = get_order_info_by_phone(phone_number, {**shop_context, "allow_internal_lookup": True})
     elif email_address:
-        order_info = get_order_info_by_email(email_address, shop_context)
-    elif cached_order and _has_order_followup_signal(all_text):
+        order_info = get_order_info_by_email(email_address, {**shop_context, "allow_internal_lookup": True})
+    elif cached_order and not current_order_policy_question and _has_order_followup_signal(question):
         cached_order_id = cached_order.get("order_id", "")
         if cached_order_id:
             console.print(
@@ -805,13 +1000,22 @@ def order_lookup_node(state: AgentState) -> dict:
             f"(status: {order_info.get('status', '-')})[/]"
         )
 
-        # Multi-turn: if order found and session has pending action, resume it
-        if order_info.get("found") and session_id and session_id in _session_pending_actions:
-            pending_action_intent = _session_pending_actions.pop(session_id)
-            console.print(
-                f"[dim]  OrderLookup: resumed pending action '{pending_action_intent.get('action')}' "
-                f"for session {session_id}[/]"
-            )
+        # Multi-turn: keep the previous action when the next turn only supplies
+        # an identifier. Pop it only once the order is fully found and verified
+        # enough for action_executor to resume.
+        if session_id and session_id in _session_pending_actions:
+            if order_info.get("found"):
+                pending_action_intent = _session_pending_actions.pop(session_id)
+                console.print(
+                    f"[dim]  OrderLookup: resumed pending action '{pending_action_intent.get('action')}' "
+                    f"for session {session_id}[/]"
+                )
+            elif order_id or phone_number or email_address or order_info.get("verification_required"):
+                pending_action_intent = dict(_session_pending_actions.get(session_id) or {})
+                console.print(
+                    f"[dim]  OrderLookup: kept pending action '{pending_action_intent.get('action')}' "
+                    f"for session {session_id}[/]"
+                )
 
         if order_info.get("found") and session_id:
             _remember_order_profile(session_id, order_info, question)
@@ -1023,7 +1227,7 @@ def support_ticket_node(state: AgentState) -> dict:
         ticket_id = ticket_res.get("ticketId") or ticket.get("_id") or ticket.get("id") or ""
         answer = _brand_voice_opening("support")
         if ticket_number:
-            answer += f" Mã ticket: {ticket_number}."
+            answer += f" Mã yêu cầu: {ticket_number}."
         answer += " Nếu cần, mình có thể theo dõi tiếp giúp bạn."
     else:
         ticket_number = ""
@@ -1140,6 +1344,7 @@ def action_executor_node(state: AgentState) -> dict:
     auth_profile = state.get("auth_state") or _build_auth_profile(shop_context)
     order_id = state.get("order_id", "")
     phone_number = state.get("phone_number", "")
+    email_address = state.get("email_address", "")
     identifier_only = bool(re.fullmatch(r"[\d\+\-\s\(\)]{8,}", question.strip()))
 
     # Multi-turn resume: if order_lookup found a pending action for this session
@@ -1148,6 +1353,18 @@ def action_executor_node(state: AgentState) -> dict:
         console.print(
             f"[dim]  ActionExecutor: resumed pending action '{pending.get('action')}' "
             f"with order {order_info.get('order_id', '')}[/]"
+        )
+    elif pending and pending.get("action"):
+        action_intent = {
+            **pending,
+            "executable": False,
+            "needs_order_id": not bool(order_id or phone_number or email_address),
+            "needs_more_info": bool(order_info.get("verification_required")),
+            "block_reason": "verification_required" if order_info.get("verification_required") else "",
+        }
+        console.print(
+            f"[dim]  ActionExecutor: kept pending action '{pending.get('action')}' "
+            "while waiting for verification[/]"
         )
     elif order_info.get("found") and identifier_only and (order_id or phone_number):
         action_intent = {
@@ -1241,7 +1458,14 @@ def action_executor_node(state: AgentState) -> dict:
             f"(ticket: {action_result.get('ticket_id', '-')})[/]"
         )
     else:
-        followup_message = _followup_prompt(action, bool(action_intent.get("needs_more_info")))
+        if order_info.get("verification_required") and (order_id or phone_number or email_address):
+            followup_message = (
+                "Mình đã nhận được thông tin đơn rồi, nhưng vẫn cần xác minh đúng chủ đơn trước khi xử lý tiếp. "
+                "Bạn giúp mình đăng nhập tài khoản đã đặt đơn, xác minh OTP, gửi mã truy cập trong email xác nhận, "
+                "hoặc gửi email đặt hàng để mình kiểm tra tiếp nhé."
+            )
+        else:
+            followup_message = _followup_prompt(action, bool(action_intent.get("needs_more_info")))
         action_result = {
             "success": False,
             "blocked": False,
@@ -1296,6 +1520,8 @@ def router_node(state: AgentState) -> dict:
     intent = meta["intent"]
     auth_profile = _build_auth_profile(shop_context)
     capability, capability_reason = _infer_capability(question, history, intent, auth_profile)
+    if capability == "inquiry":
+        intent = "INQUIRY"
     permission_rule = authorize_capability(capability, auth_profile)
 
     elapsed = int((time.time() - t0) * 1000)
@@ -1487,8 +1713,12 @@ async def inquiry_writer_node(state: AgentState) -> dict:
     catalog_info = state.get("catalog_info", {})
     capability_reason = str(state.get("capability_reason") or "").lower()
 
-    if "return_policy_question" in capability_reason or _is_return_policy_question(question):
+    if "cancel_policy_question" in capability_reason or _is_cancel_policy_question(question):
+        answer = _format_cancel_policy_summary()
+    elif "return_policy_question" in capability_reason or _is_return_policy_question(question):
         answer = _format_return_policy_summary()
+    elif "support_contact_request" in capability_reason or _is_support_ticket_request(question):
+        answer = _format_support_contact_summary()
     else:
         answer = await generate_inquiry(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
 
@@ -1652,30 +1882,34 @@ def route_by_intent(state: AgentState) -> str:
     session_id = state.get("session_id", "")
     question = state.get("question", "")
     history = state.get("history", [])
-    all_text = question + " " + " ".join(m.get("content", "") for m in history[-5:])
     capability = state.get("capability", "")
-    has_order_clue = bool(extract_order_id(all_text) or extract_phone_number(all_text))
-    has_email_clue = bool(extract_email_address(all_text))
+    current_order_policy_question = _is_order_policy_question(question)
+    has_order_clue = bool(extract_order_id(question) or extract_phone_number(question))
+    has_email_clue = bool(extract_email_address(question))
     recent_order_context = any(
         keyword in " ".join(m.get("content", "") for m in history[-4:]).lower()
         for keyword in ORDER_CONTEXT_KEYWORDS
     )
     cached_order = _get_order_profile(session_id)
-    has_order_followup = bool(cached_order and _has_order_followup_signal(all_text))
+    has_order_followup = bool(
+        cached_order
+        and not current_order_policy_question
+        and _has_order_followup_signal(question)
+    )
     cached_catalog = _get_catalog_profile(session_id)
-    has_catalog_followup = bool(cached_catalog and _has_catalog_followup_signal(all_text))
+    has_catalog_followup = bool(cached_catalog and _has_catalog_followup_signal(question))
     current_catalog_request = (
-        _is_catalog_request(all_text)
-        or _is_catalog_recommendation_request(all_text)
-        or bool(_extract_catalog_selection_name(all_text, cached_catalog))
+        _is_catalog_request(question)
+        or _is_catalog_recommendation_request(question)
+        or bool(_extract_catalog_selection_name(question, cached_catalog))
     )
 
     if capability == "loyalty":
         console.print("[dim]  Router: capability loyalty — forcing loyalty path[/]")
         return "loyalty"
     if capability == "support_ticket":
-        console.print("[dim]  Router: capability support_ticket — forcing support ticket path[/]")
-        return "support_ticket"
+        console.print("[dim]  Router: support_ticket is not customer-facing — using inquiry path[/]")
+        return "inquiry"
     if capability == "checkout":
         console.print("[dim]  Router: capability checkout — forcing checkout path[/]")
         return "checkout"
@@ -1727,15 +1961,19 @@ def route_by_intent(state: AgentState) -> str:
     # Order / address / status flows should win over checkout so we do not
     # accidentally try to create a new cart order when the user is talking
     # about an existing order.
-    if (has_order_clue or recent_order_context or _is_existing_order_issue(all_text)) and not current_catalog_request:
+    if (
+        has_order_clue
+        or (recent_order_context and _has_order_followup_signal(question))
+        or (not current_order_policy_question and _is_existing_order_issue(question))
+    ) and not current_catalog_request:
         console.print("[dim]  Router: detected order clue (order id / phone) — forcing COMPLAINT path[/]")
         return "complaint"
 
-    if _is_purchase_request(all_text) and not current_catalog_request:
+    if _is_purchase_request(question) and not current_catalog_request:
         console.print("[dim]  Router: detected checkout request — forcing checkout path[/]")
         return "checkout"
 
-    if _is_catalog_request(all_text):
+    if _is_catalog_request(question):
         console.print("[dim]  Router: detected catalog request — forcing catalog path[/]")
         return "catalog"
 
@@ -1867,7 +2105,7 @@ def build_graph() -> StateGraph:
     # - COMPLAINT + bad evidence + no retries -> empathy_writer (give up)
     def route_after_grade(state):
         intent = state.get("intent", "")
-        if intent == "INQUIRY":
+        if intent == "INQUIRY" or state.get("capability") == "inquiry":
             return "inquiry_writer"
         # Nếu Qdrant trả về 0 docs (timeout/corpus rỗng), give up ngay
         # tránh lãng phí 2× rewrite LLM call (~3s mỗi lần)
@@ -1938,7 +2176,120 @@ def startup_warmup():
     console.print("[bold green]🚀 EmpathAI pipeline ready![/]")
 
 
-@observe(name="empathAI_pipeline", as_type="generation")
+def _langfuse_user_id(shop_context: dict | None) -> str | None:
+    context = shop_context or {}
+    for key in ("user_id", "userId", "customer_id", "customerId", "id"):
+        value = context.get(key)
+        if value and "@" not in str(value):
+            return str(value)
+    return None
+
+
+def _langfuse_auth_scope(shop_context: dict | None) -> str:
+    try:
+        return str(_build_auth_profile(shop_context).get("user_scope") or "guest")
+    except Exception:
+        return "guest"
+
+
+def _langfuse_pipeline_input(
+    question: str,
+    history: list[dict] | None,
+    shop_context: dict | None,
+) -> dict:
+    recent_history = []
+    for message in (history or [])[-6:]:
+        if not isinstance(message, dict):
+            continue
+        recent_history.append(
+            {
+                "role": str(message.get("role") or ""),
+                "content": redact_for_langfuse(message.get("content") or ""),
+            }
+        )
+
+    context = shop_context or {}
+    auth_profile = _build_auth_profile(context)
+    return {
+        "question": redact_for_langfuse(question),
+        "history": recent_history,
+        "shop_context": {
+            "user_scope": auth_profile.get("user_scope", "guest"),
+            "is_authenticated": bool(auth_profile.get("is_authenticated")),
+            "has_auth_token": bool(
+                context.get("auth_token")
+                or context.get("authToken")
+                or context.get("access_token")
+                or context.get("accessToken")
+            ),
+        },
+    }
+
+
+def _langfuse_pipeline_output(final_state: dict) -> dict:
+    return {
+        "answer": redact_for_langfuse(final_state.get("answer", "")),
+        "intent": final_state.get("intent", ""),
+        "capability": final_state.get("capability", ""),
+        "processing_time_ms": final_state.get("processing_time_ms", 0),
+    }
+
+
+def _langfuse_pipeline_metadata(final_state: dict) -> dict:
+    order_info = final_state.get("order_info") or {}
+    action_result = final_state.get("action_result") or {}
+    has_order_identifier = bool(
+        final_state.get("order_id")
+        or final_state.get("phone_number")
+        or final_state.get("email_address")
+    )
+    verification_required = bool(order_info.get("verification_required"))
+    return {
+        "intent": final_state.get("intent", ""),
+        "sentiment": final_state.get("sentiment", ""),
+        "capability": final_state.get("capability", ""),
+        "is_evidence_sufficient": bool(final_state.get("is_evidence_sufficient", True)),
+        "reviewer_triggered": bool(final_state.get("reviewer_triggered", False)),
+        "rewrite_count": int(final_state.get("rewrite_count") or 0),
+        "order_found": bool(order_info.get("found")),
+        "order_identifier_received": has_order_identifier,
+        "verification_required": verification_required,
+        "lookup_blocked_by_auth": has_order_identifier and verification_required and not order_info.get("found"),
+        "ownership_verified": bool(final_state.get("ownership_verified", False)),
+        "action": action_result.get("action", ""),
+        "action_success": bool(action_result.get("success", False)),
+        "ticket_created": bool((final_state.get("ticket_info") or {}).get("success")),
+    }
+
+
+def _langfuse_attribute_context(
+    session_id: str,
+    trace_id: str,
+    shop_context: dict | None,
+):
+    if not get_langfuse():
+        return nullcontext()
+
+    try:
+        from langfuse import propagate_attributes
+
+        auth_scope = _langfuse_auth_scope(shop_context)
+        return propagate_attributes(
+            trace_name="empathAI_pipeline",
+            session_id=session_id or trace_id,
+            user_id=_langfuse_user_id(shop_context),
+            version=POLICY_VERSION,
+            tags=["milkybloom", "agentic-ai", "chat", auth_scope],
+            metadata={
+                "feature": "chat_assistant",
+                "auth_scope": auth_scope,
+            },
+        )
+    except Exception:
+        return nullcontext()
+
+
+@observe(name="empathAI_pipeline", as_type="span", capture_input=False, capture_output=False)
 async def run_streaming(
     question: str,
     history: list[dict] = None,
@@ -1951,9 +2302,10 @@ async def run_streaming(
     console.print(f"[cyan]Incoming: '{question[:60]}...'[/]")
 
     graph = _get_graph()
+    trace_id = session_id or f"trace_{uuid.uuid4().hex[:10]}"
 
     initial_state: AgentState = {
-        "trace_id": session_id or f"trace_{uuid.uuid4().hex[:10]}",
+        "trace_id": trace_id,
         "session_id": session_id,
         "question": question,
         "history": history or [],
@@ -1993,18 +2345,38 @@ async def run_streaming(
         "stream_callback": stream_callback,
     }
 
-    final_state = await graph.ainvoke(initial_state)
+    with _langfuse_attribute_context(session_id, trace_id, shop_context):
+        update_current_span_safe(
+            input=_langfuse_pipeline_input(question, history, shop_context),
+            version=POLICY_VERSION,
+            metadata={"phase": "start", "feature": "chat_assistant"},
+        )
+        try:
+            final_state = await graph.ainvoke(initial_state)
+        except Exception as e:
+            update_current_span_safe(
+                level="ERROR",
+                status_message=str(e)[:500],
+                output={"error": redact_for_langfuse(str(e))},
+            )
+            flush_langfuse()
+            raise
 
-    processing_time = int((time.time() - start_time) * 1000)
-    final_state["processing_time_ms"] = processing_time
-    try:
-        from utils.chatbot_metrics import record_chatbot_trace
-        record_chatbot_trace(final_state)
-    except Exception as e:
-        console.print(f"[yellow]  Chatbot metrics: failed to record trace: {e}[/]")
+        processing_time = int((time.time() - start_time) * 1000)
+        final_state["processing_time_ms"] = processing_time
+        update_current_span_safe(
+            output=_langfuse_pipeline_output(final_state),
+            metadata=_langfuse_pipeline_metadata(final_state),
+        )
+        try:
+            from utils.chatbot_metrics import record_chatbot_trace
+            record_chatbot_trace(final_state)
+        except Exception as e:
+            console.print(f"[yellow]  Chatbot metrics: failed to record trace: {e}[/]")
 
-    console.print(f"[green]Done in {processing_time}ms[/]")
-    return final_state
+        flush_langfuse()
+        console.print(f"[green]Done in {processing_time}ms[/]")
+        return final_state
 
 
 # ================================================================

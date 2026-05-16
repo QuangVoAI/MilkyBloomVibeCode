@@ -545,6 +545,28 @@ def _scenario_order_lookup_by_id() -> ScenarioRow:
     )
 
 
+def _scenario_order_lookup_by_object_id() -> ScenarioRow:
+    _reset_state()
+    order_id = "6a05f2a94079aa69c576225b"
+    with patch.object(graph, "get_order_info", side_effect=_fake_order_info):
+        result = graph.order_lookup_node(
+            _make_state(
+                question=f"Ki\u1ec3m tra gi\u00fap m\u00ecnh \u0111\u01a1n h\u00e0ng {order_id}",
+                session_id="matrix_object_id_lookup",
+                shop_context={"auth_token": "token_123", "user_id": "u_1"},
+            )
+        )
+    passed = result["order_id"] == order_id and result["order_info"].get("found") is True
+    return ScenarioRow(
+        case="Order ObjectId lookup",
+        input=f"\u0111\u01a1n h\u00e0ng {order_id}",
+        expected="extract 24-hex order id",
+        got=f"order_id={result['order_id']}",
+        output=_short(result["order_info"].get("summary")),
+        passed=passed,
+    )
+
+
 def _scenario_order_lookup_by_phone() -> ScenarioRow:
     _reset_state()
     with patch.object(graph, "get_order_info_by_phone", side_effect=_fake_order_info_by_phone):
@@ -653,6 +675,83 @@ def _scenario_return_policy_question() -> ScenarioRow:
         expected="capability=inquiry, route=inquiry",
         got=f"intent={intent}, capability={capability}, route={route}",
         output=reason,
+        passed=passed,
+    )
+
+
+def _scenario_cancel_policy_question() -> ScenarioRow:
+    _reset_state()
+    auth = graph._build_auth_profile({})
+    question = "M\u00ecnh mu\u1ed1n h\u1ecfi v\u1ec1 c\u00e1ch h\u1ee7y \u0111\u01a1n h\u00e0ng?"
+    history = [
+        {"role": "user", "content": "G\u1ee3i \u00fd cho t\u00f4i m\u00f3n \u0111\u1ed3 d\u01b0\u1edbi 400k"},
+        {"role": "assistant", "content": "M\u00ecnh g\u1ee3i \u00fd v\u00e0i m\u00f3n trong t\u1ea7m 400.000\u0111."},
+    ]
+    capability, reason = graph._infer_capability(
+        question,
+        history,
+        "COMPLAINT",
+        auth,
+    )
+    route = graph.route_by_intent(
+        _make_state(
+            question=question,
+            history=history,
+            session_id="matrix_cancel_policy",
+            intent="COMPLAINT",
+            capability=capability,
+        )
+    )
+    passed = capability == "inquiry" and reason == "cancel_policy_question" and route == "inquiry"
+    return ScenarioRow(
+        case="Cancel policy inquiry",
+        input=question,
+        expected="capability=inquiry, route=inquiry",
+        got=f"capability={capability}, route={route}",
+        output=reason,
+        passed=passed,
+    )
+
+
+def _scenario_new_question_ignores_policy_history() -> ScenarioRow:
+    _reset_state()
+    auth = graph._build_auth_profile({})
+    question = "Shop c\u00f3 khuy\u1ebfn m\u00e3i g\u00ec kh\u00f4ng?"
+    history = [
+        {"role": "user", "content": "M\u00ecnh mu\u1ed1n h\u1ecfi v\u1ec1 ch\u00ednh s\u00e1ch \u0111\u1ed5i tr\u1ea3"},
+        {"role": "assistant", "content": "Ch\u00ednh s\u00e1ch \u0111\u1ed5i tr\u1ea3 c\u1ee7a MilkyBloom n\u00e8..."},
+    ]
+    capability, reason = graph._infer_capability(question, history, "INQUIRY", auth)
+    passed = capability == "inquiry" and reason == "inquiry_intent"
+    return ScenarioRow(
+        case="Fresh inquiry wins",
+        input=question,
+        expected="reason=inquiry_intent",
+        got=f"capability={capability}, reason={reason}",
+        output="old return-policy history should not hardcode the next answer",
+        passed=passed,
+    )
+
+
+def _scenario_order_lookup_ignores_stale_history() -> ScenarioRow:
+    _reset_state()
+    result = graph.order_lookup_node(
+        _make_state(
+            question="Shop c\u00f3 khuy\u1ebfn m\u00e3i g\u00ec kh\u00f4ng?",
+            history=[
+                {"role": "user", "content": "Ki\u1ec3m tra gi\u00fap m\u00ecnh \u0111\u01a1n MK099"},
+                {"role": "assistant", "content": "\u0110\u01a1n MK099 \u0111ang v\u1eadn chuy\u1ec3n."},
+            ],
+            session_id="matrix_stale_order_history",
+        )
+    )
+    passed = result["order_id"] == "" and result["order_info"] == {}
+    return ScenarioRow(
+        case="Stale order ignored",
+        input="Shop c\u00f3 khuy\u1ebfn m\u00e3i g\u00ec kh\u00f4ng?",
+        expected="no order lookup from history",
+        got=f"order_id={result['order_id']}, order_info={bool(result['order_info'])}",
+        output="current message has no order identifier",
         passed=passed,
     )
 
@@ -1140,12 +1239,38 @@ def _scenario_support_ticket() -> ScenarioRow:
                 shop_context={"user_name": "Hoang", "email": "hoang@example.com"},
             )
         )
-    passed = "Mã ticket: TKT-001" in result["answer"] and captured["payload"]["channel"] == "chat"
+    passed = "Mã yêu cầu: TKT-001" in result["answer"] and captured["payload"]["channel"] == "chat"
     return ScenarioRow(
         case="Support ticket",
         input="tạo ticket hỗ trợ giúp mình",
         expected="ticket created",
         got=f"ticket={result['ticket_info'].get('ticketNumber')}",
+        output=_short(result["answer"]),
+        passed=passed,
+    )
+
+
+def _scenario_support_contact_answer() -> ScenarioRow:
+    _reset_state()
+    result = asyncio.run(
+        graph.inquiry_writer_node(
+            _make_state(
+                question="T\u1ea1o ticket h\u1ed7 tr\u1ee3 gi\u00fap m\u00ecnh v\u00ec \u0111\u01a1n giao tr\u1ec5 qu\u00e1",
+                session_id="matrix_support_contact_answer",
+                capability="inquiry",
+                capability_reason="support_contact_request",
+            )
+        )
+    )
+    passed = (
+        "m\u00e3 \u0111\u01a1n ho\u1eb7c email \u0111\u1eb7t h\u00e0ng" in result["answer"]
+        and not result.get("ticket_info")
+    )
+    return ScenarioRow(
+        case="Support contact answer",
+        input="T\u1ea1o ticket h\u1ed7 tr\u1ee3 gi\u00fap m\u00ecnh v\u00ec \u0111\u01a1n giao tr\u1ec5 qu\u00e1",
+        expected="ask for order/email, no ticket",
+        got=_short(result["answer"]),
         output=_short(result["answer"]),
         passed=passed,
     )
@@ -1162,10 +1287,14 @@ def run_chat_scenario_matrix() -> list[ScenarioRow]:
         _scenario_checkout_progression(),
         _scenario_logged_in_checkout(),
         _scenario_order_lookup_by_id(),
+        _scenario_order_lookup_by_object_id(),
         _scenario_order_lookup_by_phone(),
         _scenario_order_followup_route(),
         _scenario_email_identifier_override_catalog(),
         _scenario_return_policy_question(),
+        _scenario_cancel_policy_question(),
+        _scenario_new_question_ignores_policy_history(),
+        _scenario_order_lookup_ignores_stale_history(),
         _scenario_return_request_generic(),
         _scenario_return_policy_answer(),
         _scenario_return_request_followup_answer(),
@@ -1179,6 +1308,7 @@ def run_chat_scenario_matrix() -> list[ScenarioRow]:
         _scenario_loyalty_guest(),
         _scenario_loyalty_logged_in(),
         _scenario_support_ticket(),
+        _scenario_support_contact_answer(),
     ]
 
 

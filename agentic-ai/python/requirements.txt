@@ -20,7 +20,7 @@ langgraph>=0.2.0               # 0.2.x: stable API với ainvoke + async nodes
 langchain-core>=0.2.0
 
 # Observability
-langfuse>=2.0.0
+langfuse>=4.0.0
 
 # Utils
 rich>=13.7.0

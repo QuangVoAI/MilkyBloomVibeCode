@@ -512,6 +512,11 @@ module.exports = {
         return orders;
     },
 
+    async getOrdersByEmail(email) {
+        const orders = await orderRepository.findByEmail(email);
+        return orders;
+    },
+
     async requestOrderLookupOtp(orderId) {
         const order = await orderRepository.findByIdWithLookupAccess(orderId);
         if (!order) {

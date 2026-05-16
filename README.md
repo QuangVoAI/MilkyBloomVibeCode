@@ -210,7 +210,25 @@ agentic-ai/
 
 ## Chạy Dự Án
 
-### 1. Frontend
+### 0. Chuẩn bị `.env`
+
+Mỗi service có file env mẫu riêng. Copy file mẫu rồi điền secret thật ở máy local:
+
+```bash
+cp frontend/.env.example frontend/.env
+cp backend/.env.example backend/.env
+cp agentic-ai/.env.example agentic-ai/.env
+```
+
+Các key tối thiểu để chạy local:
+
+- `frontend/.env`: `VITE_API_URL=http://localhost:6969/api`
+- `backend/.env`: `MONGO_URI`, `JWT_SECRET`, `SESSION_SECRET`, `ORDER_LOOKUP_JWT_SECRET`, `AGENTIC_AI_WS_URL=ws://127.0.0.1:8788`
+- `agentic-ai/.env`: `GROQ_API_KEY`, `SHOP_API_BASE_URL=http://127.0.0.1:6969/api`, `PORT=8788`
+
+Nếu backend và agentic cùng dùng internal lookup, đặt cùng một giá trị cho `AI_INTERNAL_SERVICE_KEY` ở `backend/.env` và `agentic-ai/.env`.
+
+### 1. Terminal 1: Frontend
 
 ```bash
 cd frontend
@@ -218,7 +236,9 @@ npm install
 npm run dev
 ```
 
-### 2. Backend
+Frontend local mặc định chạy trên `http://localhost:5173`.
+
+### 2. Terminal 2: Backend
 
 ```bash
 cd backend
@@ -228,7 +248,16 @@ npm run dev
 
 Backend local mặc định chạy trên `http://localhost:6969`.
 
-### 3. Seed Demo Catalog
+### 3. Terminal 3: EmpathAI WebSocket
+
+```bash
+cd agentic-ai
+python ws_server.py
+```
+
+EmpathAI WebSocket local mặc định chạy trên `ws://127.0.0.1:8788`. Backend kết nối tới service này qua `AGENTIC_AI_WS_URL`.
+
+### 4. Seed Demo Catalog
 
 ```bash
 cd backend
@@ -249,30 +278,16 @@ cd backend
 npm run migrate:seed-images
 ```
 
-### 4. EmpathAI
-
-```bash
-cd agentic-ai
-conda activate deeplearning
-./run_agentic.sh
-```
-
-Hoặc chạy riêng:
-
-```bash
-cd agentic-ai
-python server.py
-python ws_server.py
-```
 
 ## Cấu Hình Quan Trọng
 
 ### Backend
 
 - `PORT=6969`
-- `MONGO_URI` trỏ tới MongoDB Atlas đã deploy
+- `MONGO_URI` trỏ tới MongoDB local hoặc MongoDB Atlas
 - `CHAT_PROVIDER=agentic`
 - `AGENTIC_AI_WS_URL=ws://127.0.0.1:8788`
+- `AI_INTERNAL_SERVICE_KEY` dùng chung với `agentic-ai/.env` nếu bật internal lookup
 
 ### Frontend
 
@@ -280,11 +295,14 @@ python ws_server.py
 
 ### EmpathAI
 
-- `EMPATHY_MODE=groq` là mặc định; nếu Groq lỗi, hệ thống sẽ fallback sang Featherless
+- `PORT=8788`
+- `SHOP_API_BASE_URL=http://127.0.0.1:6969/api`
+- `EMPATHY_MODE=groq` là mặc định; nếu Groq lỗi, hệ thống có thể fallback sang Featherless
 - `GROQ_API_KEY`
 - `GROQ_BASE_URL=https://api.groq.com/openai/v1`
 - `FEATHERLESS_API_KEY`
 - `FEATHERLESS_BASE_URL=https://api.featherless.ai/v1`
+- `LANGFUSE_*`, `QDRANT_*`, `UPSTASH_REDIS_*` là optional cho tracing, retrieval và cache
 
 ## Deploy Nhanh Trên Render
 

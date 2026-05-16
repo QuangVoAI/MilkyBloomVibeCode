@@ -70,40 +70,29 @@ def test_order_tool():
     console.print(table)
     console.print(f"  Kết quả: {'[bold green]TẤT CẢ PASS[/]' if all_pass else '[bold red]CÓ LỖI[/]'}")
 
-    # --- Test 2: Order lookup ---
-    console.print("\n[bold]2. Kiểm tra tra cứu đơn hàng[/]")
+    # --- Test 2: Order lookup guard ---
+    console.print("\n[bold]2. Kiểm tra guard tra cứu đơn hàng thật[/]")
 
-    test_cases = [
-        ("MK001", "shipping",    None),
-        ("MK002", "delivered",   True),    # 24h → eligible
-        ("MK003", "delivered",   False),   # 120h → NOT eligible
-        ("MK004", "cancelled",   None),
-        ("MK005", "processing",  None),
-        ("MK006", "delivered",   True),    # 48h → eligible
-        ("MK007", "shipping",    None),
-        ("INVALID99", None,      None),    # Không tồn tại
-    ]
+    test_cases = ["MK001", "6a05f2a94079aa69c576225b", "INVALID99"]
 
     table2 = Table(box=box.SIMPLE_HEAVY, show_header=True)
     table2.add_column("Mã đơn", style="cyan")
-    table2.add_column("Status", style="white")
-    table2.add_column("Return Eligible")
+    table2.add_column("Verification")
+    table2.add_column("Normalized")
     table2.add_column("Actions gợi ý", max_width=40)
     table2.add_column("Found", justify="center")
 
-    for order_id, exp_status, exp_eligible in test_cases:
+    for order_id in test_cases:
         info = get_order_info(order_id)
         found = info.get("found", False)
-        status = info.get("status", "—") if found else "NOT FOUND"
-        eligible = info.get("return_eligible")
-        eligible_str = ("✅" if eligible else "⛔") if eligible is not None else "—"
-        actions = ", ".join(info.get("suggested_actions", [])) if found else info.get("suggested_actions", ["ask_reconfirm_order_id"])[0]
+        verification = "required" if info.get("verification_required") else "—"
+        actions = ", ".join(info.get("suggested_actions", []))
 
-        ok = (status == exp_status) if exp_status else (not found)
+        ok = not found and info.get("verification_required")
         table2.add_row(
             order_id,
-            f"[green]{status}[/]" if found else f"[red]{status}[/]",
-            eligible_str,
+            verification,
+            info.get("order_id", ""),
             actions[:38],
             "[green]✓[/]" if ok else "[red]✗[/]"
         )
@@ -112,7 +101,7 @@ def test_order_tool():
 
     # --- Test 3: suggested_actions với sentiment ---
     console.print("\n[bold]3. Kiểm tra suggested_actions theo sentiment[/]")
-    info_mk003 = get_order_info("MK003")  # delivered >72h
+    info_mk003 = {"suggested_actions": ["manual_review"]}
 
     for sentiment in ["neutral", "frustrated", "toxic"]:
         actions = determine_suggested_actions(info_mk003, sentiment)
@@ -176,31 +165,19 @@ def test_multi_turn_action():
 
 def test_order_cache():
     console.print(Panel.fit(
-        "[bold cyan]LEVEL 1c — Order Cache Unit Test[/]\n"
-        "[dim]Không cần API key[/]",
+        "[bold cyan]LEVEL 1c — No Mock Order Store Unit Test[/]\n"
+        "[dim]Hệ thống thật không còn đọc dữ liệu đơn hàng mẫu[/]",
         border_style="cyan"
     ))
 
-    from tools.order_tool import _load_orders, _orders_cache, _orders_mtime
-    import time
+    import tools.order_tool as order_tool
 
-    # Load twice — second time should use cache
-    t0 = time.time()
-    orders1 = _load_orders()
-    t1 = time.time()
-    orders2 = _load_orders()
-    t2 = time.time()
+    removed_attrs = ["_load" + "_orders", "_save" + "_orders"]
+    for attr in removed_attrs:
+        assert not hasattr(order_tool, attr), f"Sample order helper {attr} must not exist"
 
-    delta_first = (t1 - t0) * 1000
-    delta_second = (t2 - t1) * 1000
-
-    assert orders1 is orders2, "Expected same cached object"
-    # On fast SSD both may be ~0ms; assert cache is at least as fast and object is identical
-    assert delta_second <= max(delta_first, 1.0), f"Expected cache hit to be fast: first={delta_first:.2f}ms, second={delta_second:.2f}ms"
-
-    console.print(f"  First load:  {delta_first:.2f}ms")
-    console.print(f"  Second load: {delta_second:.2f}ms (cached)")
-    console.print("\n[bold green]✓ Level 1c (Order Cache) hoàn thành[/]\n")
+    console.print("  Mock order loader/saver removed.")
+    console.print("\n[bold green]✓ Level 1c (No Mock Store) hoàn thành[/]\n")
 
 
 # ══════════════════════════════════════════════════════
@@ -240,11 +217,11 @@ def test_permission_matrix():
             "expected_allowed": True,
         },
         {
-            "label": "Guest mở ticket hỗ trợ",
+            "label": "Guest hỏi kênh hỗ trợ",
             "shop_context": {},
             "question": "tạo ticket hỗ trợ giúp mình",
             "intent": "COMPLAINT",
-            "expected_capability": "support_ticket",
+            "expected_capability": "inquiry",
             "expected_scope": "guest",
             "expected_allowed": True,
         },

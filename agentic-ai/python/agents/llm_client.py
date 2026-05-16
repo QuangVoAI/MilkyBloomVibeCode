@@ -28,6 +28,12 @@ from config import (
     FEATHERLESS_HTTP_REFERER,
     FEATHERLESS_X_TITLE,
 )
+from utils.observability import (
+    langfuse_safe_messages,
+    openai_usage_details,
+    redact_for_langfuse,
+    update_current_generation_safe,
+)
 
 # Langfuse decorator (graceful fallback if not configured)
 try:
@@ -184,6 +190,16 @@ async def _openai_chat_complete(
         temperature=temperature,
         stream=False,
     )
+    update_current_generation_safe(
+        input={"messages": langfuse_safe_messages(messages)},
+        model=model,
+        model_parameters={
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+        },
+        metadata={"provider": provider_name},
+    )
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
@@ -194,6 +210,11 @@ async def _openai_chat_complete(
         ) as resp:
             if resp.status != 200:
                 error_text = await resp.text()
+                update_current_generation_safe(
+                    level="ERROR",
+                    status_message=f"{provider_name.title()} API error ({resp.status})",
+                    output=redact_for_langfuse(error_text[:500]),
+                )
                 raise RuntimeError(
                     f"{provider_name.title()} API error ({resp.status}): {error_text[:500]}"
                 )
@@ -201,8 +222,14 @@ async def _openai_chat_complete(
             result = await resp.json()
             choices = result.get("choices", [])
             if choices:
-                return choices[0].get("message", {}).get("content", "")
-            return ""
+                content = choices[0].get("message", {}).get("content", "")
+            else:
+                content = ""
+            update_current_generation_safe(
+                output=redact_for_langfuse(content),
+                usage_details=openai_usage_details(result.get("usage")),
+            )
+            return content
 
 
 async def _openai_stream_complete(
@@ -235,6 +262,17 @@ async def _openai_stream_complete(
         temperature=temperature,
         stream=True,
     )
+    update_current_generation_safe(
+        input={"messages": langfuse_safe_messages(messages)},
+        model=model,
+        model_parameters={
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        },
+        metadata={"provider": provider_name},
+    )
+    output_parts: list[str] = []
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
@@ -245,6 +283,11 @@ async def _openai_stream_complete(
         ) as resp:
             if resp.status != 200:
                 error_text = await resp.text()
+                update_current_generation_safe(
+                    level="ERROR",
+                    status_message=f"{provider_name.title()} stream error ({resp.status})",
+                    output=redact_for_langfuse(error_text[:500]),
+                )
                 raise RuntimeError(
                     f"{provider_name.title()} stream error ({resp.status}): {error_text[:500]}"
                 )
@@ -256,6 +299,9 @@ async def _openai_stream_complete(
 
                 data_str = line[5:].strip()
                 if data_str == "[DONE]":
+                    update_current_generation_safe(
+                        output=redact_for_langfuse("".join(output_parts)),
+                    )
                     return
 
                 try:
@@ -266,9 +312,13 @@ async def _openai_stream_complete(
                         .get("content", "")
                     )
                     if delta:
+                        output_parts.append(delta)
                         yield delta
                 except (json.JSONDecodeError, IndexError, AttributeError):
                     continue
+            update_current_generation_safe(
+                output=redact_for_langfuse("".join(output_parts)),
+            )
 
 
 # ─── Non-Streaming Completion ────────────────────────────
@@ -294,7 +344,7 @@ async def groq_complete(
     )
 
 
-@observe(name="groq_chat_complete", as_type="generation")
+@observe(name="groq_chat_complete", as_type="generation", capture_input=False, capture_output=False)
 async def groq_chat_complete(
     messages: list[dict],
     model: str = GROQ_MODEL_SMART,
@@ -377,7 +427,7 @@ async def groq_stream_complete(
         yield token
 
 
-@observe(name="groq_stream_chat_complete", as_type="generation")
+@observe(name="groq_stream_chat_complete", as_type="generation", capture_input=False, capture_output=False)
 async def groq_stream_chat_complete(
     messages: list[dict],
     model: str = GROQ_MODEL_SMART,

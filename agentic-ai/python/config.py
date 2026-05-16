@@ -86,7 +86,22 @@ REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", str(7 * 24 * 3600)))
 # --- Langfuse ---
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
-LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+LANGFUSE_BASE_URL = (
+    os.getenv("LANGFUSE_BASE_URL")
+    or os.getenv("LANGFUSE_HOST")
+    or "https://cloud.langfuse.com"
+)
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST") or LANGFUSE_BASE_URL
+
+# Langfuse SDK v4 reads LANGFUSE_BASE_URL while older examples used LANGFUSE_HOST.
+# Keep both populated after .env is loaded so imports later in the process see
+# consistent credentials and do not initialize a disabled client.
+if LANGFUSE_SECRET_KEY:
+    os.environ.setdefault("LANGFUSE_SECRET_KEY", LANGFUSE_SECRET_KEY)
+if LANGFUSE_PUBLIC_KEY:
+    os.environ.setdefault("LANGFUSE_PUBLIC_KEY", LANGFUSE_PUBLIC_KEY)
+os.environ.setdefault("LANGFUSE_BASE_URL", LANGFUSE_BASE_URL)
+os.environ.setdefault("LANGFUSE_HOST", LANGFUSE_HOST)
 
 # --- Rewrite / Self-Reflective RAG ---
 MAX_REWRITE_RETRIES = 2

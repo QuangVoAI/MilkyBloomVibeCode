@@ -43,7 +43,7 @@ graph TD
 
     KW --> REDIS[(Redis Cache)]
     KW --> QDRANT[(Qdrant<br/>Vector DB)]
-    KW --> ORDERS[(mock_orders.json<br/>Order Database)]
+    KW --> ORDERS[(MilkyBloom Backend<br/>Orders API)]
     KW --> LLM[LLM Backend<br/>Groq / Featherless]
 
     style U fill:#4CAF50,color:#fff
@@ -161,13 +161,13 @@ Confirm hành động đã xử lý]
 
 | Tin nhắn khách | Phát hiện | Điều kiện | Kết quả |
 |:---|:---|:---|:---|
-| `"đặt nhầm địa chỉ, địa chỉ đúng là 45 Nguyễn Trãi Q.1"` + MK001 đang ship | Semantic / Regex | Địa chỉ mới có trong tin | ✅ Cập nhật ngay + trả Ticket ID |
+| `"đặt nhầm địa chỉ, địa chỉ đúng là 45 Nguyễn Trãi Q.1"` + đơn đang ship | Semantic / Regex | Địa chỉ mới có trong tin + backend cho phép | ✅ Gọi API cập nhật địa chỉ |
 | `"muốn đổi địa chỉ"` (không nói địa chỉ mới) | Semantic ≥ 0.55 | Thiếu địa chỉ mới | ❓ AI hỏi lại địa chỉ mới |
 | `"chỉnh sửa nơi nhận hàng giúp mình"` | Semantic ≥ 0.55 | Không có mã đơn | ❓ AI hỏi mã đơn hàng |
-| `"hủy đơn MK005"` | Regex / Semantic | MK005 đang processing | ✅ Hủy + hoàn tiền tự động |
-| `"hủy đơn MK001"` | Regex / Semantic | MK001 đang ship | 🚫 Báo không thể + gợi ý liên hệ carrier |
-| `"đơn MK002 lỗi, đổi trả"` | Regex / Semantic | Giao 48h — trong 72h | ✅ Tạo yêu cầu đổi trả |
-| `"đơn MK003 hỏng, hoàn tiền"` | Regex / Semantic | Giao 120h — quá 72h | 🚫 Báo quá hạn + mở ticket hỗ trợ |
+| `"hủy đơn <mã đơn>"` | Regex / Semantic | Đơn đang processing + backend cho phép | ✅ Gọi API hủy đơn |
+| `"hủy đơn <mã đơn>"` | Regex / Semantic | Đơn đang ship | 🚫 Báo không thể hủy trên backend |
+| `"đơn <mã đơn> lỗi, đổi trả"` | Regex / Semantic | Backend chưa có endpoint đổi trả chatbot | 🚫 Không tạo dữ liệu giả, hướng dẫn kênh hỗ trợ hiện có |
+| `"đơn <mã đơn> hỏng, hoàn tiền"` | Regex / Semantic | Backend chưa có endpoint hoàn tiền chatbot | 🚫 Không tạo dữ liệu giả, hướng dẫn kênh hỗ trợ hiện có |
 
 ---
 
@@ -279,7 +279,7 @@ empathai/
 │   │   ├── grader.py           # Document relevance grader
 │   │   └── rewriter.py         # Query rewriter
 │   ├── tools/
-│   │   ├── order_tool.py       # Extract order ID + lookup mock DB
+│   │   ├── order_tool.py       # Extract order ID + lookup backend Orders API
 │   │   └── action_tool.py      # Detect intent + execute actions
 │   ├── retrieval/              # Hybrid Search + Reranker
 │   ├── indexing/               # Query engine (Qdrant interface)
@@ -287,8 +287,7 @@ empathai/
 │   └── utils/
 │
 ├── data/
-│   ├── mykingdom_policies.json # Chính sách RAG source
-│   └── mock_orders.json        # Mock order database (7 đơn mẫu)
+│   └── mykingdom_policies.json # Chính sách RAG source
 ├── docker-compose.yml
 └── .env
 ```

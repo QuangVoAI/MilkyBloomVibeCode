@@ -134,6 +134,24 @@ module.exports = {
         return getOrderItemsForOrders(orders);
     },
 
+    async findByEmail(email) {
+        const normalizedEmail = String(email || "").trim().toLowerCase();
+        if (!normalizedEmail || !normalizedEmail.includes("@")) return [];
+
+        const users = await User.find({ email: normalizedEmail }).select('_id').lean();
+        if (users.length === 0) return [];
+
+        const orders = await Order.find({ userId: { $in: users.map(u => u._id) } })
+            .populate('userId', 'fullName email username phone')
+            .populate('addressId', 'fullNameOfReceiver phone addressLine city postalCode lat lng')
+            .populate('discountCodeId', 'code value')
+            .populate('voucherId', 'code value type')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        return getOrderItemsForOrders(orders);
+    },
+
   findByZaloAppTransId(apptransid) {
     return Order.findOne({ zaloAppTransId: apptransid }).lean();
   },

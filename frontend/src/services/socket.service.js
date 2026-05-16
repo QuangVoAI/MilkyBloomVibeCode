@@ -59,10 +59,12 @@ class SocketService {
   connect(userId, options = {}) {
     // Store userId for rejoining on reconnect
     this.userId = userId;
-    this.authToken = options.token || localStorage.getItem('authToken') || null;
+    const nextAuthToken = options.token || localStorage.getItem('authToken') || null;
+    const authTokenChanged = this.authToken !== nextAuthToken;
+    this.authToken = nextAuthToken;
     
     // If already connected, just join the room
-    if (this.socket?.connected) {
+    if (this.socket?.connected && !authTokenChanged) {
       if (userId) {
         this.socket.emit('join_user_room', userId);
       }

@@ -38,9 +38,9 @@ CAPABILITY_MATRIX = {
             "reason": "Guest can see loyalty policy, but personal points require login.",
         },
         "support_ticket": {
-            "allowed": True,
-            "mode": "public",
-            "reason": "Guest can create a support ticket.",
+            "allowed": False,
+            "mode": "blocked",
+            "reason": "Customer-facing support tickets are not available on the storefront.",
         },
         "clarify": {
             "allowed": True,
@@ -63,9 +63,9 @@ CAPABILITY_MATRIX = {
             "reason": "Logged-in users can see and redeem their loyalty points.",
         },
         "support_ticket": {
-            "allowed": True,
-            "mode": "public",
-            "reason": "Logged-in users can create support tickets.",
+            "allowed": False,
+            "mode": "blocked",
+            "reason": "Customer-facing support tickets are not available on the storefront.",
         },
         "clarify": {"allowed": True, "mode": "public", "reason": "Clarification is always allowed."},
     },
@@ -103,8 +103,8 @@ ACTION_MATRIX = {
             "reason": "Guest can only check an order after providing an order reference or verification detail.",
         },
         "create_ticket": {
-            "allowed": True,
-            "reason": "Guest can always open a support ticket.",
+            "allowed": False,
+            "reason": "Customer-facing support tickets are not available on the storefront.",
         },
     },
     "logged_in": {
@@ -134,8 +134,8 @@ ACTION_MATRIX = {
             "reason": "Logged-in users can check their own order.",
         },
         "create_ticket": {
-            "allowed": True,
-            "reason": "Logged-in users can open a support ticket.",
+            "allowed": False,
+            "reason": "Customer-facing support tickets are not available on the storefront.",
         },
     },
     "admin": {

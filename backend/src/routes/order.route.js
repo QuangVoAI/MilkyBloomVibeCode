@@ -19,7 +19,7 @@ router.get("/discount/:discountCodeId", auth, adminOnly, orderController.getOrde
 // Admin xem tất cả đơn hàng
 router.get("/admin/all", auth, adminOnly, orderController.adminGetAll);
 
-// Tìm đơn theo số điện thoại (internal CSKH lookup only)
+// Tìm đơn theo số điện thoại/email (internal CSKH lookup only)
 router.get("/guest/search", internalService, orderController.searchGuestOrdersByPhone);
 
 // Lấy chi tiết đơn guest (optional auth + access token)

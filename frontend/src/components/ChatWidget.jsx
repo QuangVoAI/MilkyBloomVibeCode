@@ -135,7 +135,7 @@ const getUserEmailFromStorage = () => {
 };
 
 const EMAIL_TEXT_PATTERN = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/i;
-const ORDER_ID_TEXT_PATTERN = /\b(?:MK|ORD|DH)[-_]?\d{3,8}\b/i;
+const ORDER_ID_TEXT_PATTERN = /\b(?:(?:MK|ORD|DH)[-_]?\d{3,8}|[a-f0-9]{24})\b/i;
 const PHONE_TEXT_PATTERN =
   /(?:\+?84|0)(?:[\s.-]?\d){9}\b/;
 
@@ -146,7 +146,11 @@ const getMessageEmail = (text) => {
 
 const getMessageOrderId = (text) => {
   const match = String(text || "").trim().match(ORDER_ID_TEXT_PATTERN);
-  return match ? match[0].toUpperCase().replace(/[-_]/g, "") : "";
+  if (!match) return "";
+  const normalized = match[0].replace(/[-_]/g, "");
+  return /^[a-f0-9]{24}$/i.test(normalized)
+    ? normalized.toLowerCase()
+    : normalized.toUpperCase();
 };
 
 const getMessagePhone = (text) => {
@@ -388,6 +392,12 @@ const ChatWidget = () => {
       token: localStorage.getItem("authToken") || "",
     });
 
+    const refreshSocketAuth = () => {
+      socketService.connect(getUserIdFromStorage(), {
+        token: localStorage.getItem("authToken") || "",
+      });
+    };
+
     const handleSocketConnect = () => {
       setChatPhase("connected");
     };
@@ -517,6 +527,8 @@ const ChatWidget = () => {
     socketService.on("chat_final", handleFinal);
     socketService.on("chat_error", handleError);
     socketService.on("chat_status", handleStatus);
+    window.addEventListener("userLoggedIn", refreshSocketAuth);
+    window.addEventListener("userLoggedOut", refreshSocketAuth);
 
     return () => {
       socketService.off("connect", handleSocketConnect);
@@ -527,6 +539,8 @@ const ChatWidget = () => {
       socketService.off("chat_final", handleFinal);
       socketService.off("chat_error", handleError);
       socketService.off("chat_status", handleStatus);
+      window.removeEventListener("userLoggedIn", refreshSocketAuth);
+      window.removeEventListener("userLoggedOut", refreshSocketAuth);
     };
   }, []);
 
@@ -568,6 +582,11 @@ const ChatWidget = () => {
       chatSessionIdRef.current ||
       `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     chatSessionIdRef.current = sessionId;
+    try {
+      sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+    } catch {
+      // ignore storage write failures
+    }
     streamingSessionIdRef.current = sessionId;
     setChatPhase("streaming");
     assistantIndexRef.current = nextMessages.length;
@@ -578,6 +597,11 @@ const ChatWidget = () => {
     const provider = normalizeProviderChoice(
       options.provider || effectiveProvider,
     );
+    const orderIdMatch = trimmed.match(/\b[a-f0-9]{24}\b/i);
+    const orderId = orderIdMatch?.[0]?.toLowerCase() || "";
+    const orderLookupToken = orderId
+      ? localStorage.getItem(`orderLookupToken:${orderId}`) || ""
+      : "";
     socketService.sendChatMessage({
       message: trimmed,
       history: nextMessages.slice(-MAX_HISTORY),
@@ -587,6 +611,8 @@ const ChatWidget = () => {
         localStorage.getItem("sessionId") ||
         localStorage.getItem("guestSessionId") ||
         "",
+      guestEmail: localStorage.getItem("guestEmail") || "",
+      orderLookupToken,
       authToken: localStorage.getItem("authToken") || "",
     });
   };
@@ -779,7 +805,7 @@ const ChatWidget = () => {
     );
   };
 
-  const renderLookupChip = (message, { type, label, toneClass, icon: Icon }) => {
+  const renderLookupChip = (message, { type, label, toneClass, icon }) => {
     const meta = message?.meta || {};
     const content = message?.content || "";
     let value = "";
@@ -798,6 +824,7 @@ const ChatWidget = () => {
     const iconClassName = isActive
       ? "h-3 w-3 text-amber-700 animate-pulse"
       : "h-3 w-3 opacity-80";
+    const LookupIcon = icon;
 
     return (
       <button
@@ -809,7 +836,7 @@ const ChatWidget = () => {
             : toneClass
         }`}
       >
-        <Icon className={iconClassName} />
+        <LookupIcon className={iconClassName} />
         {label}
       </button>
     );

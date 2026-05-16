@@ -1,23 +1,20 @@
 """
-Action Tool — Phát hiện intent hành động + Thực thi mock actions trên đơn hàng.
+Action Tool — Phát hiện intent hành động + gọi backend thật cho đơn hàng.
 
 Các action hỗ trợ:
   update_address    : Cập nhật địa chỉ giao hàng
   cancel_order      : Hủy đơn (chỉ khi đang processing)
   request_refund    : Yêu cầu hoàn tiền
   process_return    : Đổi trả sản phẩm (trong 72h)
-  create_ticket     : Tạo ticket hỗ trợ
+  create_ticket     : Không dùng ở storefront khách hàng
   no_action         : Không cần thực thi gì (hỏi thăm, inquiry)
 
 Luồng:
   detect_action_intent(question, order_info) → action_intent
   execute_action(action_intent, order_info)  → action_result
 """
-import json
 import re
 import sys
-import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import unicodedata
@@ -30,16 +27,13 @@ from agents.model_registry import get_embed_model, get_embed_cached
 from agents.prompt_registry import prompt_meta
 from utils.console import console
 
-# Import cached order loader/saver from order_tool to avoid duplicate I/O
-from tools.order_tool import _load_orders, _save_orders, extract_order_id, extract_phone_number
+from tools.order_tool import extract_order_id, extract_phone_number
 try:
     from tools.shop_client import cancel_order as remote_cancel_order
     from tools.shop_client import update_address as remote_update_address
-    from tools.shop_client import create_support_ticket as remote_create_support_ticket
 except Exception:
     remote_cancel_order = None
     remote_update_address = None
-    remote_create_support_ticket = None
 
 
 # ════════════════════════════════════════════════════════
@@ -551,10 +545,10 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
 
     if action == "create_ticket":
         return {
-            "action": "create_ticket",
-            "executable": True,
+            "action": "no_action",
+            "executable": False,
             "needs_order_id": False,
-            "block_reason": "",
+            "block_reason": "Customer-facing support tickets are not available on the storefront.",
             "confidence": {**action_meta, "method": decision_method},
         }
 
@@ -640,29 +634,29 @@ def resume_action_intent(question: str, order_info: dict, pending: dict) -> dict
 
     if action == "create_ticket":
         return {
-            "action": "create_ticket",
-            "executable": True,
+            "action": "no_action",
+            "executable": False,
             "needs_order_id": False,
-            "block_reason": "",
+            "block_reason": "Customer-facing support tickets are not available on the storefront.",
         }
 
     return detect_action_intent(question, order_info)
 
 
 # ════════════════════════════════════════════════════════
-# Mock Action Execution (ghi vào mock_orders.json)
+# Real Action Execution
 # ════════════════════════════════════════════════════════
 
 def execute_action(action_intent: dict, order_info: dict, context: dict | None = None) -> dict:
     """
-    Thực thi hành động trên mock DB và trả về kết quả.
+    Thực thi hành động qua backend thật và trả về kết quả.
 
     Returns:
         {
           "success": bool,
           "action": str,
           "message": str,           # thông báo cho LLM biết để confirm với khách
-          "ticket_id": str|None,    # nếu có tạo ticket
+          "ticket_id": str|None,    # mã yêu cầu nội bộ nếu có
           "updated_fields": dict,   # trường nào đã thay đổi
         }
     """
@@ -671,67 +665,19 @@ def execute_action(action_intent: dict, order_info: dict, context: dict | None =
     executable = action_intent.get("executable", False)
     block_reason = action_intent.get("block_reason", "")
     ctx = context or {}
-    use_remote = bool(ctx.get("auth_token") or ctx.get("token") or ctx.get("email") or ctx.get("user_email"))
-    ticket_id = f"TK{uuid.uuid4().hex[:6].upper()}"
+    has_auth = bool(ctx.get("auth_token") or ctx.get("token"))
 
     if action == "no_action":
         return {"success": False, "action": action, "message": "", "ticket_id": None, "updated_fields": {}}
 
     if action == "create_ticket":
-        subject = (
-            action_intent.get("subject")
-            or (f"Yêu cầu hỗ trợ đơn {order_id}" if order_id else "Yêu cầu hỗ trợ từ chatbot")
-        )
-        description = (
-            action_intent.get("description")
-            or order_info.get("summary")
-            or block_reason
-            or "Khách cần hỗ trợ"
-        )
-        ticket_payload = {
-            "subject": subject,
-            "description": description,
-            "channel": "chat",
-            "category": action_intent.get("category") or "other",
-            "priority": action_intent.get("priority") or "normal",
-            "orderId": order_info.get("raw", {}).get("_id") or order_info.get("raw", {}).get("id") or None,
-            "sourceMessage": ctx.get("question") or description,
-            "contactName": ctx.get("user_name") or ctx.get("full_name") or "",
-            "contactEmail": ctx.get("email") or ctx.get("user_email") or "",
-            "contactPhone": ctx.get("phone") or ctx.get("user_phone") or "",
-            "metadata": {
-                "session_id": ctx.get("session_id") or "",
-                "user_id": ctx.get("user_id") or "",
-                "order_id": order_id or "",
-            },
-        }
-
-        if use_remote and remote_create_support_ticket:
-            result = remote_create_support_ticket(ticket_payload, ctx)
-            if result.get("success"):
-                ticket_number = result.get("ticketNumber") or result.get("data", {}).get("ticketNumber") or ticket_id
-                ticket_record_id = result.get("ticketId") or result.get("data", {}).get("_id") or ""
-                return {
-                    "success": True,
-                    "action": action,
-                    "message": result.get("message") or f"Đã tạo ticket hỗ trợ **{ticket_number}**.",
-                    "ticket_id": ticket_record_id or ticket_number,
-                    "updated_fields": {
-                        "ticket_id": ticket_record_id,
-                        "ticket_number": ticket_number,
-                    },
-                }
-
         return {
-            "success": True,
+            "success": False,
             "action": action,
-            "message": (
-                f"Đã tạo ticket hỗ trợ **{ticket_id}**.\n"
-                f"• Mô tả: {description}\n"
-                f"• Mã ticket: {ticket_id}"
-            ),
-            "ticket_id": ticket_id,
-            "updated_fields": {"ticket_number": ticket_id},
+            "message": "Website hiện chưa có khu vực ticket hỗ trợ cho khách hàng theo dõi.",
+            "ticket_id": None,
+            "updated_fields": {},
+            "blocked": True,
         }
 
     if not executable:
@@ -762,122 +708,101 @@ def execute_action(action_intent: dict, order_info: dict, context: dict | None =
             "blocked": True,
         }
 
-    orders = _load_orders()
-    if order_id not in orders:
-        return {"success": False, "action": action, "message": f"Không tìm thấy {order_id} trong DB", "ticket_id": None, "updated_fields": {}}
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # ── Update Address ──
     if action == "update_address":
         new_addr = action_intent.get("new_address", "")
-        old_addr = orders[order_id].get("address", "")
         address_obj = order_info.get("raw", {}).get("addressId") or order_info.get("raw", {}).get("shippingAddress") or {}
         address_id = address_obj.get("_id") or address_obj.get("id") or order_info.get("raw", {}).get("addressId")
-        if use_remote and remote_update_address and address_id:
-            result = remote_update_address(str(address_id), {"addressLine": new_addr}, ctx)
-            if result.get("success"):
-                return {
-                    "success": True,
-                    "action": action,
-                    "message": f"Đã cập nhật địa chỉ giao hàng thật cho đơn **{order_id}**.",
-                    "ticket_id": result.get("data", {}).get("_id") or result.get("ticket_id"),
-                    "updated_fields": {"address": new_addr, "old_address": old_addr},
-                }
-        orders[order_id]["address"] = new_addr
-        orders[order_id]["address_updated_at"] = timestamp
-        orders[order_id]["address_history"] = old_addr
-        _save_orders(orders)
-        return {
-            "success": True,
-            "action": action,
-            "message": (
-                f"Đã cập nhật địa chỉ giao hàng cho đơn **{order_id}**:\n"
-                f"• Địa chỉ cũ: {old_addr}\n"
-                f"• Địa chỉ mới: **{new_addr}**\n"
-                f"• Thời gian cập nhật: {timestamp}\n"
-                f"• Mã yêu cầu: {ticket_id}"
-            ),
-            "ticket_id": ticket_id,
-            "updated_fields": {"address": new_addr, "old_address": old_addr},
-        }
-
-    # ── Cancel Order ──
-    if action == "cancel_order":
-        if use_remote and remote_cancel_order:
-            result = remote_cancel_order(order_id, ctx)
-            if result.get("success"):
-                return {
-                    "success": True,
-                    "action": action,
-                    "message": result.get("message") or f"Đã hủy đơn thật **{order_id}**.",
-                    "ticket_id": result.get("ticket_id"),
-                    "updated_fields": {"status": "cancelled"},
-                }
-        orders[order_id]["status"] = "cancelled"
-        orders[order_id]["cancelled_reason"] = "Khách yêu cầu hủy qua AI CSKH"
-        orders[order_id]["cancelled_at"] = timestamp
-        orders[order_id]["refund_status"] = "processing"
-        orders[order_id]["refund_days_remaining"] = 3
-        _save_orders(orders)
-        total = orders[order_id].get("total", 0)
-        return {
-            "success": True,
-            "action": action,
-            "message": (
-                f"Đã hủy đơn **{order_id}** thành công.\n"
-                f"• Hoàn tiền: **{total:,}đ** — dự kiến 3-5 ngày làm việc\n"
-                f"• Mã yêu cầu: {ticket_id}"
-            ),
-            "ticket_id": ticket_id,
-            "updated_fields": {"status": "cancelled"},
-        }
-
-    # ── Request Refund ──
-    if action == "request_refund":
-        # Guard: không overwrite nếu hoàn tiền đã hoàn tất
-        if orders[order_id].get("refund_status") == "completed":
+        if not address_id:
             return {
                 "success": False,
                 "action": action,
-                "message": "Hoàn tiền cho đơn này đã hoàn tất trước đó",
+                "message": "Backend chưa trả về mã địa chỉ để cập nhật đơn này.",
                 "ticket_id": None,
                 "updated_fields": {},
                 "blocked": True,
             }
-        orders[order_id]["refund_requested"] = True
-        orders[order_id]["refund_requested_at"] = timestamp
-        orders[order_id]["refund_status"] = "processing"
-        _save_orders(orders)
-        total = orders[order_id].get("total", 0)
+        if not remote_update_address:
+            return {
+                "success": False,
+                "action": action,
+                "message": "Client backend chưa sẵn sàng để cập nhật địa chỉ.",
+                "ticket_id": None,
+                "updated_fields": {},
+                "blocked": True,
+            }
+        result = remote_update_address(str(address_id), {"addressLine": new_addr}, ctx)
+        if result.get("success"):
+            return {
+                "success": True,
+                "action": action,
+                "message": f"Đã cập nhật địa chỉ giao hàng thật cho đơn **{order_id}**.",
+                "ticket_id": result.get("data", {}).get("_id") or result.get("ticket_id"),
+                "updated_fields": {"address": new_addr},
+            }
         return {
-            "success": True,
+            "success": False,
             "action": action,
-            "message": (
-                f"Đã tạo yêu cầu hoàn tiền cho đơn **{order_id}**.\n"
-                f"• Số tiền hoàn: **{total:,}đ**\n"
-                f"• Thời gian xử lý: 3-5 ngày làm việc\n"
-                f"• Mã ticket: {ticket_id}"
-            ),
-            "ticket_id": ticket_id,
-            "updated_fields": {"refund_status": "processing"},
+            "message": result.get("message") or "Backend chưa cập nhật được địa chỉ cho đơn này.",
+            "ticket_id": None,
+            "updated_fields": {},
+            "blocked": True,
         }
 
-    # ── Process Return ──
-    if action == "process_return":
-        orders[order_id]["return_requested"] = True
-        orders[order_id]["return_requested_at"] = timestamp
-        _save_orders(orders)
+    if action == "cancel_order":
+        if not has_auth:
+            return {
+                "success": False,
+                "action": action,
+                "message": "Mình cần bạn đăng nhập hoặc xác minh chủ đơn trước khi hủy đơn.",
+                "ticket_id": None,
+                "updated_fields": {},
+                "blocked": True,
+            }
+        if not remote_cancel_order:
+            return {
+                "success": False,
+                "action": action,
+                "message": "Client backend chưa sẵn sàng để hủy đơn.",
+                "ticket_id": None,
+                "updated_fields": {},
+                "blocked": True,
+            }
+        result = remote_cancel_order(order_id, ctx)
+        if result.get("success"):
+            return {
+                "success": True,
+                "action": action,
+                "message": result.get("message") or f"Đã hủy đơn thật **{order_id}**.",
+                "ticket_id": result.get("ticket_id"),
+                "updated_fields": {"status": "cancelled"},
+            }
         return {
-            "success": True,
+            "success": False,
             "action": action,
-            "message": (
-                f"Đã tạo yêu cầu đổi trả cho đơn **{order_id}**.\n"
-                f"• Phương thức: Nhân viên sẽ liên hệ trong vòng 24h để thu hồi hàng\n"
-                f"• Mã ticket: {ticket_id}"
-            ),
-            "ticket_id": ticket_id,
-            "updated_fields": {"return_requested": True},
+            "message": result.get("message") or "Backend chưa hủy được đơn này.",
+            "ticket_id": None,
+            "updated_fields": {},
+            "blocked": True,
+        }
+
+    if action == "request_refund":
+        return {
+            "success": False,
+            "action": action,
+            "message": "Backend hiện chưa có endpoint hoàn tiền tự động cho chatbot.",
+            "ticket_id": None,
+            "updated_fields": {},
+            "blocked": True,
+        }
+
+    if action == "process_return":
+        return {
+            "success": False,
+            "action": action,
+            "message": "Backend hiện chưa có endpoint đổi trả tự động cho chatbot.",
+            "ticket_id": None,
+            "updated_fields": {},
+            "blocked": True,
         }
 
     return {"success": False, "action": action, "message": "Action không được hỗ trợ", "ticket_id": None, "updated_fields": {}}

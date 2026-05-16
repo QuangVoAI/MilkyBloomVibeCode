@@ -5,7 +5,7 @@ This folder contains the Python core moved from `Agentic_customer_service_AI`.
 ## What is kept
 
 - `python/` LangGraph orchestrator
-- `data/` policies and mock order data
+- `data/` policy documents for RAG
 - `server.py` as an internal HTTP bridge for diagnostics
 
 ## What is not mounted into the main web app
