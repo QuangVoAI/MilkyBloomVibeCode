@@ -182,11 +182,14 @@ export function useCart(userId = null, authLoading = false) {
 
   // Cleanup on unmount
   useEffect(() => {
+    const timers = debounceTimersRef.current;
+    const controllers = itemAbortControllersRef.current;
+
     return () => {
       // Clear all debounce timers
-      Object.values(debounceTimersRef.current).forEach(timer => clearTimeout(timer));
+      Object.values(timers).forEach((timer) => clearTimeout(timer));
       // Abort all pending requests
-      Object.values(itemAbortControllersRef.current).forEach(controller => controller.abort());
+      Object.values(controllers).forEach((controller) => controller.abort());
     };
   }, []);
 

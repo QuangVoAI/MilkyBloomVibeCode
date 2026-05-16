@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { useCartContext } from '@/context/CartProvider';
+import { useCartContext } from '@/context/CartContext';
 
 export const useCart = () => {
   const {

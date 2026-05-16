@@ -1,4 +1,4 @@
-import { Trash2, Upload, X, Image } from 'lucide-react';
+import { Trash2, X, Image } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge';
 import { parsePrice } from '@/utils/priceUtils';
@@ -16,13 +16,6 @@ const VariantList = ({ variants, onUpdatePrice, onUpdateStock, onUpdateWeight, o
     // Pass file and preview to parent
     if (onUpdateImage) {
       onUpdateImage(index, { file, previewUrl });
-    }
-  };
-
-  // Handle URL input for variant image
-  const handleUrlInput = (index, url) => {
-    if (onUpdateImage) {
-      onUpdateImage(index, { url });
     }
   };
 

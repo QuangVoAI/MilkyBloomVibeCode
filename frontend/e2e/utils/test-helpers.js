@@ -1,3 +1,5 @@
+/* global process */
+
 const DEFAULT_API_BASE = 'http://localhost:6969/api';
 const DEFAULT_APP_BASE = 'http://localhost:5173';
 

@@ -6,7 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import Badge from '@/components/ui/badge';
 import './ProductReviews.css';
 
-const ProductReviews = ({ productId, rating = 0, reviewCount = 0 }) => {
+const ProductReviews = ({ rating = 0, reviewCount = 0 }) => {
   const [reviews] = useState([
     // Mock reviews - in real app, fetch from API
     {

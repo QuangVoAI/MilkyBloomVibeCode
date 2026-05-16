@@ -55,10 +55,9 @@ const ProductFilters = ({ filters, onFilterChange, onClearFilters, categories = 
               <Select 
                 value={filters.status || 'all'} 
                 onValueChange={(v) => handleChange('status', v)}
-                disabled={loadingStatuses}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={loadingStatuses ? 'Loading...' : 'All Statuses'} />
+                  <SelectValue placeholder='All Statuses' />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value='all'>All Statuses</SelectItem>

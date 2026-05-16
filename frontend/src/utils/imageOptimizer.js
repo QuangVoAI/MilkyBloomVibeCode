@@ -49,30 +49,6 @@ const rewriteGridFsUrl = (value) => {
   }
 };
 
-const isSupportedUrl = (url) => {
-  if (!url || typeof url !== 'string') return false;
-
-  const trimmed = url.trim();
-  if (!trimmed) return false;
-  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return true;
-  if (trimmed.startsWith('/placeholder')) return true;
-  if (trimmed.startsWith(LEGACY_SEED_IMAGE_PREFIX)) return false;
-
-  if (trimmed.startsWith('/api/media/images/')) {
-    return GRIDFS_IMAGE_PATH_PATTERN.test(trimmed);
-  }
-
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    if (trimmed.includes('/api/media/images/')) {
-      return GRIDFS_IMAGE_PATH_PATTERN.test(trimmed);
-    }
-
-    return true;
-  }
-
-  return false;
-};
-
 export const normalizeImageUrl = (url, fallback = '/placeholder.svg') => {
   if (!url || typeof url !== 'string') return fallback;
 

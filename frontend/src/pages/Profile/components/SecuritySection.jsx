@@ -135,7 +135,7 @@ const SecuritySection = ({ onChangePassword, loading }) => {
     let success = false;
     try {
       success = await onChangePassword(formData.currentPassword, formData.newPassword);
-    } catch (err) {
+    } catch {
       // Completely absorb any error
       success = false;
     }

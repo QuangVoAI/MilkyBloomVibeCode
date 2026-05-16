@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft, Calendar, CheckCircle, Clock, Ticket, UserCheck, MessageSquare, Tag } from 'lucide-react';
@@ -55,7 +55,7 @@ const TicketDetailPage = () => {
     resolutionNote: '',
   });
 
-  const loadTicket = async () => {
+  const loadTicket = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -95,12 +95,12 @@ const TicketDetailPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [ticketId]);
 
   useEffect(() => {
     if (!ticketId) return;
     loadTicket();
-  }, [ticketId]);
+  }, [ticketId, loadTicket]);
 
   const handleSave = async () => {
     if (!ticket) return;

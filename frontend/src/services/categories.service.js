@@ -22,9 +22,6 @@ export const getCategories = async (options = {}) => {
   
   const { limit, forceRefresh = false } = opts;
   
-  // Build cache key based on limit (different limits = different cache entries)
-  const cacheKey = limit ? `limit_${limit}` : 'all';
-  
   // Return cached data if valid, not forcing refresh, and same limit
   const now = Date.now();
   if (!forceRefresh && !limit && categoriesCache && (now - cacheTimestamp) < CACHE_DURATION) {

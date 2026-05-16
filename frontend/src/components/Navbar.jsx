@@ -4,7 +4,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { getCategories } from '@/services/categories.service'
 import { useAuth } from '@/hooks/useAuth'
-import { useCartContext } from '@/context/CartProvider'
+import { useCartContext } from '@/context/CartContext'
 import OptimizedImage from '@/components/ui/OptimizedImage'
 import './Navbar.css'
 
@@ -205,9 +205,9 @@ const Navbar = () => {
 
                 {/* Navigation Links */}
                 <ul className="mobile-nav-links">
-                    {NAV_LINKS.map(({ to, label, icon: Icon, isDropdown }) => (
-                        <li key={label}>
-                            {isDropdown ? (
+                    {NAV_LINKS.map((link) => (
+                        <li key={link.label}>
+                            {link.isDropdown ? (
                                 // Categories with expandable submenu
                                 <>
                                     <button
@@ -215,8 +215,8 @@ const Navbar = () => {
                                         onClick={() => setShowMobileCategoryMenu(!showMobileCategoryMenu)}
                                     >
                                         <span className="mobile-nav-button-content">
-                                            <Icon size={20} />
-                                            {label.charAt(0) + label.slice(1).toLowerCase()}
+                                            {React.createElement(link.icon, { size: 20 })}
+                                            {link.label.charAt(0) + link.label.slice(1).toLowerCase()}
                                         </span>
                                         <ChevronDown 
                                             size={16} 
@@ -251,9 +251,9 @@ const Navbar = () => {
                                     )}
                                 </>
                             ) : (
-                                <NavLink to={to} onClick={closeMobileMenu}>
-                                    <Icon size={20} />
-                                    {label.charAt(0) + label.slice(1).toLowerCase()}
+                                <NavLink to={link.to} onClick={closeMobileMenu}>
+                                    {React.createElement(link.icon, { size: 20 })}
+                                    {link.label.charAt(0) + link.label.slice(1).toLowerCase()}
                                 </NavLink>
                             )}
                         </li>

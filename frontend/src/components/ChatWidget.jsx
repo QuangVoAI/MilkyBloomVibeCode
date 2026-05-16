@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useCartContext } from "@/context/CartProvider";
+import { useCartContext } from "@/context/CartContext";
 import { socketService } from "@/services/socket.service";
 import { normalizeImageUrl } from "@/utils/imageOptimizer";
 import "./ChatWidget.css";

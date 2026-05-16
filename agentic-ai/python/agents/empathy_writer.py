@@ -134,6 +134,43 @@ def _finalize_response(text: str) -> str:
         normalized = normalize_vietnamese_output(normalized)
     return normalized
 
+
+def _fallback_casual_reply(question: str) -> str:
+    compact = re.sub(r"\s+", "", question or "")
+    if extract_order_id(question) or extract_phone_number(question) or re.fullmatch(r"[\d\+\-\(\)]{8,}", compact):
+        return (
+            "Mình đã nhận được mã/số liên hệ rồi nhé. "
+            "Để mình kiểm tra trạng thái đơn hàng cho bạn tiếp nè, bạn chờ mình chút nha."
+        )
+
+    return "Xin chào, mình là trợ lý MilkyBloom. Bạn cần hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hay chính sách nào?"
+
+
+def _fallback_inquiry_reply(question: str, evidence_text: str, order_info=None, catalog_info=None) -> str:
+    order_context = _build_order_context(order_info or {})
+    catalog_context = _build_catalog_context(catalog_info or {})
+    if evidence_text and len(evidence_text) >= 30:
+        return _finalize_response(
+            f"{question}\n\n{order_context}{catalog_context}{evidence_text[:2000]}"
+        )
+    if order_context or catalog_context:
+        return _finalize_response(
+            f"{question}\n\n{order_context}{catalog_context}"
+        )
+    return (
+        "Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể giúp bạn hỏi về sản phẩm, "
+        "đơn hàng, vận chuyển, đổi trả hoặc chính sách."
+    )
+
+
+def _fallback_empathy_reply(question: str, sentiment: str = "") -> str:
+    text = (question or "").strip()
+    if sentiment in {"frustrated", "toxic", "disappointed"}:
+        return "Mình hiểu rồi, mình sẽ giúp bạn gỡ từng bước cho nhanh nhất có thể."
+    if text:
+        return "Mình đang hỗ trợ bạn đây, bạn nói ngắn thêm một chút để mình xử lý tiếp nha."
+    return "Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể hỗ trợ bạn hỏi về sản phẩm, đơn hàng hoặc chính sách."
+
 def _build_action_context(action_result: dict, action_intent: dict) -> str:
     """Build context block thông báo kết quả thực thi action cho LLM."""
     if not action_result or not action_intent:
@@ -316,20 +353,26 @@ async def generate_empathy_response(question, evidence_text, sentiment="", score
     ]
 
     if EMPATHY_MODE == "featherless":
-        return _finalize_response(await featherless_complete(
-            messages=messages,
-            model=FEATHERLESS_MODEL_FAST,
+        try:
+            return _finalize_response(await featherless_complete(
+                messages=messages,
+                model=FEATHERLESS_MODEL_FAST,
+                max_tokens=512,
+                temperature=0.7,
+            ))
+        except Exception:
+            return _fallback_empathy_reply(question, sentiment)
+
+    try:
+        return _finalize_response(await groq_complete(
+            prompt=prompt,
+            system_prompt=EMPATHY_SYSTEM_PROMPT,
+            model=GROQ_MODEL_FAST,
             max_tokens=512,
             temperature=0.7,
         ))
-
-    return _finalize_response(await groq_complete(
-        prompt=prompt,
-        system_prompt=EMPATHY_SYSTEM_PROMPT,
-        model=GROQ_MODEL_FAST,
-        max_tokens=512,
-        temperature=0.7,
-    ))
+    except Exception:
+        return _fallback_empathy_reply(question, sentiment)
 
 
 async def generate_empathy_streaming(
@@ -365,32 +408,39 @@ async def generate_empathy_streaming(
     BUFFER_SIZE = 12
 
     if EMPATHY_MODE == "featherless":
-        async for token in featherless_stream_complete(
-            messages=messages,
-            model=FEATHERLESS_MODEL_FAST,
-            max_tokens=350,
-            temperature=0.7,
-        ):
-            full_answer += token
-            token_buffer += token
-            if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
-                if stream_callback:
-                    await stream_callback(token_buffer)
-                token_buffer = ""
+        try:
+            async for token in featherless_stream_complete(
+                messages=messages,
+                model=FEATHERLESS_MODEL_FAST,
+                max_tokens=350,
+                temperature=0.7,
+            ):
+                full_answer += token
+                token_buffer += token
+                if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
+                    if stream_callback:
+                        await stream_callback(token_buffer)
+                    token_buffer = ""
+        except Exception:
+            full_answer = _fallback_empathy_reply(question, sentiment)
     else:
-        async for token in groq_stream_complete(
-            prompt=prompt,
-            system_prompt=EMPATHY_SYSTEM_PROMPT,
-            model=GROQ_MODEL_FAST,
-            max_tokens=350,
-            temperature=0.7,
-        ):
-            full_answer += token
-            token_buffer += token
-            if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
-                if stream_callback:
-                    await stream_callback(token_buffer)
-                token_buffer = ""
+        try:
+            async for token in groq_stream_complete(
+                prompt=prompt,
+                system_prompt=EMPATHY_SYSTEM_PROMPT,
+                model=GROQ_MODEL_FAST,
+                max_tokens=350,
+                temperature=0.7,
+            ):
+                full_answer += token
+                token_buffer += token
+                if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
+                    if stream_callback:
+                        await stream_callback(token_buffer)
+                    token_buffer = ""
+        except Exception:
+            full_answer = _fallback_empathy_reply(question, sentiment)
+            token_buffer = ""
 
     if token_buffer and stream_callback:
         await stream_callback(token_buffer)
@@ -400,12 +450,10 @@ async def generate_empathy_streaming(
 
 async def generate_casual(question):
     """Casual response (không cần RAG)."""
+    fallback_reply = _fallback_casual_reply(question)
     compact = re.sub(r"\s+", "", question or "")
     if extract_order_id(question) or extract_phone_number(question) or re.fullmatch(r"[\d\+\-\(\)]{8,}", compact):
-        return (
-            "Mình đã nhận được mã/số liên hệ rồi nhé. "
-            "Để mình kiểm tra trạng thái đơn hàng cho bạn tiếp nè, bạn chờ mình chút nha."
-        )
+        return fallback_reply
 
     messages = [
         {"role": "system", "content": CASUAL_SYSTEM_PROMPT},
@@ -413,23 +461,29 @@ async def generate_casual(question):
     ]
     
     if EMPATHY_MODE == "featherless":
-        return _finalize_response(await featherless_complete(
-            messages=[
-                {"role": "system", "content": CASUAL_SYSTEM_PROMPT},
-                {"role": "user", "content": question},
-            ],
-            model=FEATHERLESS_MODEL_FAST,
+        try:
+            return _finalize_response(await featherless_complete(
+                messages=[
+                    {"role": "system", "content": CASUAL_SYSTEM_PROMPT},
+                    {"role": "user", "content": question},
+                ],
+                model=FEATHERLESS_MODEL_FAST,
+                max_tokens=256,
+                temperature=0.7,
+            ))
+        except Exception:
+            return fallback_reply
+
+    try:
+        return _finalize_response(await groq_complete(
+            prompt=question,
+            system_prompt=CASUAL_SYSTEM_PROMPT,
+            model=GROQ_MODEL_FAST,
             max_tokens=256,
             temperature=0.7,
         ))
-
-    return _finalize_response(await groq_complete(
-        prompt=question,
-        system_prompt=CASUAL_SYSTEM_PROMPT,
-        model=GROQ_MODEL_FAST,
-        max_tokens=256,
-        temperature=0.7,
-    ))
+    except Exception:
+        return fallback_reply
 
 
 async def generate_inquiry(question, evidence_text, order_info=None, catalog_info=None):
@@ -449,20 +503,26 @@ async def generate_inquiry(question, evidence_text, order_info=None, catalog_inf
     ]
     
     if EMPATHY_MODE == "featherless":
-        return _finalize_response(await featherless_complete(
-            messages=[
-                {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            model=FEATHERLESS_MODEL_FAST,
+        try:
+            return _finalize_response(await featherless_complete(
+                messages=[
+                    {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                model=FEATHERLESS_MODEL_FAST,
+                max_tokens=512,
+                temperature=0.3,
+            ))
+        except Exception:
+            return _fallback_inquiry_reply(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
+
+    try:
+        return _finalize_response(await groq_complete(
+            prompt=prompt,
+            system_prompt=INQUIRY_SYSTEM_PROMPT,
+            model=GROQ_MODEL_FAST,
             max_tokens=512,
             temperature=0.3,
         ))
-
-    return _finalize_response(await groq_complete(
-        prompt=prompt,
-        system_prompt=INQUIRY_SYSTEM_PROMPT,
-        model=GROQ_MODEL_FAST,
-        max_tokens=512,
-        temperature=0.3,
-    ))
+    except Exception:
+        return _fallback_inquiry_reply(question, evidence_text, order_info=order_info, catalog_info=catalog_info)

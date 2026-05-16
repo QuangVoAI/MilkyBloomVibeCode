@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useOrders, useAuth } from '@/hooks';
-import { useCartContext } from '@/context/CartProvider';
+import { useCartContext } from '@/context/CartContext';
 import { ROUTES } from '@/config/routes';
 import { payByCash, getShippingFeeByUser, getDeliveryTypes } from '@/services';
 

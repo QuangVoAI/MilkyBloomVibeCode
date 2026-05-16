@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { LoadingSpinner, ErrorMessage } from '@/components/common';
 import { Button } from '@/components/ui/button';
 import { useProductDetail } from '@/hooks';
-import { useCartContext } from '@/context/CartProvider';
+import { useCartContext } from '@/context/CartContext';
 import { ROUTES } from '@/config/routes';
 import { getReviewStats } from '@/services/reviews.service';
 import './ProductDetail.css';
@@ -144,7 +144,7 @@ const ProductDetail = () => {
         .finally(() => {
           setAddingToCart(false);
         });
-    } catch (err) {
+    } catch {
       toast.error('Failed to add to cart', {
         description: 'Please try again.',
       });

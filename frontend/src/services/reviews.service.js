@@ -1,4 +1,4 @@
-import apiClient from './config';
+import apiClient, { API_BASE_URL } from './config';
 
 /**
  * Get reviews for a product

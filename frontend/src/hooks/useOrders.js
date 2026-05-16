@@ -51,19 +51,20 @@ export const useOrders = () => {
       } else if (response?.success && response?.orders) {
         // Wrapped in success object with pagination
         ordersArray = response.orders;
-        setPagination({
+        const nextPagination = {
           total: response.total || ordersArray.length,
           page: response.page || 1,
           limit: response.limit || 10,
           totalPages: response.totalPages || 1
-        });
+        };
+        setPagination(nextPagination);
       } else if (response?.orders) {
         // Just orders property
         ordersArray = response.orders;
       }
       
       setOrders(ordersArray);
-      return { orders: ordersArray, pagination };
+      return ordersArray;
     } catch (err) {
       const errorMsg = err.response?.data?.message || err.message || 'Failed to fetch orders';
       setError(errorMsg);
