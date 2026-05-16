@@ -305,7 +305,11 @@ def _is_cancel_policy_question(text: str) -> bool:
 
 
 def _is_order_policy_question(text: str) -> bool:
-    return _is_return_policy_question(text) or _is_cancel_policy_question(text)
+    return (
+        _is_return_policy_question(text)
+        or _is_cancel_policy_question(text)
+        or _is_warranty_policy_question(text)
+    )
 
 
 def _join_lookup_hints(hints: list[str]) -> str:
@@ -462,6 +466,44 @@ def _is_return_policy_question(text: str) -> bool:
         )
     ):
         return True
+    return False
+
+
+def _is_warranty_policy_question(text: str) -> bool:
+    q = _normalize_vi_text(text)
+    if not q:
+        return False
+
+    policy_markers = (
+        "chinh sach bao hanh",
+        "bao hanh nhu the nao",
+        "bao hanh ra sao",
+        "dieu kien bao hanh",
+        "quy trinh bao hanh",
+        "bao hanh bao lau",
+        "warranty policy",
+    )
+    if any(phrase in q for phrase in policy_markers):
+        return True
+
+    if "bao hanh" in q and any(
+        phrase in q
+        for phrase in (
+            "cho toi biet",
+            "cho minh biet",
+            "muon biet",
+            "thong tin",
+            "chi tiet",
+            "chinh xac",
+            "cu the",
+            "dieu kien",
+            "quy trinh",
+            "bao lau",
+            "co duoc",
+        )
+    ):
+        return True
+
     return False
 
 
@@ -806,6 +848,9 @@ def _infer_capability(question: str, history: list[dict], intent: str, auth_prof
     if _is_return_policy_question(current) and not (extract_order_id(current) or extract_phone_number(current)):
         return "inquiry", "return_policy_question"
 
+    if _is_warranty_policy_question(current) and not (extract_order_id(current) or extract_phone_number(current)):
+        return "inquiry", "warranty_policy_question"
+
     if _is_cancel_policy_question(current) and not (extract_order_id(current) or extract_phone_number(current)):
         return "inquiry", "cancel_policy_question"
 
@@ -879,10 +924,20 @@ def _format_loyalty_status(data: dict) -> str:
 def _format_return_policy_summary() -> str:
     return (
         "Chính sách đổi trả của MilkyBloom nè:\n"
-        "• Hàng còn niêm phong / còn điều kiện đổi trả: mình sẽ hỗ trợ theo từng đơn.\n"
-        "• Đổi trả theo đơn cụ thể: bạn gửi mã đơn hoặc email đặt hàng để mình kiểm tra điều kiện.\n"
-        "• Nếu sản phẩm lỗi / giao sai: mình sẽ ưu tiên xử lý nhanh hơn.\n"
-        "• Sau khi quá hạn quy định, một số đơn sẽ không còn đủ điều kiện đổi trả."
+        "• Khách hàng được đổi hoặc trả hàng trong vòng 7 ngày kể từ ngày nhận hàng.\n"
+        "• Điều kiện: sản phẩm chưa qua sử dụng, còn nguyên bao bì / tem nhãn / seal, barcode không bị trầy xước, và có hóa đơn hợp lệ.\n"
+        "• Hàng đã bóc seal, cắt mác hoặc có dấu hiệu đã dùng sẽ không được hỗ trợ đổi trả.\n"
+        "• Nếu là sản phẩm lỗi hoặc giao sai, mình sẽ ưu tiên hỗ trợ nhanh hơn."
+    )
+
+
+def _format_warranty_policy_summary() -> str:
+    return (
+        "Chính sách bảo hành của MilkyBloom nè:\n"
+        "• Sản phẩm còn trong thời gian bảo hành được ghi nhận trên phiếu bảo hành hoặc hóa đơn mua hàng của website.\n"
+        "• Trường hợp được hỗ trợ là lỗi do nhà sản xuất.\n"
+        "• Việc xác định lỗi được thực hiện bởi cửa hàng MilkyBloom.\n"
+        "• Bạn có thể mang sản phẩm đến các cửa hàng MilkyBloom trên toàn quốc để được kiểm tra và bảo hành."
     )
 
 
@@ -1722,6 +1777,8 @@ async def inquiry_writer_node(state: AgentState) -> dict:
         answer = _format_cancel_policy_summary()
     elif "return_policy_question" in capability_reason or _is_return_policy_question(question):
         answer = _format_return_policy_summary()
+    elif "warranty_policy_question" in capability_reason or _is_warranty_policy_question(question):
+        answer = _format_warranty_policy_summary()
     elif "support_contact_request" in capability_reason or _is_support_ticket_request(question):
         answer = _format_support_contact_summary()
     else:
