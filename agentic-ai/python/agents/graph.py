@@ -27,6 +27,7 @@ from langgraph.graph import StateGraph, END
 
 from agents.state import AgentState
 from agents.router import classify, classify_with_metadata
+from agents.router import _is_simple_greeting
 from agents.sentiment_analyzer import sentiment_analyzer_node
 from agents.empathy_writer import (
     generate_empathy_streaming, generate_casual, generate_inquiry,
@@ -1574,6 +1575,59 @@ def router_node(state: AgentState) -> dict:
     shop_context = state.get("shop_context", {}) or {}
 
     history = state.get("history", [])
+    if _is_simple_greeting(question):
+        meta = classify_with_metadata(question)
+        intent = "CASUAL"
+        auth_profile = _build_auth_profile(shop_context)
+        capability = "casual"
+        capability_reason = "simple_greeting"
+        permission_rule = authorize_capability(capability, auth_profile)
+        elapsed = int((time.time() - t0) * 1000)
+        console.print(
+            f"[dim]  Router: {intent} -> {capability} ({elapsed}ms, confidence={meta.get('confidence', 0):.3f})[/]"
+        )
+        return {
+            "intent": intent,
+            "capability": capability,
+            "capability_reason": capability_reason,
+            "user_scope": auth_profile.get("user_scope", "guest"),
+            "is_authenticated": auth_profile.get("is_authenticated", False),
+            "ownership_verified": auth_profile.get("ownership_verified", False),
+            "permission_reason": (
+                permission_rule.get("reason")
+                or ("admin" if auth_profile.get("user_scope") == "admin"
+                    else "authenticated" if auth_profile.get("is_authenticated")
+                    else "guest")
+            ),
+            "auth_state": auth_profile,
+            "router_confidence": meta.get("confidence", 0.0),
+            "router_method": meta.get("method", ""),
+            "router_semantic_scores": meta.get("semantic_scores", {}),
+            "router_keyword_hits": meta.get("keyword_hits", 0),
+            "router_fallback_used": meta.get("fallback_used", False),
+            "router_clarify_reason": meta.get("clarify_reason", ""),
+            "router_semantic_margin": meta.get("semantic_margin", 0.0),
+            "clarification_needed": False,
+            "agent_trace": {
+                **(state.get("agent_trace") or {}),
+                "router_decision": intent,
+                "router_ms": elapsed,
+                "router_confidence": meta.get("confidence", 0.0),
+                "router_method": meta.get("method", ""),
+                "router_semantic_scores": meta.get("semantic_scores", {}),
+                "router_keyword_hits": meta.get("keyword_hits", 0),
+                "router_fallback_used": meta.get("fallback_used", False),
+                "router_clarify_reason": meta.get("clarify_reason", ""),
+                "router_semantic_margin": meta.get("semantic_margin", 0.0),
+                "trace_id": state.get("trace_id", ""),
+                "policy_version": POLICY_VERSION,
+                "user_scope": auth_profile.get("user_scope", "guest"),
+                "capability": capability,
+                "capability_reason": capability_reason,
+                "permission_mode": permission_rule.get("mode", ""),
+                **meta.get("prompt_meta", {}),
+            },
+        }
     contextualized_q = _build_contextualized_question(question, history)
 
     meta = classify_with_metadata(contextualized_q)
@@ -2467,6 +2521,8 @@ async def run_streaming(
 # ================================================================
 
 def _build_contextualized_question(question, history):
+    if _is_simple_greeting(question):
+        return question
     if not history:
         return question
 
