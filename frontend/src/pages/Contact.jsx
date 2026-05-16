@@ -33,11 +33,11 @@ const CONTRIBUTORS = [
     bio: 'Phụ trách backend, hệ thống media, triển khai cloud và phần tích hợp agentic AI.'
   },
   {
-    name: 'Ngô Gia Bảo',
+    name: 'Hoàng Xuân Thành',
     role: 'Frontend & Product UI',
-    github: 'cuchim123123',
-    email: 'randomemail123@email.ok',
-    avatar: buildAvatarDataUrl('NB', '#60a5fa'),
+    github: 'Thanh281105',
+    email: '',
+    avatar: buildAvatarDataUrl('HT', '#60a5fa'),
     bio: 'Phụ trách giao diện, trải nghiệm người dùng và các màn hình thương mại điện tử.'
   }
 ]
@@ -249,13 +249,15 @@ const Contact = () => {
                       {person.github}
                       <ArrowUpRight className="size-3.5 opacity-70" />
                     </a>
-                    <a
-                      href={`mailto:${person.email}`}
-                      className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
-                    >
-                      <Mail className="size-4 text-indigo-600 dark:text-indigo-300" />
-                      {person.email}
-                    </a>
+                    {person.email ? (
+                      <a
+                        href={`mailto:${person.email}`}
+                        className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
+                      >
+                        <Mail className="size-4 text-indigo-600 dark:text-indigo-300" />
+                        {person.email}
+                      </a>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
