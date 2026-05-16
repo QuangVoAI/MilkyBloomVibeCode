@@ -255,7 +255,7 @@ cd agentic-ai
 python ws_server.py
 ```
 
-EmpathAI WebSocket local mặc định chạy trên `ws://127.0.0.1:8788`. Backend kết nối tới service này qua `AGENTIC_AI_WS_URL`.
+EmpathAI WebSocket local mặc định chạy trên `ws://127.0.0.1:8788`. Khi chạy `ws_server.py`, service sẽ tự warm-up model trước khi nhận WebSocket traffic. Backend kết nối tới service này qua `AGENTIC_AI_WS_URL`.
 
 ### 4. Seed Demo Catalog
 
@@ -296,6 +296,7 @@ npm run migrate:seed-images
 ### EmpathAI
 
 - `PORT=8788`
+- `AGENTIC_WARMUP=true`
 - `SHOP_API_BASE_URL=http://127.0.0.1:6969/api`
 - `EMPATHY_MODE=groq` là mặc định; nếu Groq lỗi, hệ thống có thể fallback sang Featherless
 - `GROQ_API_KEY`

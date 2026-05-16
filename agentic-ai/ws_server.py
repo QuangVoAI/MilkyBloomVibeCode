@@ -104,7 +104,8 @@ async def handle_ws(websocket):
 
 async def main():
     port = int(os.getenv("PORT", os.getenv("AGENTIC_WS_PORT", "8788")))
-    if os.getenv("AGENTIC_WARMUP", "false").lower() == "true":
+    if os.getenv("AGENTIC_WARMUP", "true").lower() != "false":
+        print("Warming up EmpathAI models before accepting WebSocket traffic...")
         startup_warmup()
 
     async with websockets.serve(
