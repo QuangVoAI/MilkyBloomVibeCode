@@ -1,5 +1,7 @@
 # MilkyBloom x EmpathAI
 
+> Live demo: https://milkybloom-frontend.onrender.com/
+
 <p align="center">
   <img src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="Frontend" />
   <img src="https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Backend" />
@@ -9,6 +11,8 @@
 </p>
 
 MilkyBloom x EmpathAI là một nền tảng thương mại điện tử đồ chơi trẻ em tích hợp lớp CSKH agentic thời gian thực.
+
+Mở web demo tại: [https://milkybloom-frontend.onrender.com/](https://milkybloom-frontend.onrender.com/)
 
 - **MilkyBloom**: storefront e-commerce, product catalog, cart, checkout, orders, profile
 - **EmpathAI**: agentic customer service, xử lý hội thoại thấu cảm, tra cứu ngữ cảnh, và thực thi action hỗ trợ khách hàng
