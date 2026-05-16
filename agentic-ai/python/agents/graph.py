@@ -1381,6 +1381,11 @@ def action_executor_node(state: AgentState) -> dict:
         action_intent = detect_action_intent(question, order_info)
 
     def _followup_prompt(action_name: str, needs_more_info: bool = False) -> str:
+        if action_name == "update_address" and needs_more_info:
+            return (
+                "Mình đã xác định được đơn rồi. "
+                "Bạn gửi mình địa chỉ giao hàng mới để mình cập nhật nhé."
+            )
         if action_name in {"request_refund", "process_return", "cancel_order", "check_order_status", "update_address"}:
             if needs_more_info:
                 return (

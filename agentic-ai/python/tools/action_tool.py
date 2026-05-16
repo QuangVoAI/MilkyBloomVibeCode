@@ -159,7 +159,7 @@ ADDRESS_EXTRACT_PATTERNS = [
     r"địa chỉ(?:\s+(?:đúng|mới))?\s+là\s+(.{10,100}?)(?:\.|$|\n)",
     r"địa chỉ(?:\s+(?:đúng|mới))?:\s*(.{10,100}?)(?:\.|$|\n)",
     r"giao\s+(?:đến|tới)\s+(?:địa chỉ\s+)?(.{10,100}?)(?:\.|,\s*bạn|$|\n)",
-    r"(?:thành|sang)\s+(?:địa chỉ\s+)?(?:số\s+)?[\"']?(.{5,80}?)[\"']?\s*(?:nhé|nha|ạ|\.\s*$)",
+    r"(?:thành|sang|qua)\s+(?:địa chỉ\s+)?(?:số\s+)?[\"']?(.{5,80}?)[\"']?\s*(?:nhé|nha|ạ|\.\s*$)",
     r"[\"\u2018\u201c]([\d][^\"\u2019\u201d\n]{4,80})[\"\u2019\u201d]",
     r"(?:số\s+nhà|đường\s+\w+|quận\s+\w+|phường\s+\w+)\s*.{5,80}",
 ]
@@ -299,6 +299,34 @@ def _extract_new_address(text: str) -> Optional[str]:
     return None
 
 
+def _looks_like_standalone_address(text: str) -> bool:
+    """Heuristic for a follow-up turn that only contains the new address."""
+    raw = (text or "").strip().strip("\"'\u2018\u2019\u201c\u201d").rstrip(".,")
+    if len(raw) < 6:
+        return False
+    lowered = raw.lower()
+    if re.search(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", lowered):
+        return False
+    if extract_order_id(raw) or extract_phone_number(raw):
+        return False
+    address_markers = (
+        "đường", "duong", "quận", "quan", "phường", "phuong", "tp", "hcm",
+        "thành phố", "tỉnh", "huyện", "xã", "đại học", "truong", "trường",
+        "chung cư", "toa", "tòa", "building", "university",
+    )
+    return bool(re.search(r"\d", raw) or "," in raw or any(marker in lowered for marker in address_markers))
+
+
+def _extract_new_address_followup(text: str) -> Optional[str]:
+    addr = _extract_new_address(text)
+    if addr:
+        return addr
+    raw = (text or "").strip().strip("\"'\u2018\u2019\u201c\u201d").rstrip(".,")
+    if _looks_like_standalone_address(raw):
+        return raw
+    return None
+
+
 def _fallback_regex_detect(question: str) -> str:
     """Regex fallback when semantic score is ambiguous."""
     if _match_any(question, UPDATE_ADDRESS_PATTERNS):
@@ -433,7 +461,7 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
     # ── Build result per action type ──
     if action == "update_address":
         new_addr = _extract_new_address(question)
-        executable = found and status in ("processing", "shipping")
+        executable = found and status in ("pending", "processing", "shipping")
         block_reason = ""
         if not found:
             return {
@@ -570,8 +598,8 @@ def resume_action_intent(question: str, order_info: dict, pending: dict) -> dict
     found = order_info.get("found", False)
 
     if action == "update_address":
-        new_addr = _extract_new_address(question)
-        executable = found and status in ("processing", "shipping") and new_addr is not None
+        new_addr = _extract_new_address_followup(question)
+        executable = found and status in ("pending", "processing", "shipping") and new_addr is not None
         block_reason = ""
         if found and status == "delivered":
             block_reason = "Đơn đã giao thành công, không thể thay đổi địa chỉ"

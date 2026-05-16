@@ -1085,6 +1085,59 @@ def _scenario_update_address_email_followup() -> ScenarioRow:
     )
 
 
+def _scenario_update_address_pending_order() -> ScenarioRow:
+    _reset_state()
+    order_info = {
+        "found": True,
+        "ownership_verified": True,
+        "order_id": "6a088f69cf41ac9ebe2dd68f",
+        "status": "pending",
+        "return_eligible": False,
+        "delivered_hours_ago": 0,
+        "summary": "Đơn 6a088f69cf41ac9ebe2dd68f đang chờ xử lý",
+        "raw": {"addressId": {"_id": "ADDR_1"}},
+    }
+    execute_result = {
+        "success": True,
+        "action": "update_address",
+        "message": "Đã cập nhật địa chỉ giao hàng thật cho đơn **6a088f69cf41ac9ebe2dd68f**.",
+        "ticket_id": "ADDR_1",
+        "updated_fields": {"address": "Đại học Tôn Đức Thắng"},
+    }
+    question = (
+        'Đổi giúp mình địa chỉ đơn 6a088f69cf41ac9ebe2dd68f nha. '
+        'Mình đặt nhầm á. Đổi qua "Đại học Tôn Đức Thắng" nha'
+    )
+    with patch.object(action_tool, "_semantic_score_map", side_effect=_zero_semantic_scores), \
+        patch.object(graph, "execute_action", return_value=execute_result):
+        result = graph.action_executor_node(
+            _make_state(
+                question=question,
+                session_id="matrix_update_address_pending_order",
+                intent="COMPLAINT",
+                capability="order_management",
+                shop_context={"user_scope": "logged_in", "ownership_verified": True},
+                order_info=order_info,
+                order_id="6a088f69cf41ac9ebe2dd68f",
+            )
+        )
+
+    passed = (
+        result["action_intent"].get("action") == "update_address"
+        and result["action_intent"].get("new_address") == "Đại học Tôn Đức Thắng"
+        and result["action_intent"].get("executable") is True
+        and result["action_result"].get("success") is True
+    )
+    return ScenarioRow(
+        case="Address update pending order",
+        input='đổi địa chỉ đơn pending qua "Đại học Tôn Đức Thắng"',
+        expected="extract address and execute for pending order",
+        got=f"action={result['action_intent'].get('action')}, new_address={result['action_intent'].get('new_address')}, success={result['action_result'].get('success')}",
+        output=_short(result["action_result"].get("message", "")),
+        passed=passed,
+    )
+
+
 def _scenario_cancel_order() -> ScenarioRow:
     _reset_state()
     order_info = {
@@ -1302,6 +1355,7 @@ def run_chat_scenario_matrix() -> list[ScenarioRow]:
         _scenario_cancel_order_email_followup(),
         _scenario_refund_email_followup(),
         _scenario_update_address_email_followup(),
+        _scenario_update_address_pending_order(),
         _scenario_cancel_order(),
         _scenario_request_refund(),
         _scenario_process_return(),
