@@ -81,7 +81,6 @@ Quét QR để mở nhanh trên điện thoại:
 - [Cấu Trúc Repository](#cấu-trúc-repository)
 - [Công Nghệ Chính](#công-nghệ-chính)
 - [Chạy Dự Án](#chạy-dự-án)
-- [Cấu Hình Quan Trọng](#cấu-hình-quan-trọng)
 - [Thành Viên](#thành-viên)
 
 ## Tổng Quan
@@ -261,23 +260,7 @@ agentic-ai/
 
 ## Chạy Dự Án
 
-### 0. Chuẩn bị `.env`
-
-Mỗi service có file env mẫu riêng. Copy file mẫu rồi điền secret thật ở máy local:
-
-```bash
-cp frontend/.env.example frontend/.env
-cp backend/.env.example backend/.env
-cp agentic-ai/.env.example agentic-ai/.env
-```
-
-Các key tối thiểu để chạy local:
-
-- `frontend/.env`: `VITE_API_URL=http://localhost:6969/api`
-- `backend/.env`: `MONGO_URI`, `JWT_SECRET`, `SESSION_SECRET`, `ORDER_LOOKUP_JWT_SECRET`, `AGENTIC_AI_WS_URL=ws://127.0.0.1:8788`
-- `agentic-ai/.env`: `GROQ_API_KEY`, `SHOP_API_BASE_URL=http://127.0.0.1:6969/api`, `PORT=8788`
-
-Nếu backend và agentic cùng dùng internal lookup, đặt cùng một giá trị cho `AI_INTERNAL_SERVICE_KEY` ở `backend/.env` và `agentic-ai/.env`.
+Mỗi service có file `.env.example` riêng. Copy file mẫu tương ứng rồi điền biến cần thiết theo môi trường của bạn.
 
 ### 1. Terminal 1: Frontend
 
@@ -321,71 +304,6 @@ Script này:
 - lưu ảnh demo vào MongoDB GridFS
 - phát ảnh qua URL stream của backend
 - không cần ảnh local trong repo
-
-Nếu bạn có dữ liệu cũ trỏ về `/seed-images/...`, chạy thêm:
-
-```bash
-cd backend
-npm run migrate:seed-images
-```
-
-
-## Cấu Hình Quan Trọng
-
-### Backend
-
-- `PORT=6969`
-- `MONGO_URI` trỏ tới MongoDB local hoặc MongoDB Atlas
-- `CHAT_PROVIDER=agentic`
-- `AGENTIC_AI_WS_URL=ws://127.0.0.1:8788`
-- `AI_INTERNAL_SERVICE_KEY` dùng chung với `agentic-ai/.env` nếu bật internal lookup
-
-### Frontend
-
-- `VITE_API_URL=http://localhost:6969/api`
-
-### EmpathAI
-
-- `PORT=8788`
-- `AGENTIC_WARMUP=true`
-- `SHOP_API_BASE_URL=http://127.0.0.1:6969/api`
-- `EMPATHY_MODE=groq` là mặc định; nếu Groq lỗi, hệ thống có thể fallback sang Featherless
-- `GROQ_API_KEY`
-- `GROQ_BASE_URL=https://api.groq.com/openai/v1`
-- `FEATHERLESS_API_KEY`
-- `FEATHERLESS_BASE_URL=https://api.featherless.ai/v1`
-- `LANGFUSE_*`, `QDRANT_*`, `UPSTASH_REDIS_*` là optional cho tracing, retrieval và cache
-
-## Deploy Nhanh Trên Render
-
-Repo đã có sẵn [render.yaml](render.yaml) để deploy free 3 phần:
-
-- `milkybloom-frontend` = static site React/Vite
-- `milkybloom-backend` = Node/Express API + socket.io
-- `milkybloom-agentic` = EmpathAI WebSocket service
-
-### Cách dùng
-
-1. Tạo một Render Blueprint từ repo này.
-2. Render sẽ tự link `VITE_API_URL` từ backend và `AGENTIC_AI_WS_URL` từ agentic service.
-3. Sau khi services lên, thêm các secret env cần thiết trong dashboard của Render.
-
-### Secret env cần nhập trên Render
-
-- `MONGO_URI`
-- `JWT_SECRET`
-- `SESSION_SECRET`
-- `AI_INTERNAL_SERVICE_KEY`
-- `ORDER_LOOKUP_JWT_SECRET`
-- `GROQ_API_KEY`
-- `FEATHERLESS_API_KEY` nếu muốn fallback
-- Các key tích hợp khác nếu bạn đang dùng: `SMTP_*`, `GOOGLE_*`, `FACEBOOK_*`, `MOMO_*`, `ZALOPAY_*`, `VIETMAP_API_KEY`, `OPENWEATHER_API_KEY`, `LANGFUSE_*`, `QDRANT_URL` nếu có vector DB riêng
-
-### Ghi chú
-
-- Frontend config có thể nhận `VITE_API_URL` dạng full URL hoặc hostname, và sẽ tự chuẩn hóa sang HTTPS.
-- Backend config có thể nhận `AGENTIC_AI_WS_URL` dạng full `ws(s)://...` hoặc `https://...`, và sẽ tự chuyển sang `wss://...` khi cần.
-- `agentic-ai/ws_server.py` sẽ tự dùng `PORT` của Render.
 
 ## Tài Liệu Liên Quan
 
