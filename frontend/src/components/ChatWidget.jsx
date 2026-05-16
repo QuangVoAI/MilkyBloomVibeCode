@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { useCartContext } from "@/context/CartProvider";
 import { socketService } from "@/services/socket.service";
+import { normalizeImageUrl } from "@/utils/imageOptimizer";
 import "./ChatWidget.css";
 
 const STORAGE_KEY = "milkybloom-chat-session-v2";
@@ -188,14 +189,14 @@ const getProductImage = (product) => {
   const variantImage = firstFromArray(
     variants.find((variant) => firstFromArray(variant?.imageUrls))?.imageUrls,
   );
-  return (
+  const candidate =
     firstFromArray(product?.imageUrls) ||
     product?.imageUrl ||
     product?.thumbnail ||
     product?.coverImage ||
-    variantImage ||
-    "/placeholder-product.png"
-  );
+    variantImage;
+
+  return normalizeImageUrl(candidate, "/placeholder.svg");
 };
 
 const getVariantLabel = (variant) => {
@@ -885,7 +886,7 @@ const ChatWidget = () => {
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                     loading="lazy"
                     onError={(event) => {
-                      event.currentTarget.src = "/placeholder-product.png";
+                      event.currentTarget.src = "/placeholder.svg";
                     }}
                   />
                   <span className="absolute inset-x-2 bottom-2 rounded-full bg-white/82 px-2 py-0.5 text-[10px] font-bold text-slate-700 opacity-0 shadow-sm transition group-hover:opacity-100">
