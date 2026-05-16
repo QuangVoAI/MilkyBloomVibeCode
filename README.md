@@ -17,6 +17,35 @@ MilkyBloom x EmpathAI là một nền tảng thương mại điện tử đồ c
 
 Mục tiêu của dự án là giữ trải nghiệm mua sắm mượt cho khách hàng, đồng thời để AI hỗ trợ khách hàng theo cách tự nhiên, có ngữ cảnh, và phản hồi realtime.
 
+## Tài khoản Test
+
+- Nếu bạn đã seed dữ liệu demo, hãy dùng account đó để vào thử toàn bộ flow mua hàng và chat hỗ trợ.
+- Nếu chưa có account sẵn, có thể đăng ký mới ngay trên web demo để test phần login, giỏ hàng, đơn hàng, và chat.
+- Với vai trò giám khảo, chỉ cần mở web demo ở trên là có thể test ngay mà không cần chạy local.
+
+## What to demo first
+
+- Mở trang Home để xem hero, catalog nổi bật, và layout tổng thể.
+- Vào Shop để kiểm tra danh sách sản phẩm, ảnh, video, và filter.
+- Thử chat MilkyBloom Assistant bằng câu như `Gợi ý cho tôi món đồ dưới 300k`.
+- Đăng nhập hoặc tạo account test, rồi thử thêm giỏ hàng và đặt hàng.
+- Nếu cần xem luồng AI, gửi câu hỏi về sản phẩm, đơn hàng, hoặc đổi trả để thấy EmpathAI phản hồi realtime.
+
+## Demo Flow
+
+```mermaid
+flowchart LR
+    U([Giám khảo / User]) --> H[Home]
+    H --> S[Shop / Product Detail]
+    S --> C[Cart / Checkout]
+    H --> A[Chat Widget]
+    A --> B[Backend API]
+    B --> E[EmpathAI Agentic]
+    E --> B
+    B --> A
+    C --> O[Orders / History]
+```
+
 ## Demo Online
 
 Link web production: [https://milkybloom-frontend.onrender.com/](https://milkybloom-frontend.onrender.com/)
@@ -44,6 +73,9 @@ Quét QR để mở nhanh trên điện thoại:
 ## Mục Lục
 
 - [Tổng Quan](#tổng-quan)
+- [Tài khoản Test](#tài-khoản-test)
+- [What to demo first](#what-to-demo-first)
+- [Demo Flow](#demo-flow)
 - [Kiến Trúc Hệ Thống](#kiến-trúc-hệ-thống)
 - [Luồng Hoạt Động Chi Tiết](#luồng-hoạt-động-chi-tiết)
 - [Cấu Trúc Repository](#cấu-trúc-repository)
