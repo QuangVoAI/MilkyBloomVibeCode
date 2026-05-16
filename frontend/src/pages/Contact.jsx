@@ -26,20 +26,35 @@ const buildAvatarDataUrl = (label, background = '#f472b6', foreground = '#ffffff
 const CONTRIBUTORS = [
   {
     name: 'Võ Xuân Quang',
-    role: 'Backend + Infrastructure',
+    role: 'Backend, AI & Infrastructure',
     github: 'QuangVoAI',
     email: 'vxq123@icloud.com',
     avatar: buildAvatarDataUrl('VQ'),
-    bio: 'Develops backend services and manages AWS infrastructure.'
+    bio: 'Phụ trách backend, hệ thống media, triển khai cloud và phần tích hợp agentic AI.'
   },
   {
     name: 'Ngô Gia Bảo',
-    role: 'zzz',
+    role: 'Frontend & Product UI',
     github: 'cuchim123123',
     email: 'randomemail123@email.ok',
     avatar: buildAvatarDataUrl('NB', '#60a5fa'),
-    bio: '... '
+    bio: 'Phụ trách giao diện, trải nghiệm người dùng và các màn hình thương mại điện tử.'
   }
+]
+
+const CONTACT_POINTS = [
+  {
+    title: 'Hỗ trợ sản phẩm',
+    description: 'Gửi câu hỏi về danh mục, giá, biến thể, ảnh hoặc video sản phẩm.',
+  },
+  {
+    title: 'Đơn hàng & vận chuyển',
+    description: 'Tra cứu trạng thái đơn, đổi địa chỉ, hủy đơn hoặc theo dõi giao hàng.',
+  },
+  {
+    title: 'Đổi trả & phản hồi',
+    description: 'Gửi góp ý, yêu cầu đổi trả, báo lỗi hoặc đề xuất cải thiện trải nghiệm.',
+  },
 ]
 
 const CRYSTALS = [
@@ -141,25 +156,26 @@ const Contact = () => {
           <div className="relative p-8 sm:p-12 space-y-4">
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-300">
               <Sparkles className="size-4" />
-              Contributors
+              Liên hệ MilkyBloom
             </p>
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Connect with the contributors building MilkyBloomToyStore
+              Kết nối nhanh với đội ngũ đang xây MilkyBloom
             </h1>
             <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-3xl">
-              We are happy to talk about the product, feedback, or collaboration opportunities. Reach out to each member directly or email the whole team.
+              Bạn cần hỗ trợ về sản phẩm, đơn hàng, vận chuyển, đổi trả hay muốn góp ý cho dự án?
+              Cứ nhắn trực tiếp cho từng thành viên hoặc gửi email chung cho nhóm, mình sẽ tiếp nhận nhanh nhất có thể.
             </p>
             <div className="flex flex-wrap gap-3 pt-2">
               <Button asChild size="lg" className="px-5">
                 <a href="mailto:vxq123@icloud.com">
                   <Mail className="size-4" />
-                  Email the team
+                  Gửi email cho team
                 </a>
               </Button>
               <Button asChild variant="outline" size="lg" className="px-5">
-                <a href="https://github.com/NguyenHoangKimYen/toy-store.git" target="_blank" rel="noreferrer" className="flex items-center gap-2">
+                <a href="https://github.com/QuangVoAI/MilkyBloomVibeCode" target="_blank" rel="noreferrer" className="flex items-center gap-2">
                   <Github className="size-4" />
-                  View on GitHub
+                  Xem mã nguồn
                   <ArrowUpRight className="size-4" />
                 </a>
               </Button>
@@ -167,13 +183,31 @@ const Contact = () => {
           </div>
         </section>
 
+        {/* Contact points */}
+        <section className="grid gap-4 md:grid-cols-3">
+          {CONTACT_POINTS.map((point) => (
+            <Card key={point.title} className="bg-white/90 dark:bg-slate-900/70 border-slate-200/80 dark:border-slate-800/80 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg text-slate-900 dark:text-white">
+                  {point.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                  {point.description}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+
         {/* Contributors section */}
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Contributors</h2>
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Thành viên dự án</h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Direct contact info for each project member.
+                Thông tin liên hệ nhanh của từng người phụ trách chính.
               </p>
             </div>
           </div>
