@@ -320,9 +320,9 @@ const Navbar = () => {
                             <hr className='nav-link-underline w-2/4 border-none h-[1.5px] bg-gray-700' />
                             
                             {/* Mega Dropdown Menu */}
-                            <div className='group-hover:block hidden absolute top-full left-1/2 -translate-x-1/2 pt-4 z-[1100]'>
-                                <div className='bg-white rounded-xl shadow-2xl border border-gray-100 p-6 min-w-[800px] max-w-[1000px]'>
-                                    <div className='grid grid-cols-4 gap-3'>
+                            <div className='nav-mega-dropdown group-hover:block hidden absolute top-full left-1/2 -translate-x-1/2 pt-4 z-[1100]'>
+                                <div className='nav-mega-dropdown-panel bg-white rounded-xl shadow-2xl border border-gray-100 p-5 sm:p-6'>
+                                    <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4'>
                                         {categories.slice(0, 12).map((category) => (
                                             <button
                                                 key={category._id}

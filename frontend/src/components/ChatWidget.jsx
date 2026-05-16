@@ -1043,11 +1043,11 @@ const ChatWidget = () => {
   return (
     <>
       {!isPresented ? (
-        <div className="fixed bottom-4 right-4 z-[80] sm:bottom-6 sm:right-6">
+        <div className="fixed bottom-3 right-3 z-[80] sm:bottom-6 sm:right-6">
           <button
             type="button"
             onClick={openChat}
-            className="chat-widget-launch group flex aspect-[16/9] w-[clamp(248px,22vw,340px)] flex-col justify-between rounded-[30px] px-4 py-4 text-slate-900 sm:w-[clamp(268px,20vw,360px)]"
+            className="chat-widget-launch group flex aspect-[4/3] w-[min(92vw,320px)] flex-col justify-between rounded-[28px] px-4 py-4 text-slate-900 sm:aspect-[16/9] sm:w-[clamp(268px,20vw,360px)]"
             aria-label="Open MilkyBloom chat"
           >
           <div className="flex items-start justify-between gap-4">
@@ -1086,10 +1086,10 @@ const ChatWidget = () => {
             ref={sheetRef}
             className={`chat-widget-sheet ${
               isClosing ? "chat-widget-sheet--closing" : "chat-widget-sheet--open"
-            } ${sheetStateClassName} relative h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-h-[52rem] max-w-[56rem] overflow-hidden rounded-[36px] shadow-[0_28px_80px_rgba(15,23,42,0.16)] sm:h-[min(82vh,52rem)] sm:w-[min(92vw,56rem)]`}
+            } ${sheetStateClassName} relative h-[calc(100dvh-0.75rem)] w-[calc(100vw-0.75rem)] max-h-none max-w-none overflow-hidden rounded-[28px] shadow-[0_28px_80px_rgba(15,23,42,0.16)] sm:h-[min(82vh,52rem)] sm:w-[min(92vw,56rem)] sm:max-h-[52rem] sm:max-w-[56rem] sm:rounded-[36px]`}
             onClick={(event) => event.stopPropagation()}
           >
-          <div className="chat-widget-sheet__glass relative z-[1] flex h-full w-full flex-col overflow-hidden rounded-[34px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(252,252,254,0.88))] backdrop-blur-[28px]">
+          <div className="chat-widget-sheet__glass relative z-[1] flex h-full w-full flex-col overflow-hidden rounded-[26px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(252,252,254,0.88))] backdrop-blur-[28px] sm:rounded-[34px]">
             <div className="chat-widget-sheet__content relative flex h-full w-full flex-col">
             <div className="chat-widget-intel-aurora" aria-hidden="true" />
             <div
@@ -1105,21 +1105,21 @@ const ChatWidget = () => {
               aria-hidden="true"
             />
 
-            <div className="relative px-4 pt-3">
+            <div className="relative px-3 pt-3 sm:px-4">
               <div
                 className="mx-auto h-[5px] w-11 rounded-full bg-slate-300/32 shadow-[0_1px_0_rgba(255,255,255,0.78)]"
                 aria-hidden="true"
               />
             </div>
 
-            <div className="chat-widget-sheet__header relative flex items-start justify-between gap-3 px-4 py-3.5">
+            <div className="chat-widget-sheet__header relative flex items-start justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-3.5">
               <div className="flex min-w-0 items-start gap-2.5">
-                <div className="chat-widget-orb mt-0.5 flex h-12 w-12 items-center justify-center rounded-full border border-white/80 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.99)_0%,rgba(255,239,246,0.94)_20%,rgba(255,214,221,0.76)_44%,rgba(191,219,254,0.46)_70%,rgba(192,132,252,0.62)_88%,rgba(251,113,133,0.88)_100%)] text-white shadow-[0_14px_32px_rgba(251,113,133,0.2)] ring-2 ring-white/70">
+                <div className="chat-widget-orb mt-0.5 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.99)_0%,rgba(255,239,246,0.94)_20%,rgba(255,214,221,0.76)_44%,rgba(191,219,254,0.46)_70%,rgba(192,132,252,0.62)_88%,rgba(251,113,133,0.88)_100%)] text-white shadow-[0_14px_32px_rgba(251,113,133,0.2)] ring-2 ring-white/70 sm:h-12 sm:w-12">
                   <Sparkles className="h-[18px] w-[18px] drop-shadow-[0_1px_1px_rgba(255,255,255,0.42)]" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h2 className="truncate text-[19px] font-bold tracking-[-0.05em] text-slate-950">
+                    <h2 className="truncate text-[17px] font-bold tracking-[-0.05em] text-slate-950 sm:text-[19px]">
                       MilkyBloom Assistant
                     </h2>
                     {getChatPhaseLabel(chatPhase) ? (
@@ -1167,7 +1167,7 @@ const ChatWidget = () => {
 
             <div
               ref={messagesRef}
-              className="chat-widget-sheet__messages chat-widget-message-pane chat-widget-scroll relative flex-1 space-y-3 overflow-y-auto px-4 py-4"
+              className="chat-widget-sheet__messages chat-widget-message-pane chat-widget-scroll relative flex-1 space-y-3 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4"
             >
               {messages.map((message, index) => {
                 const isUser = message.role === "user";
@@ -1183,7 +1183,7 @@ const ChatWidget = () => {
                     className={`chat-widget-message flex ${isUser ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[88%] rounded-[24px] px-4 py-3 text-[15px] leading-[1.65] shadow-[0_12px_34px_rgba(15,23,42,0.08)] ${
+                      className={`max-w-[92%] rounded-[24px] px-3.5 py-3 text-[14px] leading-[1.6] shadow-[0_12px_34px_rgba(15,23,42,0.08)] sm:max-w-[88%] sm:px-4 sm:text-[15px] ${
                         isUser
                           ? "bg-slate-900 text-white shadow-[0_14px_28px_rgba(15,23,42,0.2)]"
                           : "border border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.998),rgba(255,240,246,0.99))] text-slate-950 shadow-[0_14px_34px_rgba(15,23,42,0.1)]"
@@ -1246,7 +1246,7 @@ const ChatWidget = () => {
               })}
             </div>
 
-            <div className="chat-widget-sheet__composer border-t border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.86))] px-4 py-4 backdrop-blur-[22px]">
+            <div className="chat-widget-sheet__composer border-t border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.86))] px-3 py-3 backdrop-blur-[22px] sm:px-4 sm:py-4">
               <form onSubmit={handleSubmit} className="flex items-stretch gap-2">
                 <textarea
                   ref={inputRef}
@@ -1262,7 +1262,7 @@ const ChatWidget = () => {
                   }}
                   rows={2}
                   placeholder={composerHint || "Type to MilkyBloom"}
-                  className={`chat-widget-siri-input h-[78px] flex-1 resize-none rounded-[24px] px-4 py-4 text-[17px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_rgba(15,23,42,0.05)] outline-none transition placeholder:text-slate-600 focus:ring-2 sm:h-[82px] sm:text-[18px] ${
+                  className={`chat-widget-siri-input h-[68px] flex-1 resize-none rounded-[20px] px-3.5 py-3.5 text-[16px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_rgba(15,23,42,0.05)] outline-none transition placeholder:text-slate-600 focus:ring-2 sm:h-[82px] sm:rounded-[24px] sm:px-4 sm:py-4 sm:text-[18px] ${
                     activeLookupChip
                       ? "border-amber-300 bg-[linear-gradient(180deg,rgba(255,252,231,0.995),rgba(254,243,199,0.9))] focus:border-amber-400 focus:ring-amber-100/80"
                       : "border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.995),rgba(255,240,246,0.96))] focus:border-rose-300/80 focus:ring-rose-100/80"
@@ -1271,7 +1271,7 @@ const ChatWidget = () => {
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
-                  className="chat-widget-siri-send group flex h-[78px] w-[78px] items-center justify-center self-stretch rounded-[24px] transition disabled:cursor-not-allowed disabled:opacity-40 sm:h-[82px] sm:w-[82px]"
+                  className="chat-widget-siri-send group flex h-[68px] w-[68px] items-center justify-center self-stretch rounded-[20px] transition disabled:cursor-not-allowed disabled:opacity-40 sm:h-[82px] sm:w-[82px] sm:rounded-[24px]"
                   aria-label="Send message"
                 >
                   <Send className="h-[18px] w-[18px] text-rose-500 drop-shadow-[0_1px_0_rgba(255,255,255,0.8)] transition duration-200 group-hover:translate-x-[1px] group-hover:-translate-y-[1px] group-hover:rotate-[-10deg] group-hover:text-rose-600" />
