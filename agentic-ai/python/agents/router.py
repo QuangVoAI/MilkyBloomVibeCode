@@ -61,6 +61,18 @@ CASUAL_KEYWORDS = [
 ]
 
 CASUAL_SHORT_ONLY = ["chào", "hi", "hey", "ok", "ừ", "vâng", "dạ"]
+CASUAL_GREETINGS = [
+    "alo",
+    "a lô",
+    "a lo",
+    "chào",
+    "chao",
+    "hi",
+    "hey",
+    "hello",
+    "yo",
+    "xin chao",
+]
 ORDER_CONTEXT_KEYWORDS = [
     "mã đơn",
     "mã truy cập",
@@ -85,12 +97,35 @@ def _looks_like_identifier_only(question: str) -> bool:
     return bool(re.fullmatch(r"[\d\+\-\(\)]{8,}", compact))
 
 
+def _is_simple_greeting(question: str) -> bool:
+    """Detect short greetings that should always go to casual."""
+    normalized = _normalize_text(question)
+    compact = re.sub(r"\s+", " ", normalized).strip()
+    if not compact:
+        return False
+
+    if compact in {_normalize_text(item) for item in CASUAL_GREETINGS}:
+        return True
+
+    # Allow short greeting with punctuation, e.g. "alo!" or "hi?"
+    compact_alpha = re.sub(r"[^\w\s]", "", compact).strip()
+    if compact_alpha in {_normalize_text(item) for item in CASUAL_GREETINGS}:
+        return True
+
+    if len(compact_alpha) <= 4 and compact_alpha in {"alo", "hi", "yo"}:
+        return True
+
+    return False
+
+
 def _looks_like_noise(question: str) -> bool:
     """Detect short gibberish / random keyboard mash that should be clarified."""
     normalized = _normalize_text(question)
     compact = re.sub(r"\s+", "", normalized)
     if not compact or len(compact) < 3:
         return True
+    if _is_simple_greeting(question):
+        return False
     if any(keyword in normalized for keyword in COMPLAINT_KEYWORDS + INQUIRY_KEYWORDS + CASUAL_KEYWORDS):
         return False
     if _looks_like_identifier_only(question) or extract_order_id(question) or extract_phone_number(question):
@@ -228,6 +263,9 @@ def _fast_classify(question):
     # Pure identifiers or explicit phone/order/email inputs should never be casual.
     if extract_order_id(question) or extract_phone_number(question) or extract_email_address(question) or _looks_like_identifier_only(question):
         return "COMPLAINT"
+
+    if _is_simple_greeting(question):
+        return "CASUAL"
 
     if _looks_like_noise(question):
         return "CLARIFY"
