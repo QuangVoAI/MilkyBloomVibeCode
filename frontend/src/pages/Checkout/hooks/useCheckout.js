@@ -266,8 +266,14 @@ export const useCheckout = () => {
       // Get order ID first before clearing cart
       const orderId = order._id || order.id;
 
-      // Clear cart after successful order
-      await clearAllItems();
+      // Clear cart after successful order.
+      // This is non-critical: if it fails, the order is still valid and we
+      // should not block the user from continuing to the success page.
+      try {
+        await clearAllItems();
+      } catch (clearErr) {
+        console.warn('Failed to clear cart after order placement:', clearErr);
+      }
 
       // Redirect based on payment method
       // NOTE: Don't set submitting=false here, let the navigation happen while still "submitting"

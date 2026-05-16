@@ -94,7 +94,7 @@ module.exports = {
             deliveryType,
         } = payload;
 
-        // Validate delivery type
+        // Validate delivery type against the options exposed in the UI.
         const validDeliveryTypes = ['economy', 'standard', 'express', 'expedited'];
         let finalDeliveryType = deliveryType;
         if (!validDeliveryTypes.includes(finalDeliveryType)) {
@@ -136,7 +136,7 @@ module.exports = {
             guestInfo: guestInfo || null,
             addressId: addressId || null,
             paymentMethod: paymentMethod || null,
-            deliveryType: deliveryType || 'standard',
+            deliveryType: finalDeliveryType,
             items,
             discountCodeId: discountCodeId || cart.discountCodeId || null,
             totalAmount,
@@ -203,8 +203,10 @@ module.exports = {
         }
         let shippingAddress = null;
 
-        if (!['standard', 'express'].includes(deliveryType))
+        const validDeliveryTypes = ['economy', 'standard', 'express', 'expedited'];
+        if (!validDeliveryTypes.includes(deliveryType)) {
             deliveryType = 'standard';
+        }
 
         // CASE USER LOGIN
         if (userId && !guestInfo) {
@@ -248,7 +250,6 @@ module.exports = {
                 addressLine: guestInfo.addressLine,
                 lat: guestInfo.lat,
                 lng: guestInfo.lng,
-                isDefault: isFirstAddress,
                 isDefault: isFirstAddress,
             });
 

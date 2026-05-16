@@ -330,7 +330,7 @@ module.exports = {
     // Checkout từ cart cho guest (session)
     async checkoutFromCartForGuest(req, res, next) {
         try {
-            const { sessionId, guestInfo, discountCodeId, pointsToUse, paymentMethod } =
+            const { sessionId, guestInfo, discountCodeId, pointsToUse, paymentMethod, deliveryType } =
                 req.body;
 
             const detail = await orderService.createOrderFromCart({
@@ -339,6 +339,7 @@ module.exports = {
                 discountCodeId: discountCodeId || null,
                 pointsToUse: Number(pointsToUse) || 0,
                 paymentMethod: paymentMethod || 'cashondelivery',
+                deliveryType: deliveryType || 'standard',
             });
 
             res.status(201).json({ success: true, data: detail });
