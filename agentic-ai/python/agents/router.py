@@ -25,6 +25,7 @@ COMPLAINT_KEYWORDS = [
     "khiếu nại", "phàn nàn", "bức xúc", "mệt mỏi",
     "hoàn tiền", "đổi trả", "bồi thường",
     "hủy đơn", "hủy đơn hàng", "muốn hủy", "cancel order",
+    "hỏi về cách hủy", "hỏi hủy đơn",
     "đổi địa chỉ", "thay đổi địa chỉ", "sửa địa chỉ", "cập nhật địa chỉ",
     "check order", "kiểm tra đơn", "tra cứu đơn", "theo dõi đơn",
     "không được", "không hoạt động", "không phản hồi",
@@ -161,7 +162,7 @@ COMPLAINT_FAST = [
     "đặt nhầm địa chỉ", "nhầm địa chỉ", "sai địa chỉ",
     "địa chỉ mới", "giao đến địa chỉ", "giao tới địa chỉ", "cập nhật địa chỉ",
     "ship đến địa chỉ", "chuyển địa chỉ",
-    "hủy đơn", "muốn hủy", "hủy hộ",
+    "hủy đơn", "muốn hủy", "hủy hộ", "hỏi về cách hủy", "hỏi hủy đơn",
     "đổi trả hàng", "trả hàng",
     # Check order status — must route COMPLAINT for action_executor
     "kiểm tra đơn", "tra cứu đơn", "tình trạng đơn", "đơn đâu",

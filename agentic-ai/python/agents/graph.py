@@ -127,6 +127,7 @@ PURCHASE_ACTION_KEYWORDS = [
 
 CATALOG_KEYWORDS = [
     "còn hàng",
+    "có sẵn hàng",
     "hết hàng",
     "còn bao nhiêu",
     "còn size",
@@ -257,8 +258,17 @@ def _is_support_ticket_request(text: str) -> bool:
     return any(keyword in q for keyword in SUPPORT_TICKET_KEYWORDS)
 
 
+def _normalize_marker_text(text: str) -> str:
+    import unicodedata
+    text = (text or "").lower()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = text.replace("Đ", "d").replace("đ", "d")
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _is_existing_order_issue(text: str) -> bool:
-    q = (text or "").lower()
+    q = _normalize_marker_text(text)
     markers = (
         "đặt nhầm địa chỉ",
         "nhầm địa chỉ",
@@ -269,6 +279,8 @@ def _is_existing_order_issue(text: str) -> bool:
         "cập nhật địa chỉ",
         "hủy đơn",
         "hủy đơn hàng",
+        "hỏi về cách hủy",
+        "hỏi hủy đơn",
         "kiểm tra đơn",
         "tra cứu đơn",
         "theo dõi đơn",
@@ -293,7 +305,8 @@ def _is_existing_order_issue(text: str) -> bool:
         "muốn trả hàng",
         "cần trả hàng",
     )
-    return any(marker in q for marker in markers)
+    normalized_markers = [_normalize_marker_text(m) for m in markers]
+    return any(marker in q for marker in normalized_markers)
 
 
 def _is_return_policy_question(text: str) -> bool:
