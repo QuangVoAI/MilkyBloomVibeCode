@@ -1,6 +1,6 @@
 # MilkyBloom x EmpathAI
 
-> Live demo: https://milkybloom-frontend.onrender.com/
+Mở web demo ngay: https://milkybloom-frontend.onrender.com/
 
 <p align="center">
   <img src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="Frontend" />
@@ -12,12 +12,27 @@
 
 MilkyBloom x EmpathAI là một nền tảng thương mại điện tử đồ chơi trẻ em tích hợp lớp CSKH agentic thời gian thực.
 
-Mở web demo tại: [https://milkybloom-frontend.onrender.com/](https://milkybloom-frontend.onrender.com/)
-
 - **MilkyBloom**: storefront e-commerce, product catalog, cart, checkout, orders, profile
 - **EmpathAI**: agentic customer service, xử lý hội thoại thấu cảm, tra cứu ngữ cảnh, và thực thi action hỗ trợ khách hàng
 
 Mục tiêu của dự án là giữ trải nghiệm mua sắm mượt cho khách hàng, đồng thời để AI hỗ trợ khách hàng theo cách tự nhiên, có ngữ cảnh, và phản hồi realtime.
+
+## Demo Online
+
+Link web production: [https://milkybloom-frontend.onrender.com/](https://milkybloom-frontend.onrender.com/)
+
+Quét QR để mở nhanh trên điện thoại:
+
+<p align="center">
+  <a href="https://milkybloom-frontend.onrender.com/" target="_blank" rel="noreferrer">
+    <img
+      src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fmilkybloom-frontend.onrender.com%2F"
+      alt="MilkyBloom live demo QR code"
+      width="220"
+      height="220"
+    />
+  </a>
+</p>
 
 ## Project Highlights
 
