@@ -23,6 +23,7 @@ services:
     autoDeploy: true
     buildCommand: pip install --no-cache-dir -r requirements.render.txt
     startCommand: python ws_server.py
+    healthCheckPath: /health
     envVars:
       - key: AGENTIC_WARMUP
         value: "false"

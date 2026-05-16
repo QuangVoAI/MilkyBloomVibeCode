@@ -4,9 +4,12 @@ import asyncio
 import json
 import os
 import sys
+from http import HTTPStatus
 from pathlib import Path
 
 import websockets
+from websockets.datastructures import Headers
+from websockets.http11 import Response
 
 ROOT = Path(__file__).resolve().parent
 PYTHON_DIR = ROOT / "python"
@@ -14,6 +17,70 @@ if str(PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(PYTHON_DIR))
 
 from agents.graph import run_streaming, startup_warmup  # noqa: E402
+
+
+def _http_response(status: HTTPStatus, payload: dict):
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = Headers(
+        {
+            "Content-Type": "application/json; charset=utf-8",
+            "Content-Length": str(len(body)),
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-Session-Id",
+        }
+    )
+    return Response(status.value, status.phrase, headers, body)
+
+
+async def process_request(_connection, request):
+    path = getattr(request, "path", "")
+    upgrade_header = str(getattr(request, "headers", {}).get("Upgrade", "") or "").lower()
+    is_websocket_upgrade = "websocket" in upgrade_header
+
+    if is_websocket_upgrade:
+        return None
+
+    if path == "/health":
+        return _http_response(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "service": "agentic-ai",
+                "provider": os.getenv("EMPATHY_MODE", "featherless"),
+            },
+        )
+
+    if path == "/providers":
+        return _http_response(
+            HTTPStatus.OK,
+            {
+                "providers": {
+                    "featherless": os.getenv(
+                        "FEATHERLESS_BASE_URL",
+                        "https://api.featherless.ai/v1",
+                    ),
+                    "agentic": "built-in",
+                }
+            },
+        )
+
+    if path in ("/", "/chat", "/ws"):
+        return _http_response(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "service": "agentic-ai",
+                "mode": "websocket",
+            },
+        )
+
+    # Non-upgrade requests to anything else get a JSON 404 instead of a
+    # low-level handshake error.
+    if path not in ("/health", "/providers"):
+        return _http_response(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+
+    return None
 
 
 async def handle_ws(websocket):
@@ -112,6 +179,7 @@ async def main():
         handle_ws,
         "0.0.0.0",
         port,
+        process_request=process_request,
         ping_interval=None,
         max_size=10 * 1024 * 1024,
     ):
