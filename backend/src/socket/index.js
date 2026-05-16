@@ -27,6 +27,19 @@ const sanitizeChatErrorMessage = (value) => {
     return redacted || CHAT_ERROR_FALLBACK;
 };
 
+const buildFallbackReply = (message) => {
+    const text = String(message || '').toLowerCase();
+    if (/(sản phẩm|món|đồ|budget|ngân sách|giá|300k|500k|dưới\s*\d)/i.test(text)) {
+        return 'Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể gợi ý sản phẩm nếu bạn cho mình biết ngân sách, độ tuổi hoặc chủ đề bạn thích nhé.';
+    }
+
+    if (/(đơn|order|tracking|mã đơn|email|phone|số điện thoại|tra cứu)/i.test(text)) {
+        return 'Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể hỗ trợ tra đơn nếu bạn gửi mã đơn, email hoặc số điện thoại đã đặt hàng nhé.';
+    }
+
+    return 'Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể giúp bạn hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hoặc chính sách.';
+};
+
 /**
  * ============================================
  * SOCKET.IO CONFIGURATION
@@ -153,11 +166,32 @@ module.exports = {
                             socket.emit('chat_final', data);
                         },
                         onError: (error, data) => {
+                            const safeMessage = sanitizeChatErrorMessage(
+                                error?.message || `${providerLabel} AI error`,
+                            );
+                            const shouldFallback =
+                                providerLabel === 'Groq' ||
+                                /groq|featherless|api error|stream error|\/chat\/completions/i.test(
+                                    String(error?.message || ''),
+                                ) ||
+                                safeMessage === CHAT_ERROR_FALLBACK;
+
+                            if (shouldFallback) {
+                                socket.emit('chat_final', {
+                                    sessionId,
+                                    reply: buildFallbackReply(message),
+                                    provider: 'fallback',
+                                    model: 'fallback-message',
+                                    fallback: true,
+                                    fallback_reason: safeMessage,
+                                    raw: data || null,
+                                });
+                                return;
+                            }
+
                             socket.emit('chat_error', {
                                 sessionId,
-                                message: sanitizeChatErrorMessage(
-                                    error?.message || `${providerLabel} AI error`,
-                                ),
+                                message: safeMessage,
                                 raw: data || null,
                             });
                         },
@@ -180,9 +214,13 @@ module.exports = {
                     });
                 } catch (error) {
                     console.error(`[chat_message] session=${sessionId} failed:`, error);
-                    socket.emit('chat_error', {
+                    socket.emit('chat_final', {
                         sessionId,
-                        message: sanitizeChatErrorMessage(
+                        reply: buildFallbackReply(message),
+                        provider: 'fallback',
+                        model: 'fallback-message',
+                        fallback: true,
+                        fallback_reason: sanitizeChatErrorMessage(
                             error?.message || `${providerLabel} AI streaming failed`,
                         ),
                     });
