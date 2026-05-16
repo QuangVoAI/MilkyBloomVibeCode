@@ -242,6 +242,53 @@ def _number_value(value) -> float | int | None:
     return int(number) if number.is_integer() else number
 
 
+def _product_price_bounds(product: dict) -> tuple[float | int | None, float | int | None]:
+    min_candidates = [
+        product.get("minPrice"),
+        product.get("price"),
+    ]
+    max_candidates = [
+        product.get("maxPrice"),
+        product.get("price"),
+        product.get("minPrice"),
+    ]
+
+    variants = product.get("variants") or []
+    if isinstance(variants, list):
+        for variant in variants:
+            if not isinstance(variant, dict):
+                continue
+            min_candidates.extend([variant.get("salePrice"), variant.get("price")])
+            max_candidates.extend([variant.get("salePrice"), variant.get("price")])
+
+    min_price = None
+    max_price = None
+    for candidate in min_candidates:
+        value = _number_value(candidate)
+        if value is not None:
+            min_price = value if min_price is None else min(min_price, value)
+    for candidate in max_candidates:
+        value = _number_value(candidate)
+        if value is not None:
+            max_price = value if max_price is None else max(max_price, value)
+
+    if min_price is None and max_price is not None:
+        min_price = max_price
+    if max_price is None and min_price is not None:
+        max_price = min_price
+    return min_price, max_price
+
+
+def _product_within_budget(product: dict, budget_limit: int | None) -> bool:
+    if not budget_limit:
+        return True
+
+    min_price, _ = _product_price_bounds(product)
+    if min_price is None:
+        return False
+    return min_price <= budget_limit
+
+
 def _format_price(value) -> str:
     number = _number_value(value)
     if number is None:
@@ -313,6 +360,40 @@ def _fallback_catalog_search(query: str, ctx: dict, *, budget_limit: int | None 
     return _local_match_products(products, query, limit=limit)
 
 
+def _budget_fallback_catalog_search(
+    query: str,
+    ctx: dict,
+    *,
+    budget_limit: int | None = None,
+    keyword: str = "",
+    limit: int = 5,
+) -> list[dict]:
+    if not search_products_by_filters:
+        return []
+
+    remote = search_products_by_filters(
+        ctx,
+        limit=100,
+        sort="price-asc" if budget_limit else None,
+    )
+    products = _normalize_products(remote)
+    if budget_limit:
+        products = [product for product in products if _product_within_budget(product, budget_limit)]
+
+    if not products:
+        return []
+
+    candidate = (keyword or query or "").strip()
+    if candidate:
+        candidate_normalized = _normalize_text(candidate)
+        if candidate_normalized and candidate_normalized not in {"món", "đồ", "quà", "sản phẩm"}:
+            matched = _local_match_products(products, candidate, limit=limit)
+            if matched:
+                return matched
+
+    return products[:limit]
+
+
 def lookup_live_catalog(question: str, context: dict | None = None) -> dict:
     query = _clean_query(question)
     ctx = context or {}
@@ -366,6 +447,8 @@ def lookup_live_catalog(question: str, context: dict | None = None) -> dict:
     products = _normalize_products(remote or {})
     if not products:
         products = _fallback_catalog_search(keyword or query, ctx, budget_limit=budget_limit)
+    if not products and budget_limit:
+        products = _budget_fallback_catalog_search(keyword or query, ctx, budget_limit=budget_limit, keyword=keyword)
     if not products:
         return {
             "found": False,
