@@ -4,12 +4,9 @@ import asyncio
 import json
 import os
 import sys
-from http import HTTPStatus
 from pathlib import Path
 
-import websockets
-from websockets.datastructures import Headers
-from websockets.http11 import Response
+from aiohttp import web
 
 ROOT = Path(__file__).resolve().parent
 PYTHON_DIR = ROOT / "python"
@@ -19,106 +16,98 @@ if str(PYTHON_DIR) not in sys.path:
 from agents.graph import run_streaming, startup_warmup  # noqa: E402
 
 
-def _http_response(status: HTTPStatus, payload: dict):
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    headers = Headers(
-        {
-            "Content-Type": "application/json; charset=utf-8",
-            "Content-Length": str(len(body)),
+def _json_response(payload: dict, status: int = 200) -> web.Response:
+    return web.json_response(
+        payload,
+        status=status,
+        headers={
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, X-Session-Id",
+        },
+    )
+
+
+async def health(request: web.Request) -> web.Response:
+    return _json_response(
+        {
+            "ok": True,
+            "service": "agentic-ai",
+            "provider": os.getenv("EMPATHY_MODE", "featherless"),
         }
     )
-    return Response(status.value, status.phrase, headers, body)
 
 
-async def process_request(_connection, request):
-    path = getattr(request, "path", "")
-    upgrade_header = str(getattr(request, "headers", {}).get("Upgrade", "") or "").lower()
-    is_websocket_upgrade = "websocket" in upgrade_header
+async def providers(request: web.Request) -> web.Response:
+    return _json_response(
+        {
+            "providers": {
+                "featherless": os.getenv(
+                    "FEATHERLESS_BASE_URL",
+                    "https://api.featherless.ai/v1",
+                ),
+                "agentic": "built-in",
+            }
+        }
+    )
 
-    if is_websocket_upgrade:
-        return None
 
-    if path == "/health":
-        return _http_response(
-            HTTPStatus.OK,
-            {
-                "ok": True,
-                "service": "agentic-ai",
-                "provider": os.getenv("EMPATHY_MODE", "featherless"),
-            },
-        )
-
-    if path == "/providers":
-        return _http_response(
-            HTTPStatus.OK,
-            {
-                "providers": {
-                    "featherless": os.getenv(
-                        "FEATHERLESS_BASE_URL",
-                        "https://api.featherless.ai/v1",
-                    ),
-                    "agentic": "built-in",
-                }
-            },
-        )
-
-    if path in ("/", "/chat", "/ws"):
-        return _http_response(
-            HTTPStatus.OK,
+async def ws_entrypoint(request: web.Request) -> web.StreamResponse:
+    if request.headers.get("Upgrade", "").lower() != "websocket":
+        if request.method == "HEAD":
+            return web.Response(status=200, headers={"Content-Length": "0"})
+        return _json_response(
             {
                 "ok": True,
                 "service": "agentic-ai",
                 "mode": "websocket",
-            },
+            }
         )
 
-    # Non-upgrade requests to anything else get a JSON 404 instead of a
-    # low-level handshake error.
-    if path not in ("/health", "/providers"):
-        return _http_response(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+    ws = web.WebSocketResponse(heartbeat=None, max_msg_size=10 * 1024 * 1024)
+    await ws.prepare(request)
 
-    return None
+    async def send_json(payload: dict) -> None:
+        await ws.send_str(json.dumps(payload, ensure_ascii=False))
 
+    async for msg in ws:
+        if msg.type != web.WSMsgType.TEXT:
+            continue
 
-async def handle_ws(websocket):
-    async for raw in websocket:
         try:
-            payload = json.loads(raw)
+            payload = json.loads(msg.data)
         except json.JSONDecodeError:
-            await websocket.send(json.dumps({
+            await send_json({
                 "type": "error",
                 "message": "Invalid JSON payload",
-            }))
+            })
             continue
 
         message = payload.get("message")
         if not message:
-            await websocket.send(json.dumps({
+            await send_json({
                 "type": "error",
                 "message": "message is required",
-            }))
+            })
             continue
 
         history = payload.get("history") or []
         session_id = payload.get("session_id") or payload.get("sessionId") or ""
         shop_context = payload.get("shop_context") or payload.get("context") or {}
 
-        await websocket.send(json.dumps({
+        await send_json({
             "type": "status",
             "session_id": session_id,
             "message": "started",
-        }))
+        })
 
         async def stream_callback(chunk: str):
             if chunk:
-                await websocket.send(json.dumps({
+                await send_json({
                     "type": "token",
                     "session_id": session_id,
                     "content": chunk,
-                }, ensure_ascii=False))
+                })
 
         try:
             final_state = await run_streaming(
@@ -129,14 +118,14 @@ async def handle_ws(websocket):
                 stream_callback=stream_callback,
             )
         except Exception as exc:
-            await websocket.send(json.dumps({
+            await send_json({
                 "type": "error",
                 "session_id": session_id,
                 "message": str(exc),
-            }, ensure_ascii=False))
+            })
             continue
 
-        await websocket.send(json.dumps({
+        await send_json({
             "type": "final",
             "session_id": session_id,
             "reply": final_state.get("answer", ""),
@@ -166,7 +155,23 @@ async def handle_ws(websocket):
             "ticket_number": final_state.get("action_result", {}).get("updated_fields", {}).get("ticket_number", ""),
             "agent_trace": final_state.get("agent_trace", {}),
             "processing_time_ms": final_state.get("processing_time_ms", 0),
-        }, ensure_ascii=False))
+        })
+
+    return ws
+
+
+async def init_app() -> web.Application:
+    app = web.Application()
+    app.router.add_route("GET", "/health", health)
+    app.router.add_route("HEAD", "/health", health)
+    app.router.add_route("GET", "/providers", providers)
+    app.router.add_route("HEAD", "/providers", providers)
+    app.router.add_route("*", "/", ws_entrypoint)
+    app.router.add_route("*", "/ws", ws_entrypoint)
+    app.router.add_route("*", "/chat", ws_entrypoint)
+    app.router.add_route("*", "/chat/ws", ws_entrypoint)
+    app.router.add_route("*", "/ws/chat", ws_entrypoint)
+    return app
 
 
 async def main():
@@ -175,16 +180,13 @@ async def main():
         print("Warming up EmpathAI models before accepting WebSocket traffic...")
         startup_warmup()
 
-    async with websockets.serve(
-        handle_ws,
-        "0.0.0.0",
-        port,
-        process_request=process_request,
-        ping_interval=None,
-        max_size=10 * 1024 * 1024,
-    ):
-        print(f"Agentic AI WebSocket listening on ws://0.0.0.0:{port}")
-        await asyncio.Future()
+    app = await init_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Agentic AI HTTP/WebSocket listening on http://0.0.0.0:{port}")
+    await asyncio.Future()
 
 
 if __name__ == "__main__":
