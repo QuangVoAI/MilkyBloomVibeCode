@@ -10,6 +10,44 @@ let formatSupportCache = null;
 
 const LEGACY_SEED_IMAGE_PREFIX = '/seed-images/';
 const GRIDFS_IMAGE_PATH_PATTERN = /\/api\/media\/images\/([a-fA-F0-9]{24})\/stream(?:\?.*)?$/;
+const PLACEHOLDER_IMAGE = '/placeholder.svg';
+
+const getBackendOrigin = () => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    return new URL(API_BASE_URL, window.location.origin).origin;
+  } catch {
+    return window.location.origin;
+  }
+};
+
+const rewriteGridFsUrl = (value) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+
+  const backendOrigin = getBackendOrigin();
+  if (!backendOrigin) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed, backendOrigin);
+    if (!parsed.pathname.includes('/api/media/images/')) {
+      return trimmed;
+    }
+
+    const match = parsed.pathname.match(/\/api\/media\/images\/([a-fA-F0-9]{24})\/stream/);
+    if (!match) {
+      return trimmed;
+    }
+
+    const search = parsed.search || '';
+    return `${backendOrigin}/api/media/images/${match[1]}/stream${search}`;
+  } catch {
+    return trimmed;
+  }
+};
 
 const isSupportedUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -35,13 +73,25 @@ const isSupportedUrl = (url) => {
   return false;
 };
 
-export const normalizeImageUrl = (url, fallback = '/placeholder.png') => {
+export const normalizeImageUrl = (url, fallback = '/placeholder.svg') => {
   if (!url || typeof url !== 'string') return fallback;
 
   const trimmed = url.trim();
   if (!trimmed) return fallback;
   if (trimmed.startsWith(LEGACY_SEED_IMAGE_PREFIX)) return fallback;
-  if (isSupportedUrl(trimmed)) return trimmed;
+  if (trimmed.startsWith('/placeholder')) return trimmed;
+
+  if (GRIDFS_IMAGE_PATH_PATTERN.test(trimmed) || trimmed.includes('/api/media/images/')) {
+    return rewriteGridFsUrl(trimmed);
+  }
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    if (trimmed.includes('/api/media/images/')) {
+      return rewriteGridFsUrl(trimmed);
+    }
+
+    return trimmed;
+  }
 
   return fallback;
 };
@@ -52,7 +102,7 @@ export const normalizeImageUrl = (url, fallback = '/placeholder.png') => {
  */
 export const getOptimizedImageUrl = (url) => {
   const normalized = normalizeImageUrl(url);
-  if (normalized === '/placeholder.png' || normalized.startsWith('data:')) {
+  if (normalized.startsWith('/placeholder') || normalized.startsWith('data:')) {
     return normalized;
   }
 
@@ -65,7 +115,7 @@ export const getOptimizedImageUrl = (url) => {
  */
 export const generateSrcSet = (url, sizes = [320, 480, 640, 768, 1024, 1280]) => {
   const normalized = normalizeImageUrl(url);
-  if (!normalized || normalized === '/placeholder.png' || normalized.startsWith('data:')) {
+  if (!normalized || normalized.startsWith('/placeholder') || normalized.startsWith('data:')) {
     return '';
   }
 
@@ -80,7 +130,7 @@ export const preloadImage = (url, options = {}) => {
   if (!url || typeof window === 'undefined') return;
 
   const normalized = normalizeImageUrl(url);
-  if (!normalized || normalized === '/placeholder.png') return;
+  if (!normalized || normalized.startsWith('/placeholder')) return;
 
   const { 
     as = 'image',

@@ -87,7 +87,7 @@ const CartItem = ({ item, onUpdateQuantity, onRemove }) => {
           height="100"
           onError={(e) => {
             e.target.onerror = null;
-            e.target.src = '/placeholder.png';
+            e.target.src = '/placeholder.svg';
           }}
         />
       </div>

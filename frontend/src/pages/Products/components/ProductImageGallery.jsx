@@ -19,7 +19,7 @@ const ProductImageGallery = ({ images = [], selectedVariantImageIndex = 0, produ
       .map((image) => normalizeImageUrl(image))
       .filter(Boolean);
 
-    return safeImages.length > 0 ? safeImages : ['/placeholder.png'];
+    return safeImages.length > 0 ? safeImages : ['/placeholder.svg'];
   }, [images]);
 
   // Auto-scroll to selected variant's image when variant changes

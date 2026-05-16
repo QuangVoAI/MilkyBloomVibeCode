@@ -40,7 +40,7 @@ const transformCartItem = (item) => {
     if (product?.imageUrls?.length > 0) {
       return normalizeImageUrl(product.imageUrls[0]);
     }
-    return '/placeholder.png';
+    return '/placeholder.svg';
   };
 
   return {

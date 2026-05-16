@@ -40,7 +40,7 @@ const ProductCard = ({
   const singlePrice = parsePrice(product.price);
   const priceDisplay = hasVariants && minPrice ? formatPrice(minPrice) : formatPrice(singlePrice);
 
-  const imageUrl = product.imageUrls?.[0] || '/placeholder.png';
+  const imageUrl = product.imageUrls?.[0] || '/placeholder.svg';
   
   // Safely extract category name (check both category and categoryId for search results)
   let categoryName = 'Uncategorized';

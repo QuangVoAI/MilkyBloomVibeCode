@@ -273,7 +273,7 @@ const AdvancedSearchBar = ({
                         >
                           <div className="result-image">
                             <img
-                              src={product.imageUrls?.[0] || '/placeholder.png'}
+                              src={product.imageUrls?.[0] || '/placeholder.svg'}
                               alt={product.name}
                               loading="lazy"
                             />

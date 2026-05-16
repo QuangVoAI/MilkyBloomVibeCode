@@ -36,7 +36,7 @@ const OrderSummary = ({
           const imageUrl = item.imageUrl || 
             item.variant?.imageUrls?.[0] || 
             item.product?.imageUrls?.[0] || 
-            '/placeholder.png';
+            '/placeholder.svg';
             
           const variantInfo = item.variant?.attributes?.length > 0 ? (
             item.variant.attributes.map((attr, idx) => (
@@ -55,7 +55,7 @@ const OrderSummary = ({
                 loading="lazy"
                 onError={(e) => {
                   e.target.onerror = null;
-                  e.target.src = '/placeholder.png';
+                  e.target.src = '/placeholder.svg';
                 }}
               />
               <div className="order-item-details">

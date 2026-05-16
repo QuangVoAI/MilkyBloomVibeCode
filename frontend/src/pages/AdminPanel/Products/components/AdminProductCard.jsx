@@ -25,7 +25,7 @@ const AdminProductCard = ({
   const singlePrice = parsePrice(product.price);
   const priceDisplay = hasVariants && minPrice ? formatPrice(minPrice) : formatPrice(singlePrice);
 
-  const imageUrl = product.imageUrls?.[0] || '/placeholder.png';
+  const imageUrl = product.imageUrls?.[0] || '/placeholder.svg';
   const categoryName = product.category?.name || product.categoryId?.[0]?.name || product.categoryId?.name || 'Uncategorized';
   
   // Calculate total stock: use variants sum if available, fallback to totalStock field
