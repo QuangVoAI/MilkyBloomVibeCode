@@ -60,7 +60,7 @@ const ProductShowcaseSection = ({
           <div ref={scrollRef} className="products-scroll">
             {loading ? (
               [...Array(6)].map((_, i) => (
-                <div key={i} className="skeleton w-[200px] sm:w-[220px] lg:w-[240px] h-[320px] flex-shrink-0 rounded-lg" />
+                <div key={i} className="skeleton w-[168px] sm:w-[200px] lg:w-[240px] h-[300px] sm:h-[320px] flex-shrink-0 rounded-lg" />
               ))
             ) : (
               products.slice(0, 12).map((product) => (
@@ -71,7 +71,7 @@ const ProductShowcaseSection = ({
                   showCategory={false}
                   showQuickView={false}
                   onClick={() => navigate(`/products/${product._id}`)}
-                  className="flex-shrink-0 w-[200px] sm:w-[220px] lg:w-[240px]"
+                  className="flex-shrink-0 w-[168px] sm:w-[200px] lg:w-[240px]"
                 />
               ))
             )}

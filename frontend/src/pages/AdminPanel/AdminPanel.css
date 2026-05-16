@@ -33,6 +33,7 @@
   flex-direction: column;
   overflow: visible;
   min-height: auto;
+  min-width: 0;
 }
 
 .admin-panel-content {
@@ -44,6 +45,7 @@
   flex-direction: column;
   overflow: visible;
   box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.08);
+  min-width: 0;
 }
 
 .admin-dashboard-shell {
@@ -157,8 +159,8 @@
     top: 0;
     left: 0;
     bottom: 0;
-    width: 280px;
-    max-width: 85vw;
+    width: min(88vw, 320px);
+    max-width: 88vw;
     background: white;
     z-index: 999;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
@@ -173,6 +175,7 @@
 
   .admin-panel-content {
     border-radius: 8px;
+    overflow-x: auto;
   }
   
   .admin-dashboard-shell {

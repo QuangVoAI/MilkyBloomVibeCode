@@ -153,7 +153,7 @@ const CategorizedProductsSection = () => {
               className="categorized-products-list"
             >
               {activeCategory.products.map((product) => (
-                <div key={product._id} className="flex-shrink-0 w-[220px] sm:w-[240px] transition-transform duration-300 hover:-translate-y-1">
+                <div key={product._id} className="flex-shrink-0 w-[180px] sm:w-[220px] lg:w-[240px] transition-transform duration-300 hover:-translate-y-1">
                   <ProductCard
                     product={product}
                     showBadges={false}

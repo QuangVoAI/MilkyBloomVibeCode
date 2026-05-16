@@ -139,7 +139,7 @@ const AdminSidebar = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => setShowAccountMenu((v) => !v)}
-            className="flex items-center gap-2 w-full text-left rounded-lg px-2 py-1.5 transition hover:bg-slate-50"
+            className="flex items-center gap-2 w-full min-h-[44px] text-left rounded-lg px-2 py-2 transition hover:bg-slate-50"
           >
             {user?.avatar || user?.profileImage || user?.photoURL ? (
               <img
@@ -196,7 +196,7 @@ const AdminSidebar = ({ onNavigate }) => {
 
         {/* Search */}
         <div className="relative">
-          <label className="w-full bg-slate-50 border border-slate-200 rounded-lg flex items-center px-3 py-2.5 text-sm text-slate-600">
+          <label className="w-full min-h-[44px] bg-slate-50 border border-slate-200 rounded-lg flex items-center px-3 py-2.5 text-sm text-slate-600">
             <Search className="size-4 mr-1.5 text-slate-400" />
             <input
               type="text"
@@ -223,7 +223,7 @@ const AdminSidebar = ({ onNavigate }) => {
                 searchResults.map((item) => (
                   <button
                     key={`${item.type}-${item.id}`}
-                    className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition flex items-start gap-2"
+                    className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition flex items-start gap-2 min-h-[44px]"
                     onClick={() => handleResultNavigate(item.route)}
                   >
                     <span className="text-[11px] font-semibold text-slate-600">{item.type}</span>
@@ -246,7 +246,7 @@ const AdminSidebar = ({ onNavigate }) => {
             <button
               key={tab.route}
               onClick={() => handleTabClick(tab.route)}
-              className={`flex items-center justify-start gap-2.5 w-full rounded-md px-3 py-2 text-sm transition cursor-pointer ${
+              className={`flex items-center justify-start gap-2.5 w-full min-h-[44px] rounded-md px-3 py-2 text-sm transition cursor-pointer ${
                 isActive(tab.route)
                   ? 'bg-slate-900 text-white'
                   : 'text-slate-600 hover:bg-slate-50'

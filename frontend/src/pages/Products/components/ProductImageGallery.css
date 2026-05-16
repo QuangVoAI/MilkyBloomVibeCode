@@ -172,8 +172,48 @@
 
   .main-image-container {
     width: 100%;
-    min-height: 280px;
+    min-height: 240px;
     aspect-ratio: 1;
+  }
+
+  .thumbnail-item {
+    width: 52px;
+    height: 52px;
+  }
+}
+
+@media (max-width: 480px) {
+  .product-image-gallery-nike {
+    gap: 0.4rem;
+  }
+
+  .main-image-container {
+    min-height: 220px;
+  }
+
+  .thumbnail-item {
+    width: 48px;
+    height: 48px;
+  }
+
+  .fullscreen-close-btn {
+    width: 42px;
+    height: 42px;
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+
+  .fullscreen-nav-btn {
+    width: 46px;
+    height: 46px;
+  }
+
+  .fullscreen-nav-btn.prev {
+    left: 0.75rem;
+  }
+
+  .fullscreen-nav-btn.next {
+    right: 0.75rem;
   }
 }
 

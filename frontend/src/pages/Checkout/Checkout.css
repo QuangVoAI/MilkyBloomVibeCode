@@ -3,6 +3,7 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 1.5rem 1rem;
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
   min-height: calc(100vh - 160px);
   box-sizing: border-box;
   overflow-x: hidden;
@@ -17,6 +18,11 @@
 
 .checkout-header {
   margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .back-button {
@@ -106,7 +112,13 @@
 
 @media (max-width: 640px) {
   .checkout-container {
-    padding: 1rem 0.75rem;
+    padding: 1rem 0.75rem calc(5.5rem + env(safe-area-inset-bottom));
+  }
+
+  .checkout-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .checkout-title {
@@ -125,7 +137,7 @@
 
 @media (max-width: 480px) {
   .checkout-container {
-    padding: 0.5rem;
+    padding: 0.5rem 0.5rem calc(5.75rem + env(safe-area-inset-bottom));
     width: 100%;
   }
 
@@ -144,5 +156,9 @@
   .back-button {
     font-size: 0.875rem;
     padding: 0.25rem 0.5rem;
+  }
+
+  .checkout-summary {
+    border-radius: 12px;
   }
 }

@@ -199,7 +199,7 @@ const ProductDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-2 md:py-4">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-2 pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:pb-0 md:py-4">
       <div className="max-w-[1400px] mx-auto px-2 md:px-4">
         {/* Back Button */}
         <Button

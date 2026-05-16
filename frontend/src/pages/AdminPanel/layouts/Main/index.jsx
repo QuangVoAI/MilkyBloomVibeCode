@@ -426,7 +426,7 @@ const Main = () => {
                 <h3 className="text-sm font-semibold text-stone-700 mb-3">
                   Monthly Revenue (Heatmap)
                 </h3>
-                <div className="grid grid-cols-6 md:grid-cols-12 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-12 gap-2">
                   {revenueMonthData.map((m) => (
                     <div key={m.label} className="flex flex-col items-center gap-1">
                       <div
