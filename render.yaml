@@ -3,7 +3,6 @@ services:
     name: milkybloom-backend
     runtime: node
     rootDir: backend
-    plan: free
     autoDeploy: true
     buildCommand: npm ci
     startCommand: npm start
@@ -21,7 +20,6 @@ services:
     name: milkybloom-agentic
     runtime: python
     rootDir: agentic-ai
-    plan: free
     autoDeploy: true
     buildCommand: pip install --no-cache-dir -r requirements.render.txt
     startCommand: python ws_server.py
@@ -33,7 +31,6 @@ services:
     name: milkybloom-frontend
     runtime: static
     rootDir: frontend
-    plan: free
     autoDeploy: true
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
