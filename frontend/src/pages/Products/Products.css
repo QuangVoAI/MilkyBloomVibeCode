@@ -66,6 +66,8 @@
   height: clamp(220px, 38vw, 420px);
   object-fit: cover;
   display: block;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .products-banner-video {
@@ -363,6 +365,33 @@
 .products-grid.loading {
   opacity: 0.6;
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .products-page::before,
+  .products-page::after,
+  .products-banner-video,
+  .sort-menu,
+  .filters-backdrop,
+  .products-content,
+  .products-filters,
+  .products-grid,
+  .products-toolbar,
+  .filter-toggle-btn,
+  .sort-trigger,
+  .sort-option {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .products-page::before,
+  .products-page::after {
+    opacity: 0.15;
+  }
+
+  .products-banner-media {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  }
 }
 
 /* List View */

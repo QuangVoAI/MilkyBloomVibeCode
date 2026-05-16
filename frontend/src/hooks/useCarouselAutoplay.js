@@ -11,6 +11,7 @@ export const useCarouselAutoplay = (interval = 5000) => {
   const stop = () => {
     if (autoPlayRef.current) {
       clearInterval(autoPlayRef.current);
+      autoPlayRef.current = null;
     }
   };
 

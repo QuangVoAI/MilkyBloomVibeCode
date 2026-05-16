@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, lazy, Suspense, useMemo, useCallback, useEffect } from 'react';
 import { SlidersHorizontal, X, ArrowUpDown, Grid3X3, LayoutList, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useProductCatalog } from './hooks';
@@ -12,10 +12,22 @@ const ProductGrid = lazy(() => import('./components/ProductGrid'));
 const BANNER_VIDEO_CACHE_KEY = 'milkybloom-products-banner-video';
 const BANNER_VIDEO_CACHE_TTL = 30 * 60 * 1000;
 
+const getBannerVideoType = (mimeType) => {
+  switch (String(mimeType || '').toLowerCase()) {
+    case 'video/webm':
+      return 'video/webm';
+    case 'video/quicktime':
+      return 'video/quicktime';
+    case 'video/mp4':
+    default:
+      return 'video/mp4';
+  }
+};
+
 const Products = () => {
   const [videoError, setVideoError] = useState(false);
   const [catalogBannerVideo, setCatalogBannerVideo] = useState('');
-  const bannerPreloaderRef = useRef(null);
+  const [catalogBannerVideoMimeType, setCatalogBannerVideoMimeType] = useState('video/mp4');
   const [showFilters, setShowFilters] = useState(true);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -119,6 +131,7 @@ const Products = () => {
     const cachedVideo = readCachedBannerVideo();
     if (cachedVideo) {
       setCatalogBannerVideo(cachedVideo);
+      setCatalogBannerVideoMimeType('video/mp4');
       setVideoError(false);
     }
 
@@ -130,6 +143,7 @@ const Products = () => {
         if (nextUrl) {
           writeCachedBannerVideo(nextUrl);
           setCatalogBannerVideo(nextUrl);
+          setCatalogBannerVideoMimeType(data?.mimeType || 'video/mp4');
           setVideoError(false);
         }
       } catch {
@@ -148,44 +162,10 @@ const Products = () => {
   }, []);
 
   const showVideo = !!catalogBannerVideo && !videoError;
-
-  useEffect(() => {
-    if (!catalogBannerVideo) return undefined;
-
-    const preloader = document.createElement('video');
-    preloader.preload = 'auto';
-    preloader.muted = true;
-    preloader.playsInline = true;
-    preloader.src = catalogBannerVideo;
-    preloader.load();
-    bannerPreloaderRef.current = preloader;
-
-    return () => {
-      try {
-        preloader.pause();
-        preloader.removeAttribute('src');
-        preloader.load();
-      } catch {
-        // ignore cleanup errors
-      }
-      bannerPreloaderRef.current = null;
-    };
-  }, [catalogBannerVideo]);
-
-  useEffect(() => {
-    if (!catalogBannerVideo) return undefined;
-
-    const link = document.createElement('link');
-    link.rel = 'preload';
-    link.as = 'video';
-    link.href = catalogBannerVideo;
-    link.crossOrigin = 'anonymous';
-    document.head.appendChild(link);
-
-    return () => {
-      link.remove();
-    };
-  }, [catalogBannerVideo]);
+  const bannerVideoType = useMemo(
+    () => getBannerVideoType(catalogBannerVideoMimeType),
+    [catalogBannerVideoMimeType],
+  );
 
   // Memoize priceRange to prevent unnecessary re-renders
   const priceRange = useMemo(() => ({ min: 0, max: 500 }), []);
@@ -205,12 +185,16 @@ const Products = () => {
                   muted
                   loop
                   playsInline
-                  preload="auto"
+                  preload="metadata"
                   controls={false}
                   onError={() => setVideoError(true)}
                   onLoadedData={() => setVideoError(false)}
+                  onCanPlay={(event) => {
+                    setVideoError(false);
+                    event.currentTarget.play?.().catch(() => {});
+                  }}
                 >
-                  <source src={catalogBannerVideo} type="video/mp4" />
+                  <source src={catalogBannerVideo} type={bannerVideoType} />
                 </video>
               ) : (
                 <div className="products-banner-fallback" aria-label="Product Catalog Banner">
