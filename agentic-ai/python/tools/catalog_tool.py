@@ -193,6 +193,33 @@ def _build_budget_catalog_message(products: list[dict], budget_limit: int | None
     return prefix + ":\n" + "\n".join(lines)
 
 
+def _build_nearby_budget_message(products: list[dict], budget_limit: int | None, keyword: str = "") -> str:
+    if not products:
+        return _build_budget_catalog_message([], budget_limit, keyword=keyword)
+
+    label = "Mình chưa thấy món nào đúng tầm"
+    if budget_limit:
+        label += f" {_format_price(budget_limit)}"
+    else:
+        label += " ngân sách này"
+    if keyword:
+        label += f" cho '{keyword}'"
+
+    lines = []
+    for product in products[:3]:
+        name = product.get("name") or "Sản phẩm"
+        min_price, max_price = _product_price_bounds(product)
+        if min_price is not None and max_price is not None and max_price != min_price:
+            price_text = f"{_format_price(min_price)} - {_format_price(max_price)}"
+        elif min_price is not None:
+            price_text = _format_price(min_price)
+        else:
+            price_text = _format_price(product.get("price"))
+        lines.append(f"• {name} - {price_text}")
+
+    return label + ", nhưng đây là vài món gần nhất:\n" + "\n".join(lines)
+
+
 def _format_variant(variant: dict) -> str:
     attrs = variant.get("attributes") or []
     attr_text = ""
@@ -449,6 +476,22 @@ def lookup_live_catalog(question: str, context: dict | None = None) -> dict:
         products = _fallback_catalog_search(keyword or query, ctx, budget_limit=budget_limit)
     if not products and budget_limit:
         products = _budget_fallback_catalog_search(keyword or query, ctx, budget_limit=budget_limit, keyword=keyword)
+    if not products and budget_limit and search_products_by_filters:
+        remote = search_products_by_filters(
+            ctx,
+            limit=5,
+            sort="price-asc",
+        )
+        products = _normalize_products(remote)
+        if products:
+            return {
+                "found": True,
+                "query": keyword or query,
+                "summary": _build_nearby_budget_message(products, budget_limit, keyword=keyword),
+                "lookup_hints": CATALOG_HINTS,
+                "products": products,
+                "suggested_actions": ["ask_clarify_product"],
+            }
     if not products:
         return {
             "found": False,
