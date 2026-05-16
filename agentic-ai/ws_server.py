@@ -29,23 +29,38 @@ def _json_response(payload: dict, status: int = 200) -> web.Response:
 
 
 async def health(request: web.Request) -> web.Response:
+    groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_API_KEYS", "").strip())
+    featherless_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip())
     return _json_response(
         {
             "ok": True,
             "service": "agentic-ai",
             "provider": os.getenv("EMPATHY_MODE", "featherless"),
+            "groq_configured": groq_configured,
+            "featherless_configured": featherless_configured,
         }
     )
 
 
 async def providers(request: web.Request) -> web.Response:
+    groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_API_KEYS", "").strip())
+    featherless_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip())
     return _json_response(
         {
             "providers": {
-                "featherless": os.getenv(
-                    "FEATHERLESS_BASE_URL",
-                    "https://api.featherless.ai/v1",
-                ),
+                "groq": {
+                    "configured": groq_configured,
+                    "base_url": os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+                    "model": os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
+                },
+                "featherless": {
+                    "configured": featherless_configured,
+                    "base_url": os.getenv(
+                        "FEATHERLESS_BASE_URL",
+                        "https://api.featherless.ai/v1",
+                    ),
+                    "model": os.getenv("FEATHERLESS_MODEL", "Qwen/Qwen2.5-7B-Instruct"),
+                },
                 "agentic": "built-in",
             }
         }
@@ -176,6 +191,12 @@ async def init_app() -> web.Application:
 
 async def main():
     port = int(os.getenv("PORT", os.getenv("AGENTIC_WS_PORT", "8788")))
+    groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_API_KEYS", "").strip())
+    featherless_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip())
+    if not groq_configured:
+        print("[agentic] GROQ_API_KEY/GROQ_API_KEYS is missing. Groq requests will fail unless Featherless fallback is available.")
+    if not featherless_configured:
+        print("[agentic] FEATHERLESS_API_KEY is missing. If Groq fails, responses will fall back to canned messages only.")
     if os.getenv("AGENTIC_WARMUP", "true").lower() != "false":
         print("Warming up EmpathAI models before accepting WebSocket traffic...")
         startup_warmup()
