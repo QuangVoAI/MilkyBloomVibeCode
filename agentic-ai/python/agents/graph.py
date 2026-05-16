@@ -2154,8 +2154,29 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # Inquiry: order_lookup_inquiry -> retrieve (no sentiment needed)
-    graph.add_edge("order_lookup_inquiry", "retrieve")
+    # Inquiry: policy questions can go straight to the policy summary writer,
+    # avoiding dependency on Qdrant / retrieval availability.
+    def route_after_inquiry_entry(state):
+        question = state.get("question", "")
+        capability_reason = str(state.get("capability_reason") or "").lower()
+        if (
+            "return_policy_question" in capability_reason
+            or "cancel_policy_question" in capability_reason
+            or "warranty_policy_question" in capability_reason
+            or _is_order_policy_question(question)
+            or _is_support_ticket_request(question)
+        ):
+            return "direct"
+        return "retrieve"
+
+    graph.add_conditional_edges(
+        "order_lookup_inquiry",
+        route_after_inquiry_entry,
+        {
+            "direct": "inquiry_writer",
+            "retrieve": "retrieve",
+        },
+    )
 
     # Both INQUIRY and COMPLAINT share: retrieve -> grade
     graph.add_edge("retrieve", "grade")
