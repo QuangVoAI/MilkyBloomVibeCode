@@ -2,8 +2,34 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Heart } from 'lucide-react';
 import './About.css';
 
-const message = `Dear dreamers,
-MilkyBloom is a full-stack e-commerce web application developed as part of our Web Application Development course using Node.js. The platform is designed to provide a seamless online shopping experience for collectible toys, featuring a robust backend built with ExpressJS and MongoDB, secure authentication flows, advanced order and payment processing, and a modern user-friendly interface. This project represents the collective dedication of our team, combining practical engineering skills with real-world system design to deliver a scalable, maintainable, and production-ready application.`;
+const message = `Xin chào, đây là MilkyBloom.
+
+MilkyBloom là dự án thương mại điện tử full-stack được xây dựng cho dòng sản phẩm sưu tầm, với mục tiêu tạo ra trải nghiệm mua sắm nhẹ nhàng, rõ ràng và dễ dùng trên cả desktop lẫn mobile.
+
+Dự án kết hợp backend Node.js, ExpressJS, MongoDB và hệ thống xác thực an toàn, cùng giao diện hiện đại cho người dùng, quản trị viên và chatbot hỗ trợ khách hàng.
+
+Trong phiên bản triển khai hiện tại, MilkyBloom tập trung vào:
+• Danh mục sản phẩm, tìm kiếm và bộ lọc thông minh
+• Giỏ hàng, đặt hàng và xử lý thanh toán
+• Chat hỗ trợ sản phẩm, đơn hàng, vận chuyển và đổi trả
+• Hệ thống media, ảnh và video được tối ưu cho deploy thực tế
+
+Đây là một sản phẩm được tinh chỉnh liên tục để vừa đẹp, vừa chạy ổn định, vừa đủ linh hoạt cho demo, đồ án và triển khai thật.`;
+
+const ABOUT_HIGHLIGHTS = [
+  {
+    title: 'Stack chính',
+    value: 'React, Node.js, Express, MongoDB',
+  },
+  {
+    title: 'Tính năng nổi bật',
+    value: 'Tìm kiếm, giỏ hàng, thanh toán, chat AI',
+  },
+  {
+    title: 'Trải nghiệm',
+    value: 'Mượt, rõ, thân thiện trên mọi thiết bị',
+  },
+];
 
 const HEART_FLIGHT = [
   { top: '8%', delay: 0, duration: 18, size: 28, arc: 24, sway: 6, seed: 0.1 },
@@ -115,6 +141,22 @@ const About = () => {
             <p className="handwriting whitespace-pre-line text-lg lg:text-xl leading-9 text-slate-700 min-h-[200px]">
               {typed}
             </p>
+
+            <div className="mt-8 grid gap-3 md:grid-cols-3">
+              {ABOUT_HIGHLIGHTS.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-2xl border border-rose-100/80 bg-white/85 px-4 py-4 shadow-sm backdrop-blur"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-400">
+                    {item.title}
+                  </p>
+                  <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
