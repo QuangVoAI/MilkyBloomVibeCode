@@ -1,6 +1,18 @@
 version: '3.8'
 
 services:
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    container_name: toy-store-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - toy-store-network
+
   mongodb:
     image: mongo:7.0
     container_name: toy-store-mongodb
@@ -56,6 +68,8 @@ services:
       - toy-store-network
 
 volumes:
+  qdrant_data:
+    driver: local
   mongodb_data:
     driver: local
   elasticsearch_data:

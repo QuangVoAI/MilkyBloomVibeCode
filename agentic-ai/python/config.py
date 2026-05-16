@@ -49,6 +49,14 @@ FEATHERLESS_HTTP_REFERER = os.getenv("FEATHERLESS_HTTP_REFERER", "")
 FEATHERLESS_X_TITLE = os.getenv("FEATHERLESS_X_TITLE", "")
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_HOSTPORT = os.getenv("QDRANT_HOSTPORT", "")
+QDRANT_HOST = os.getenv("QDRANT_HOST", "")
+QDRANT_PORT = os.getenv("QDRANT_PORT", "")
+if not os.getenv("QDRANT_URL"):
+    if QDRANT_HOSTPORT:
+        QDRANT_URL = QDRANT_HOSTPORT if QDRANT_HOSTPORT.startswith(("http://", "https://")) else f"http://{QDRANT_HOSTPORT}"
+    elif QDRANT_HOST and QDRANT_PORT:
+        QDRANT_URL = f"http://{QDRANT_HOST}:{QDRANT_PORT}"
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 
 # --- Model Configuration ---

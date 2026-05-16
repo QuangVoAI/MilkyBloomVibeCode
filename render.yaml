@@ -1,4 +1,15 @@
 services:
+  - type: pserv
+    name: milkybloom-qdrant
+    runtime: docker
+    dockerfilePath: qdrant/Dockerfile
+    dockerContext: qdrant
+    autoDeploy: true
+    disk:
+      name: qdrant-storage
+      mountPath: /qdrant/storage
+      sizeGB: 5
+
   - type: web
     name: milkybloom-backend
     runtime: node
@@ -24,6 +35,7 @@ services:
     buildCommand: pip install --no-cache-dir -r requirements.render.txt
     startCommand: python ws_server.py
     healthCheckPath: /health
+    initialDeployHook: python python/bootstrap_qdrant.py
     envVars:
       - key: AGENTIC_WARMUP
         value: "false"
@@ -32,6 +44,11 @@ services:
           name: milkybloom-backend
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: QDRANT_HOSTPORT
+        fromService:
+          name: milkybloom-qdrant
+          type: pserv
+          property: hostport
 
   - type: web
     name: milkybloom-frontend
