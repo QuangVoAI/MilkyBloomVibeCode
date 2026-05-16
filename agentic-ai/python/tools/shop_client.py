@@ -19,8 +19,15 @@ def _normalize_base_url(value: str) -> str:
     return base
 
 
+def _ensure_api_path(value: str) -> str:
+    base = _normalize_base_url(value)
+    if not base:
+        return ""
+    return base if base.endswith("/api") else f"{base}/api"
+
+
 def _get_base_url() -> str:
-    return _normalize_base_url(
+    return _ensure_api_path(
         os.getenv("SHOP_API_BASE_URL")
         or os.getenv("BACKEND_URL")
         or os.getenv("BACKEND_BASE_URL")

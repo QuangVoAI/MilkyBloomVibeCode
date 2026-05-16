@@ -27,6 +27,11 @@ services:
     envVars:
       - key: AGENTIC_WARMUP
         value: "false"
+      - key: BACKEND_URL
+        fromService:
+          name: milkybloom-backend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
   - type: web
     name: milkybloom-frontend
