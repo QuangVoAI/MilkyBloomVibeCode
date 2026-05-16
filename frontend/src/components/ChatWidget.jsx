@@ -23,6 +23,8 @@ const STORAGE_KEY = "milkybloom-chat-session-v2";
 const SESSION_ID_KEY = "milkybloom-chat-session-id-v1";
 const PROVIDER_STORAGE_KEY = "milkybloom-chat-provider-v1";
 const MAX_HISTORY = 20;
+const CHAT_ERROR_FALLBACK =
+  "Mình đang gặp lỗi kết nối AI tạm thời. Bạn thử lại sau nhé.";
 
 const WELCOME_MESSAGE = {
   role: "assistant",
@@ -503,7 +505,14 @@ const ChatWidget = () => {
     const handleError = (data) => {
       if (data?.session_id && data.session_id !== streamingSessionIdRef.current)
         return;
-      const message = data?.message || "Hệ thống chat tạm thời chưa sẵn sàng.";
+      const rawMessage = String(data?.message || "").trim();
+      const message =
+        rawMessage &&
+        !/\/chat\/completions/i.test(rawMessage) &&
+        !/\b(?:sk|gsk|pk)-[A-Za-z0-9][A-Za-z0-9._-]{8,}\b/i.test(rawMessage) &&
+        !/Bearer\s+[A-Za-z0-9._~+/=-]+/i.test(rawMessage)
+          ? rawMessage
+          : CHAT_ERROR_FALLBACK;
       if (assistantIndexRef.current != null) {
         setMessages((current) => {
           const next = [...current];

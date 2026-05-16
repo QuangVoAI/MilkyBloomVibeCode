@@ -4,6 +4,29 @@ const { streamAgenticChat } = require('../services/agentic-stream.service');
 
 let io;
 
+const CHAT_ERROR_FALLBACK = 'Mình đang gặp lỗi kết nối AI tạm thời. Bạn thử lại sau nhé.';
+
+const sanitizeChatErrorMessage = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return CHAT_ERROR_FALLBACK;
+
+    // Never expose API keys or raw provider URLs in the chat surface.
+    if (
+        /\/chat\/completions/i.test(text) ||
+        /\b(?:sk|gsk|pk)-[A-Za-z0-9][A-Za-z0-9._-]{8,}\b/i.test(text) ||
+        /Bearer\s+[A-Za-z0-9._~+/=-]+/i.test(text)
+    ) {
+        return CHAT_ERROR_FALLBACK;
+    }
+
+    const redacted = text
+        .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***')
+        .replace(/\b(?:sk|gsk|pk)-[A-Za-z0-9][A-Za-z0-9._-]{8,}\b/gi, '***')
+        .replace(/https?:\/\/[^\s]+/gi, '***');
+
+    return redacted || CHAT_ERROR_FALLBACK;
+};
+
 /**
  * ============================================
  * SOCKET.IO CONFIGURATION
@@ -132,7 +155,9 @@ module.exports = {
                         onError: (error, data) => {
                             socket.emit('chat_error', {
                                 sessionId,
-                                message: error.message || `${providerLabel} AI error`,
+                                message: sanitizeChatErrorMessage(
+                                    error?.message || `${providerLabel} AI error`,
+                                ),
                                 raw: data || null,
                             });
                         },
@@ -157,7 +182,9 @@ module.exports = {
                     console.error(`[chat_message] session=${sessionId} failed:`, error);
                     socket.emit('chat_error', {
                         sessionId,
-                        message: error.message || `${providerLabel} AI streaming failed`,
+                        message: sanitizeChatErrorMessage(
+                            error?.message || `${providerLabel} AI streaming failed`,
+                        ),
                     });
                 }
             });

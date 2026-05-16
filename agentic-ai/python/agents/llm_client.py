@@ -7,6 +7,7 @@ LLM client for EmpathAI.
 import asyncio
 import aiohttp
 import json
+import re
 from typing import AsyncGenerator
 
 import sys
@@ -124,6 +125,21 @@ def _build_openai_headers(api_key: str, referer: str = "", title: str = "") -> d
     return headers
 
 
+def _sanitize_error_text(value: str, max_chars: int = 240) -> str:
+    """Strip obvious secrets and URLs from provider errors before surfacing them."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    text = re.sub(r"Bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer ***", text, flags=re.I)
+    text = re.sub(r"\b(?:sk|gsk|pk)-[A-Za-z0-9][A-Za-z0-9._-]{8,}\b", "***", text)
+    text = re.sub(r"https?://[^\s]+", "***", text)
+
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip() + "..."
+    return text
+
+
 def _build_openai_payload(
     messages: list[dict],
     model: str,
@@ -210,14 +226,13 @@ async def _openai_chat_complete(
         ) as resp:
             if resp.status != 200:
                 error_text = await resp.text()
+                safe_error_text = _sanitize_error_text(error_text[:500])
                 update_current_generation_safe(
                     level="ERROR",
                     status_message=f"{provider_name.title()} API error ({resp.status})",
-                    output=redact_for_langfuse(error_text[:500]),
+                    output=redact_for_langfuse(safe_error_text),
                 )
-                raise RuntimeError(
-                    f"{provider_name.title()} API error ({resp.status}): {error_text[:500]}"
-                )
+                raise RuntimeError(f"{provider_name.title()} API error ({resp.status})")
 
             result = await resp.json()
             choices = result.get("choices", [])
@@ -283,14 +298,13 @@ async def _openai_stream_complete(
         ) as resp:
             if resp.status != 200:
                 error_text = await resp.text()
+                safe_error_text = _sanitize_error_text(error_text[:500])
                 update_current_generation_safe(
                     level="ERROR",
                     status_message=f"{provider_name.title()} stream error ({resp.status})",
-                    output=redact_for_langfuse(error_text[:500]),
+                    output=redact_for_langfuse(safe_error_text),
                 )
-                raise RuntimeError(
-                    f"{provider_name.title()} stream error ({resp.status}): {error_text[:500]}"
-                )
+                raise RuntimeError(f"{provider_name.title()} stream error ({resp.status})")
 
             async for raw_line in resp.content:
                 line = raw_line.decode("utf-8", errors="ignore").strip()
