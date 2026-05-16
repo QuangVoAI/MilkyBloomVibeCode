@@ -26,34 +26,34 @@ const buildAvatarDataUrl = (label, background = '#f472b6', foreground = '#ffffff
 const CONTRIBUTORS = [
   {
     name: 'Võ Xuân Quang',
-    role: 'Backend, AI & Infrastructure',
+    role: 'Web Development, Architecture & Integration',
     github: 'QuangVoAI',
     email: 'vxq123@icloud.com',
     avatar: buildAvatarDataUrl('VQ'),
-    bio: 'Phụ trách backend, hệ thống media, triển khai cloud và phần tích hợp agentic AI.'
+    bio: 'Responsible for the web stack, system architecture, backend integration, media handling, and cloud deployment.'
   },
   {
     name: 'Hoàng Xuân Thành',
-    role: 'Frontend & Product UI',
+    role: 'EmpathAI & Agentic Experience',
     github: 'Thanh281105',
     email: '',
     avatar: buildAvatarDataUrl('HT', '#60a5fa'),
-    bio: 'Phụ trách giao diện, trải nghiệm người dùng và các màn hình thương mại điện tử.'
+    bio: 'Responsible for EmpathAI, agentic workflows, and the customer support intelligence layer.'
   }
 ]
 
 const CONTACT_POINTS = [
   {
-    title: 'Hỗ trợ sản phẩm',
-    description: 'Gửi câu hỏi về danh mục, giá, biến thể, ảnh hoặc video sản phẩm.',
+    title: 'Product Support',
+    description: 'Ask about the catalog, pricing, variants, images, or product videos.',
   },
   {
-    title: 'Đơn hàng & vận chuyển',
-    description: 'Tra cứu trạng thái đơn, đổi địa chỉ, hủy đơn hoặc theo dõi giao hàng.',
+    title: 'Orders & Shipping',
+    description: 'Check order status, update an address, cancel an order, or track delivery.',
   },
   {
-    title: 'Đổi trả & phản hồi',
-    description: 'Gửi góp ý, yêu cầu đổi trả, báo lỗi hoặc đề xuất cải thiện trải nghiệm.',
+    title: 'Returns & Feedback',
+    description: 'Send feedback, request a return, report bugs, or suggest improvements.',
   },
 ]
 
@@ -156,26 +156,26 @@ const Contact = () => {
           <div className="relative p-8 sm:p-12 space-y-4">
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-300">
               <Sparkles className="size-4" />
-              Liên hệ MilkyBloom
+              Contact MilkyBloom
             </p>
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Kết nối nhanh với đội ngũ đang xây MilkyBloom
+              Connect quickly with the team building MilkyBloom
             </h1>
             <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-3xl">
-              Bạn cần hỗ trợ về sản phẩm, đơn hàng, vận chuyển, đổi trả hay muốn góp ý cho dự án?
-              Cứ nhắn trực tiếp cho từng thành viên hoặc gửi email chung cho nhóm, mình sẽ tiếp nhận nhanh nhất có thể.
+              Need help with products, orders, shipping, returns, or project feedback?
+              Reach out to the right contributor directly or send a shared email to the team, and we'll respond as quickly as possible.
             </p>
             <div className="flex flex-wrap gap-3 pt-2">
               <Button asChild size="lg" className="px-5">
                 <a href="mailto:vxq123@icloud.com">
                   <Mail className="size-4" />
-                  Gửi email cho team
+                  Email the team
                 </a>
               </Button>
               <Button asChild variant="outline" size="lg" className="px-5">
                 <a href="https://github.com/QuangVoAI/MilkyBloomVibeCode" target="_blank" rel="noreferrer" className="flex items-center gap-2">
                   <Github className="size-4" />
-                  Xem mã nguồn
+                  View source
                   <ArrowUpRight className="size-4" />
                 </a>
               </Button>
@@ -205,9 +205,9 @@ const Contact = () => {
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Thành viên dự án</h2>
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">Project Contributors</h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Thông tin liên hệ nhanh của từng người phụ trách chính.
+                Direct contact details for each primary contributor.
               </p>
             </div>
           </div>
