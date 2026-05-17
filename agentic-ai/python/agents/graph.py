@@ -2696,6 +2696,16 @@ async def run_streaming(
             metadata=_langfuse_pipeline_metadata(final_state),
         )
         try:
+            if session_id:
+                await SessionMemoryManager.update_summary(session_id, final_state, _session_summaries)
+                updated_summary = _session_summaries.get(session_id, {})
+                final_state["session_summary"] = updated_summary
+                final_state["session_summary_text"] = updated_summary.get("summary_text", final_state.get("session_summary_text", ""))
+                final_state["budget"] = updated_summary.get("budget", final_state.get("budget", {}))
+                final_state["viewed_products"] = updated_summary.get("viewed_products", final_state.get("viewed_products", []))
+        except Exception as summary_error:
+            console.print(f"[yellow]  SessionMemory: failed to update summary: {summary_error}[/]")
+        try:
             from utils.chatbot_metrics import record_chatbot_trace
             record_chatbot_trace(final_state)
         except Exception as e:
