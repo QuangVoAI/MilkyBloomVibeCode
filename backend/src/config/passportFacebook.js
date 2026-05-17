@@ -2,11 +2,20 @@ const passportFacebook = require("passport");
 const FacebookStrategy = require("passport-facebook").Strategy;
 const User = require("../models/user.model");
 const { getDefaultAvatar } = require('../utils/defaultAvatar.js');
-const { getBackendUrl } = require('./runtime.js');
+const { getBackendUrl, isProduction, normalizeUrl } = require('./runtime.js');
 
-const getFacebookCallbackUrl = () =>
-    process.env.FACEBOOK_CALLBACK_URL ||
-    `${getBackendUrl()}/api/auth/facebook/callback`;
+const isLocalhostLike = (value = '') =>
+    /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(
+        normalizeUrl(value),
+    );
+
+const getFacebookCallbackUrl = () => {
+    const configured = process.env.FACEBOOK_CALLBACK_URL;
+    if (configured && (!isProduction() || !isLocalhostLike(configured))) {
+        return configured;
+    }
+    return `${getBackendUrl()}/api/auth/facebook/callback`;
+};
 
 module.exports = function setupFacebookPassport() {
     passportFacebook.use(
