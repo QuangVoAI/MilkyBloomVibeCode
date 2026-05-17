@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Heart } from 'lucide-react';
 import './About.css';
 
@@ -64,10 +64,31 @@ const SPARKLE_POSITIONS = [
   { top: '60%', right: '30%' },
 ];
 
+const splitGraphemes = (text) => {
+  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter !== 'undefined') {
+    const segmenter = new Intl.Segmenter('vi', { granularity: 'grapheme' });
+    return [...segmenter.segment(text)].map((segment) => segment.segment);
+  }
+  return Array.from(text);
+};
+
+const getTypingDelay = (segment) => {
+  if (segment === '\n') return 0;
+  if (/\s/.test(segment)) return 26;
+  if (/[.,;:!?]/.test(segment)) return 90;
+  if (/[•\-]/.test(segment)) return 54;
+  return 18;
+};
+
 const About = () => {
-  const [typed, setTyped] = useState('');
+  const messageLines = useMemo(() => message.split('\n'), []);
+  const graphemeLines = useMemo(
+    () => messageLines.map((line) => splitGraphemes(line)),
+    [messageLines],
+  );
+  const [visibleLines, setVisibleLines] = useState(() => messageLines.map(() => ''));
+  const [activeLineIndex, setActiveLineIndex] = useState(0);
   const [skip, setSkip] = useState(false);
-  const typingDelay = 25;
 
   // Memoize hearts to prevent re-renders
   const hearts = useMemo(() => HEART_FLIGHT.map((item, idx) => (
@@ -95,17 +116,61 @@ const About = () => {
 
   useEffect(() => {
     if (skip) {
-      setTyped(message);
-      return;
+      setVisibleLines(messageLines);
+      setActiveLineIndex(messageLines.length - 1);
+      return undefined;
     }
-    let i = 0;
-    const interval = setInterval(() => {
-      setTyped(message.slice(0, i + 1));
-      i += 1;
-      if (i >= message.length) clearInterval(interval);
-    }, typingDelay);
-    return () => clearInterval(interval);
-  }, [skip]);
+    let cancelled = false;
+    const timers = [];
+
+    setVisibleLines(messageLines.map(() => ''));
+    setActiveLineIndex(0);
+
+    const revealLine = (lineIndex, charIndex = 0) => {
+      if (cancelled) return;
+      if (lineIndex >= messageLines.length) {
+        setActiveLineIndex(messageLines.length - 1);
+        return;
+      }
+
+      const currentLine = graphemeLines[lineIndex] || [];
+      if (currentLine.length === 0) {
+        setVisibleLines((prev) => {
+          const next = [...prev];
+          next[lineIndex] = '';
+          return next;
+        });
+        setActiveLineIndex(lineIndex);
+        timers.push(setTimeout(() => revealLine(lineIndex + 1, 0), 180));
+        return;
+      }
+
+      if (charIndex < currentLine.length) {
+        const currentChar = currentLine[charIndex];
+        setVisibleLines((prev) => {
+          const next = [...prev];
+          next[lineIndex] = currentLine.slice(0, charIndex + 1).join('');
+          return next;
+        });
+        setActiveLineIndex(lineIndex);
+        timers.push(
+          setTimeout(() => revealLine(lineIndex, charIndex + 1), getTypingDelay(currentChar)),
+        );
+        return;
+      }
+
+      timers.push(setTimeout(() => revealLine(lineIndex + 1, 0), 260));
+    };
+
+    timers.push(setTimeout(() => revealLine(0, 0), 120));
+
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [skip, graphemeLines, messageLines]);
+
+  const renderedLines = skip ? messageLines : visibleLines;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden text-slate-900 bg-gradient-to-br from-white via-rose-50 to-blue-50">
@@ -138,9 +203,25 @@ const About = () => {
                 Skip
               </button>
             )}
-            <p className="handwriting whitespace-pre-line text-lg lg:text-xl leading-9 text-slate-700 min-h-[200px]">
-              {typed}
-            </p>
+            <div className="handwriting handwriting-text text-lg lg:text-xl leading-9 text-slate-700 min-h-[220px]">
+              {renderedLines.map((line, index) => {
+                const isCurrentLine = index === activeLineIndex && !skip;
+                const isComplete = line === messageLines[index];
+                return (
+                  <span
+                    key={`about-line-${index}`}
+                    className={`writing-line block ${isCurrentLine ? 'is-typing' : ''} ${
+                      isComplete ? 'is-complete' : ''
+                    }`}
+                  >
+                    {line.length > 0 ? line : '\u00A0'}
+                    {isCurrentLine && !isComplete && (
+                      <span className="typing-caret" aria-hidden="true" />
+                    )}
+                  </span>
+                );
+              })}
+            </div>
 
             <div className="mt-8 grid gap-3 md:grid-cols-3">
               {ABOUT_HIGHLIGHTS.map((item) => (

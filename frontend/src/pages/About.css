@@ -1,8 +1,59 @@
 /* About page - Custom animations (Tailwind cannot do these) */
 
 .handwriting {
-  font-family: 'Dancing Script', 'Caveat', 'Pacifico', cursive;
-  letter-spacing: 0.6px;
+  font-family: 'Caveat', 'Dancing Script', 'Be Vietnam Pro', 'Noto Sans', cursive;
+  letter-spacing: 0.15px;
+  font-variant-ligatures: contextual;
+  text-rendering: optimizeLegibility;
+}
+
+.handwriting-text {
+  line-height: 1.8;
+}
+
+.writing-line {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: lineReveal 420ms ease forwards;
+  transform-origin: left center;
+  white-space: pre-wrap;
+  min-height: 1.8em;
+}
+
+.writing-line.is-typing {
+  opacity: 1;
+}
+
+.typing-caret {
+  display: inline-block;
+  width: 0.7ch;
+  height: 1.1em;
+  margin-left: 0.08em;
+  border-right: 2px solid rgba(190, 24, 93, 0.72);
+  vertical-align: -0.18em;
+  animation: caretBlink 0.8s steps(1) infinite;
+}
+
+@keyframes lineReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scaleX(0.985);
+    filter: blur(0.8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleX(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes caretBlink {
+  0%, 45% {
+    opacity: 1;
+  }
+  46%, 100% {
+    opacity: 0;
+  }
 }
 
 /* Sparkle effects */
@@ -82,7 +133,15 @@
 /* Reduce motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
   .sparkle-fx span,
-  .heart-float {
+  .heart-float,
+  .writing-line,
+  .typing-caret {
     animation: none;
+  }
+
+  .writing-line {
+    opacity: 1;
+    transform: none;
+    filter: none;
   }
 }
