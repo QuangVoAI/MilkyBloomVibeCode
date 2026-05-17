@@ -67,6 +67,55 @@ async def providers(request: web.Request) -> web.Response:
     )
 
 
+async def chat_http(request: web.Request) -> web.Response:
+    try:
+        payload = await request.json()
+    except Exception:
+        return _json_response({"error": "Invalid JSON"}, status=400)
+
+    message = payload.get("message")
+    if not message:
+        return _json_response({"error": "message is required"}, status=400)
+
+    history = payload.get("history") or []
+    session_id = payload.get("session_id") or payload.get("sessionId") or ""
+    shop_context = payload.get("shop_context") or payload.get("context") or {}
+
+    try:
+        final_state = await run_streaming(
+            question=message,
+            history=history,
+            session_id=session_id,
+            shop_context=shop_context,
+            stream_callback=None,
+        )
+    except Exception as exc:
+        return _json_response(
+            {
+                "error": str(exc),
+                "provider": "agentic",
+            },
+            status=503,
+        )
+
+    return _json_response(
+        {
+            "reply": final_state.get("answer", ""),
+            "answer": final_state.get("answer", ""),
+            "provider": "agentic",
+            "model": "empathai-langgraph",
+            "session_id": session_id,
+            "sentiment": final_state.get("sentiment", ""),
+            "sentiment_score": final_state.get("sentiment_score", 0),
+            "order_id": final_state.get("order_id", ""),
+            "order_info": final_state.get("order_info", {}),
+            "suggested_actions": final_state.get("suggested_actions", []),
+            "agent_trace": final_state.get("agent_trace", {}),
+            "processing_time_ms": final_state.get("processing_time_ms", 0),
+        }
+    )
+
+
 async def ws_entrypoint(request: web.Request) -> web.StreamResponse:
     if request.headers.get("Upgrade", "").lower() != "websocket":
         if request.method == "HEAD":
@@ -181,9 +230,10 @@ async def init_app() -> web.Application:
     app.router.add_route("HEAD", "/health", health)
     app.router.add_route("GET", "/providers", providers)
     app.router.add_route("HEAD", "/providers", providers)
+    app.router.add_route("POST", "/chat", chat_http)
     app.router.add_route("*", "/", ws_entrypoint)
     app.router.add_route("*", "/ws", ws_entrypoint)
-    app.router.add_route("*", "/chat", ws_entrypoint)
+    app.router.add_route("GET", "/chat", ws_entrypoint)
     app.router.add_route("*", "/chat/ws", ws_entrypoint)
     app.router.add_route("*", "/ws/chat", ws_entrypoint)
     return app

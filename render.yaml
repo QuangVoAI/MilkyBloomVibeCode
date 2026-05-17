@@ -26,6 +26,11 @@ services:
           name: milkybloom-agentic
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: AGENTIC_AI_BASE_URL
+        fromService:
+          name: milkybloom-agentic
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
   - type: web
     name: milkybloom-agentic

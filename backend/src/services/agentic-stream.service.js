@@ -25,11 +25,39 @@ const resolveWebSocketUrl = (value) => {
     return trimmed;
 };
 
+const resolveHttpUrl = (value) => {
+    const trimmed = normalizeUrl(value);
+    if (!trimmed) return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+    }
+    if (trimmed.startsWith('ws://')) {
+        return `http://${trimmed.slice('ws://'.length)}`;
+    }
+    if (trimmed.startsWith('wss://')) {
+        return `https://${trimmed.slice('wss://'.length)}`;
+    }
+    if (!hasScheme(trimmed)) {
+        const protocol = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(trimmed)
+            ? 'http'
+            : 'https';
+        return `${protocol}://${trimmed}`;
+    }
+    return trimmed;
+};
+
 const getAgenticWsUrl = () =>
     resolveWebSocketUrl(
         process.env.AGENTIC_AI_WS_URL ||
         process.env.CHAT_AGENTIC_WS_URL ||
         'ws://127.0.0.1:8788',
+    );
+
+const getAgenticHttpUrl = () =>
+    resolveHttpUrl(
+        process.env.AGENTIC_AI_BASE_URL ||
+        process.env.CHAT_AGENTIC_BASE_URL ||
+        getAgenticWsUrl(),
     );
 
 const getAgenticWsUrlCandidates = () => {
@@ -62,6 +90,7 @@ const streamAgenticChat = async ({
     onError,
 } = {}) => {
     const wsUrls = getAgenticWsUrlCandidates();
+    const httpBaseUrl = getAgenticHttpUrl();
     if (!wsUrls.length) {
         throw new Error('AGENTIC_AI_WS_URL is not configured');
     }
@@ -94,10 +123,84 @@ const streamAgenticChat = async ({
             reject(err);
         };
 
+        const postHttpFallback = async () => {
+            if (!httpBaseUrl) {
+                return null;
+            }
+
+            const endpoint = httpBaseUrl.replace(/\/+$/, '') + '/chat';
+            if (typeof onStatus === 'function') {
+                try {
+                    onStatus({ type: 'status', session_id: sessionId, status: 'started' });
+                } catch (callbackErr) {
+                    console.error('[streamAgenticChat] Error in onStatus callback:', callbackErr);
+                }
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message,
+                    history,
+                    session_id: sessionId,
+                    shop_context: shopContext,
+                }),
+            });
+
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                const error = new Error(
+                    data?.error ||
+                    data?.message ||
+                    `HTTP ${response.status} from Agentic service`,
+                );
+                if (typeof onError === 'function') {
+                    try {
+                        onError(error, data);
+                    } catch (callbackErr) {
+                        console.error('[streamAgenticChat] Error in onError callback:', callbackErr);
+                    }
+                }
+                throw error;
+            }
+
+            if (typeof onFinal === 'function') {
+                try {
+                    onFinal({
+                        type: 'final',
+                        session_id: sessionId,
+                        ...data,
+                    });
+                } catch (callbackErr) {
+                    console.error('[streamAgenticChat] Error in onFinal callback:', callbackErr);
+                }
+            }
+
+            return {
+                reply: data?.reply || data?.answer || '',
+                provider: data?.provider || 'agentic',
+                model: data?.model || 'empathai-langgraph',
+                raw: data || null,
+            };
+        };
+
         const tryNext = async (attemptIndex = 0, lastError = null) => {
             if (finished) return;
             const wsUrl = wsUrls[attemptIndex];
             if (!wsUrl) {
+                try {
+                    const fallbackPayload = await postHttpFallback();
+                    if (fallbackPayload) {
+                        finalize(fallbackPayload);
+                        return;
+                    }
+                } catch (fallbackError) {
+                    fail(fallbackError || lastError || new Error('Agentic WebSocket endpoint unreachable'));
+                    return;
+                }
                 fail(lastError || new Error('Agentic WebSocket endpoint unreachable'));
                 return;
             }
