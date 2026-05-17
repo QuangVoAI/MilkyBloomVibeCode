@@ -1174,9 +1174,18 @@ const ChatWidget = () => {
                 const isAssistant = message.role === "assistant";
                 const isTyping =
                   isAssistant && loading && index === assistantIndexRef.current;
+                const hasRenderableAssistantContent =
+                  Boolean(String(message.content || "").trim()) ||
+                  isTyping ||
+                  Boolean(message.meta?.catalogProducts?.length) ||
+                  Boolean(message.meta?.actionResult) ||
+                  Boolean(message.meta?.pendingActionIntent);
                 const emailLookupMessage = isUser && isEmailLookupText(message.content);
                 const hasOrderId = isUser && isOrderLookupText(message.content);
                 const hasPhone = isUser && isPhoneLookupText(message.content);
+                if (isAssistant && !hasRenderableAssistantContent) {
+                  return null;
+                }
                 return (
                   <div
                     key={`${message.role}-${index}`}

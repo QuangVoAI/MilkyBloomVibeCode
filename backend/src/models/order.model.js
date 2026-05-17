@@ -98,7 +98,6 @@ const OrderSchema = new mongoose.Schema(
             type: String,
             select: false,
             default: null,
-            index: true,
         },
         guestAccessTokenIssuedAt: {
             type: Date,

@@ -10,6 +10,7 @@ const express = require('express');
 const compression = require('compression');
 const http = require('http');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const passport = require('passport');
 const {
   getAllowedCorsOrigins,
@@ -85,6 +86,11 @@ app.use(
         secret: getSessionSecret(),
         resave: false,
         saveUninitialized: false,
+        store: MongoStore.create({
+            mongoUrl: process.env.MONGO_URI,
+            collectionName: 'sessions',
+            ttl: 5 * 60,
+        }),
         cookie: {
             secure: process.env.NODE_ENV === 'production',
             maxAge: 5 * 60 * 1000, // 5 minutes - only for OAuth flow

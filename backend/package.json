@@ -17,6 +17,7 @@
         "chokidar": "^3.6.0",
         "compression": "^1.8.1",
         "concat-map": "^0.0.1",
+        "connect-mongo": "^6.0.0",
         "content-disposition": "^1.0.0",
         "content-type": "^1.0.5",
         "cookie": "^0.7.2",
