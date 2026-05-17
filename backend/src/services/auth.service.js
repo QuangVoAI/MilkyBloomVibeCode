@@ -132,7 +132,7 @@ const register = async (data) => {
         const message = error.details
             .map((detail) => detail.message)
             .join(', '); //gộp tất cả các lỗi
-        throw new Error(message);
+        throw Object.assign(new Error(message), { status: 400 });
     }
 
     const fullName = value.fullName.trim();
@@ -147,7 +147,10 @@ const register = async (data) => {
     const hasNumber = /[0-9]/.test(plainPassword);
 
     if (!hasUpperCase || !hasLowerCase || !hasNumber) {
-        throw new Error('Password must contain uppercase, lowercase, and number');
+        throw Object.assign(
+            new Error('Password must contain uppercase, lowercase, and number'),
+            { status: 400 },
+        );
     }
 
     const [byEmail, byPhone, byUsername] = await Promise.all([
@@ -160,25 +163,45 @@ const register = async (data) => {
     const passwordHash = await bcrypt.hash(plainPassword, 10); //băm mật khẩu
 
     if (byEmail) {
-        throw new Error('Email already in use');
+        throw Object.assign(new Error('Email already in use'), { status: 409 });
     }
     if (byPhone) {
-        throw new Error('Phone number already in use');
+        throw Object.assign(new Error('Phone number already in use'), { status: 409 });
     }
     if (byUsername) {
-        throw new Error('Username already in use');
+        throw Object.assign(new Error('Username already in use'), { status: 409 });
     }
 
-    const user = await userRepository.create({
-        //tạo người dùng mới
-        fullName,
-        email,
-        phone,
-        username,
-        password: passwordHash,
-        avatar: getDefaultAvatar(email), // Assign deterministic default avatar
-        isVerified: false,
-    });
+    let user;
+    try {
+        user = await userRepository.create({
+            //tạo người dùng mới
+            fullName,
+            email,
+            phone,
+            username,
+            password: passwordHash,
+            avatar: getDefaultAvatar(email), // Assign deterministic default avatar
+            isVerified: false,
+        });
+    } catch (dbError) {
+        if (dbError?.code === 11000) {
+            const fields = Object.keys(dbError.keyPattern || dbError.keyValue || {});
+            const field = fields[0] || 'value';
+            const prettyField = field === 'username'
+                ? 'Username'
+                : field === 'email'
+                    ? 'Email'
+                    : field === 'phone'
+                        ? 'Phone number'
+                        : 'This value';
+            throw Object.assign(
+                new Error(`${prettyField} already in use`),
+                { status: 409 },
+            );
+        }
+        throw dbError;
+    }
 
     const token = generateToken();
     const tokenHash = sha256('verify:' + token);
