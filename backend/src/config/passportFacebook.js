@@ -2,6 +2,11 @@ const passportFacebook = require("passport");
 const FacebookStrategy = require("passport-facebook").Strategy;
 const User = require("../models/user.model");
 const { getDefaultAvatar } = require('../utils/defaultAvatar.js');
+const { getBackendUrl } = require('./runtime.js');
+
+const getFacebookCallbackUrl = () =>
+    process.env.FACEBOOK_CALLBACK_URL ||
+    `${getBackendUrl()}/api/auth/facebook/callback`;
 
 module.exports = function setupFacebookPassport() {
     passportFacebook.use(
@@ -9,7 +14,7 @@ module.exports = function setupFacebookPassport() {
             {
                 clientID: process.env.FACEBOOK_APP_ID,
                 clientSecret: process.env.FACEBOOK_APP_SECRET,
-                callbackURL: process.env.FACEBOOK_CALLBACK_URL,
+                callbackURL: getFacebookCallbackUrl(),
                 profileFields: [
                     'id',
                     'displayName',
