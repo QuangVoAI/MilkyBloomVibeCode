@@ -438,7 +438,8 @@ async def generate_empathy_response(question, evidence_text, sentiment="", score
                 max_tokens=512,
                 temperature=0.7,
             ))
-        except Exception:
+        except Exception as e:
+            console.print(f"[red]  EmpathyWriter featherless error: {str(e)[:200]}[/]")
             return _fallback_empathy_reply(question, sentiment)
 
     try:
@@ -449,7 +450,8 @@ async def generate_empathy_response(question, evidence_text, sentiment="", score
             max_tokens=512,
             temperature=0.7,
         ))
-    except Exception:
+    except Exception as e:
+        console.print(f"[red]  EmpathyWriter error: {str(e)[:200]}[/]")
         return _fallback_empathy_reply(question, sentiment)
 
 
@@ -501,7 +503,8 @@ async def generate_empathy_streaming(
                     if stream_callback:
                         await stream_callback(token_buffer)
                     token_buffer = ""
-        except Exception:
+        except Exception as e:
+            console.print(f"[red]  EmpathyWriter featherless stream error: {str(e)[:200]}[/]")
             full_answer = _fallback_empathy_reply(question, sentiment)
     else:
         try:
@@ -518,7 +521,8 @@ async def generate_empathy_streaming(
                     if stream_callback:
                         await stream_callback(token_buffer)
                     token_buffer = ""
-        except Exception:
+        except Exception as e:
+            console.print(f"[red]  EmpathyWriter groq stream error: {str(e)[:200]}[/]")
             full_answer = _fallback_empathy_reply(question, sentiment)
             token_buffer = ""
 
