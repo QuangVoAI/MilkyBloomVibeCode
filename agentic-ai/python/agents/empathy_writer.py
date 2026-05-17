@@ -146,20 +146,92 @@ def _fallback_casual_reply(question: str) -> str:
     return "Xin chào, mình là trợ lý MilkyBloom. Bạn cần hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hay chính sách nào?"
 
 
+def _is_simple_greeting_text(question: str) -> bool:
+    normalized = re.sub(r"\s+", " ", (question or "").strip().lower())
+    normalized = normalized.strip("!?.,:;~")
+    return normalized in {
+        "alo",
+        "a lo",
+        "a lô",
+        "chao",
+        "chào",
+        "hi",
+        "hey",
+        "hello",
+        "yo",
+        "xin chao",
+        "xin chào",
+    }
+
+
+def _is_catalog_request_text(question: str) -> bool:
+    q = (question or "").lower()
+    return any(marker in q for marker in (
+        "mua",
+        "gợi ý",
+        "goi y",
+        "đề xuất",
+        "de xuat",
+        "sản phẩm",
+        "san pham",
+        "món đồ",
+        "mon do",
+        "ngân sách",
+        "ngan sach",
+        "budget",
+        "giá",
+        "gia",
+    ))
+
+
+def _is_order_help_request_text(question: str) -> bool:
+    q = (question or "").lower()
+    return any(marker in q for marker in (
+        "đơn",
+        "don",
+        "order",
+        "tracking",
+        "theo dõi",
+        "theo doi",
+        "vận chuyển",
+        "van chuyen",
+        "giao hàng",
+        "giao hang",
+        "hủy",
+        "huy",
+        "đổi trả",
+        "doi tra",
+        "bảo hành",
+        "bao hanh",
+    ))
+
+
 def _fallback_inquiry_reply(question: str, evidence_text: str, order_info=None, catalog_info=None) -> str:
+    if _is_simple_greeting_text(question):
+        return _fallback_casual_reply(question)
+
     order_context = _build_order_context(order_info or {})
     catalog_context = _build_catalog_context(catalog_info or {})
-    if evidence_text and len(evidence_text) >= 30:
+
+    if _is_catalog_request_text(question):
         return _finalize_response(
-            f"{question}\n\n{order_context}{catalog_context}{evidence_text[:2000]}"
+            "Mình gợi ý nhanh cho bạn nè. "
+            "Bạn cho mình biết ngân sách, độ tuổi hoặc chủ đề bạn thích là mình lọc ngay cho bạn."
         )
+
+    if _is_order_help_request_text(question):
+        return _finalize_response(
+            "Mình có thể hỗ trợ bạn kiểm tra đơn hàng, giao hàng, đổi trả hoặc bảo hành. "
+            "Bạn cho mình mã đơn, số điện thoại hoặc email đặt hàng nhé."
+        )
+
     if order_context or catalog_context:
         return _finalize_response(
             f"{question}\n\n{order_context}{catalog_context}"
         )
     return (
-        "Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể giúp bạn hỏi về sản phẩm, "
-        "đơn hàng, vận chuyển, đổi trả hoặc chính sách."
+        "Mình có thể giúp bạn hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hoặc chính sách. "
+        "Bạn nói ngắn thêm một chút để mình hỗ trợ đúng ý nhé."
     )
 
 
