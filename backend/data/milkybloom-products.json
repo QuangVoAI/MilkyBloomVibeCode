@@ -1,0 +1,213 @@
+[
+  {
+    "id": "bb-001",
+    "title": "Stardust Wonderland - Blind Box Series",
+    "category": "Blind Boxes",
+    "price": 189000,
+    "originalPrice": 249000,
+    "rating": 4.8,
+    "reviews": 284,
+    "inStock": true,
+    "stock": 18,
+    "sold": 112,
+    "description": "Enchanted collectible blind boxes with mystery editions. Each box contains a beautifully designed character with unique color variations - from pastel pastels to holographic finishes.",
+    "images": [
+      "https://images.unsplash.com/photo-1589411955342-9f3fb9e79fa5?w=800&q=80",
+      "https://images.unsplash.com/photo-1594787318286-3d835c1cab83?w=800&q=80",
+      "https://images.unsplash.com/photo-1608889335941-32ac5f2041b9?w=800&q=80",
+      "https://images.unsplash.com/photo-1543269865-cbdf26861551?w=800&q=80"
+    ],
+    "colors": ["Pastel Pink", "Lavender", "Mint Green", "Cream White"],
+    "brand": "MilkyBloom Studio",
+    "tags": ["collectible", "mystery", "beginner-friendly"],
+    "variants": [
+      { "name": "Standard Edition", "sku": "BB-001-STD", "stock": 12, "price": 189000 },
+      { "name": "Shimmer Edition", "sku": "BB-001-SHM", "stock": 4, "price": 249000 },
+      { "name": "Holographic Edition", "sku": "BB-001-HOL", "stock": 2, "price": 329000 }
+    ]
+  },
+  {
+    "id": "df-001",
+    "title": "Pixel Dreams - Designer Figure Collection",
+    "category": "Designer Figures",
+    "price": 349000,
+    "originalPrice": 449000,
+    "rating": 4.9,
+    "reviews": 156,
+    "inStock": true,
+    "stock": 8,
+    "sold": 64,
+    "description": "Premium art toy with award-winning design. Features articulated joints, hand-painted details, and comes in beautiful premium packaging. Perfect for display collectors.",
+    "images": [
+      "https://images.unsplash.com/photo-1515562141207-6811bcdd339a?w=800&q=80",
+      "https://images.unsplash.com/photo-1528148343865-5218b4a83ee6?w=800&q=80",
+      "https://images.unsplash.com/photo-1630859260519-f11be6fb7ee3?w=800&q=80",
+      "https://images.unsplash.com/photo-1616394584533-609f3a02d619?w=800&q=80"
+    ],
+    "colors": ["Forest Green", "Ocean Blue", "Sunset Orange", "Galaxy Purple"],
+    "brand": "Pixel Dreams Co.",
+    "tags": ["premium", "articulated", "display"],
+    "variants": [
+      { "name": "Base Figure", "sku": "DF-001-BASE", "stock": 5, "price": 349000 },
+      { "name": "Exclusive Variant", "sku": "DF-001-EXC", "stock": 3, "price": 449000 }
+    ]
+  },
+  {
+    "id": "pf-001",
+    "title": "Cloud Nine - Ultra Soft Plush Friends",
+    "category": "Plush Friends",
+    "price": 159000,
+    "originalPrice": 189000,
+    "rating": 4.7,
+    "reviews": 412,
+    "inStock": true,
+    "stock": 24,
+    "sold": 328,
+    "description": "Ultra-soft plush toys with embroidered details and premium fabric. Perfect for hugging, gifting, or as room decor. Hypoallergenic and machine washable.",
+    "images": [
+      "https://images.unsplash.com/photo-1545831652-98f3c9147d12?w=800&q=80",
+      "https://images.unsplash.com/photo-1567545741202-b86f23f88ea1?w=800&q=80",
+      "https://images.unsplash.com/photo-1585399363032-d0e3c2ba9092?w=800&q=80",
+      "https://images.unsplash.com/photo-1597803541966-1ec28db2da7a?w=800&q=80"
+    ],
+    "colors": ["Baby Pink", "Soft Blue", "Warm Cream", "Sage Green"],
+    "brand": "Cloud Nine",
+    "tags": ["plush", "soft", "giftable"],
+    "variants": [
+      { "name": "Small (20cm)", "sku": "PF-001-S", "stock": 12, "price": 159000 },
+      { "name": "Medium (30cm)", "sku": "PF-001-M", "stock": 9, "price": 199000 },
+      { "name": "Large (40cm)", "sku": "PF-001-L", "stock": 3, "price": 249000 }
+    ]
+  },
+  {
+    "id": "bk-001",
+    "title": "Mini Streets - Buildable Mini World",
+    "category": "Building Kits",
+    "price": 279000,
+    "originalPrice": 349000,
+    "rating": 4.6,
+    "reviews": 89,
+    "inStock": true,
+    "stock": 14,
+    "sold": 42,
+    "description": "Interactive building kit to create your own mini city. Includes modular blocks, miniature furniture, and collectible figures. Perfect for creative play and decoration.",
+    "images": [
+      "https://images.unsplash.com/photo-1632218486200-bbf4e3883852?w=800&q=80",
+      "https://images.unsplash.com/photo-1611080626919-c3400ca199e3?w=800&q=80",
+      "https://images.unsplash.com/photo-1594787318286-3d835c1cab83?w=800&q=80",
+      "https://images.unsplash.com/photo-1544716278-ca5e3af4abd8?w=800&q=80"
+    ],
+    "colors": ["Pastel Palette", "Neutral Tones", "Bright Neon"],
+    "brand": "Building Dreams",
+    "tags": ["creative", "buildable", "modular"],
+    "variants": [
+      { "name": "Starter Kit", "sku": "BK-001-ST", "stock": 8, "price": 279000 },
+      { "name": "Deluxe Kit", "sku": "BK-001-DX", "stock": 6, "price": 349000 }
+    ]
+  },
+  {
+    "id": "cp-001",
+    "title": "Creative Lab - DIY Craft Studio Set",
+    "category": "Creative Play",
+    "price": 219000,
+    "originalPrice": 279000,
+    "rating": 4.5,
+    "reviews": 167,
+    "inStock": true,
+    "stock": 16,
+    "sold": 98,
+    "description": "Complete DIY craft set with stickers, beads, clay, and tools. Includes instruction cards and inspiration booklet. Great for creative expression and fine motor development.",
+    "images": [
+      "https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800&q=80",
+      "https://images.unsplash.com/photo-1578500494198-246f612d03b3?w=800&q=80",
+      "https://images.unsplash.com/photo-1509664158680-11ff52a56ed0?w=800&q=80",
+      "https://images.unsplash.com/photo-1513321318423-f06f70424dde?w=800&q=80"
+    ],
+    "colors": ["Rainbow Mix", "Pastels", "Jewel Tones"],
+    "brand": "Creative Lab",
+    "tags": ["DIY", "craft", "educational"],
+    "variants": [
+      { "name": "Standard Set", "sku": "CP-001-STD", "stock": 10, "price": 219000 },
+      { "name": "Premium Set", "sku": "CP-001-PRM", "stock": 6, "price": 279000 }
+    ]
+  },
+  {
+    "id": "dd-001",
+    "title": "Desk Buddies - Mood Lamp Collection",
+    "category": "Desk Decor",
+    "price": 129000,
+    "originalPrice": 159000,
+    "rating": 4.4,
+    "reviews": 203,
+    "inStock": true,
+    "stock": 22,
+    "sold": 156,
+    "description": "Cute desk lamp with changeable LED colors. USB rechargeable with touch controls. Perfect for studying, working, or creating ambient room lighting.",
+    "images": [
+      "https://images.unsplash.com/photo-1565129666617-dde6c6e3d1f7?w=800&q=80",
+      "https://images.unsplash.com/photo-1565034577286-f4208db92a5f?w=800&q=80",
+      "https://images.unsplash.com/photo-1551286081-e0db4b4a54d9?w=800&q=80",
+      "https://images.unsplash.com/photo-1552062407-291827981395?w=800&q=80"
+    ],
+    "colors": ["Warm White", "Cool Blue", "RGB Multi-color"],
+    "brand": "Desk Buddies",
+    "tags": ["lamp", "USB", "dorm-friendly"],
+    "variants": [
+      { "name": "Warm Light", "sku": "DD-001-W", "stock": 10, "price": 129000 },
+      { "name": "RGB Multi-color", "sku": "DD-001-RGB", "stock": 12, "price": 159000 }
+    ]
+  },
+  {
+    "id": "ma-001",
+    "title": "Pocket Collectibles - Keychain Series",
+    "category": "Mini Accessories",
+    "price": 49000,
+    "originalPrice": 69000,
+    "rating": 4.3,
+    "reviews": 518,
+    "inStock": true,
+    "stock": 45,
+    "sold": 634,
+    "description": "Adorable mini collectible keychains with intricate details. Come in blind box format. Perfect for backpack decoration or gift giving. Collect all 8 designs!",
+    "images": [
+      "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&q=80",
+      "https://images.unsplash.com/photo-1533994122351-575f4a4a0b84?w=800&q=80",
+      "https://images.unsplash.com/photo-1608889335941-32ac5f2041b9?w=800&q=80",
+      "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80"
+    ],
+    "colors": ["Multi-color Blind Box"],
+    "brand": "Pocket Collectibles",
+    "tags": ["keychain", "mini", "affordable"],
+    "variants": [
+      { "name": "Single Blind Box", "sku": "MA-001-1", "stock": 25, "price": 49000 },
+      { "name": "3-Pack Set", "sku": "MA-001-3", "stock": 15, "price": 129000 },
+      { "name": "Complete Set (8)", "sku": "MA-001-8", "stock": 5, "price": 329000 }
+    ]
+  },
+  {
+    "id": "gs-001",
+    "title": "Ultimate Gift Bundle - Best Sellers Collection",
+    "category": "Gift Sets",
+    "price": 899000,
+    "originalPrice": 1199000,
+    "rating": 4.9,
+    "reviews": 84,
+    "inStock": true,
+    "stock": 6,
+    "sold": 28,
+    "description": "Premium gift bundle including bestselling items. Includes blind box, figure, plush toy, and exclusive bonus items. Beautifully packaged in luxury gift box.",
+    "images": [
+      "https://images.unsplash.com/photo-1513885535751-7b8f3b2a4d11?w=800&q=80",
+      "https://images.unsplash.com/photo-1606552183917-a4c40d85f6f3?w=800&q=80",
+      "https://images.unsplash.com/photo-1514306688989-9a94d719e91f?w=800&q=80",
+      "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&q=80"
+    ],
+    "colors": ["Luxury Gold", "Premium Packaging"],
+    "brand": "MilkyBloom",
+    "tags": ["gift", "bundle", "premium"],
+    "variants": [
+      { "name": "Birthday Bundle", "sku": "GS-001-BD", "stock": 3, "price": 899000 },
+      { "name": "Celebration Pack", "sku": "GS-001-CP", "stock": 3, "price": 999000 }
+    ]
+  }
+]
