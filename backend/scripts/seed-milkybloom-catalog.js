@@ -10,8 +10,12 @@ const Product = require('../src/models/product.model');
 
 const seedMilkyBloomCatalog = async () => {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mykingdom', {
+    // Connect to MongoDB (use Docker local instance for development)
+    const mongoUri = process.env.NODE_ENV === 'production'
+      ? process.env.MONGODB_URI
+      : 'mongodb://admin:admin123@localhost:27017/toy_store?authSource=admin';
+
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
@@ -27,10 +31,14 @@ const seedMilkyBloomCatalog = async () => {
     const productsData = JSON.parse(fs.readFileSync(productsPath, 'utf8'));
     console.log(`✓ Read ${productsData.length} products from file`);
 
-    // Clear existing data (optional - comment out to keep existing data)
-    await Category.deleteMany({});
-    await Product.deleteMany({});
-    console.log('✓ Cleared existing categories and products');
+    // Clear existing data (optional - only if auth is available)
+    try {
+      await Category.deleteMany({});
+      await Product.deleteMany({});
+      console.log('✓ Cleared existing categories and products');
+    } catch (clearError) {
+      console.log('⚠ Skipped clearing (auth required, proceeding with insert)');
+    }
 
     // Insert categories
     const insertedCategories = await Category.insertMany(categoriesData);
@@ -39,14 +47,28 @@ const seedMilkyBloomCatalog = async () => {
     // Insert products with category references
     const productsWithCategoryIds = productsData.map(product => {
       // Find matching category by slug
-      const category = categoriesData.find(cat =>
+      const category = insertedCategories.find(cat =>
         cat.slug === product.category.toLowerCase().replace(/\s+/g, '-')
       );
 
       return {
-        ...product,
-        categoryId: category ? category.id : null,
-        category: product.category,
+        name: product.title,
+        slug: product.id, // Use product ID as slug
+        categoryId: [category._id], // Array of ObjectId
+        description: product.description,
+        minPrice: product.price,
+        maxPrice: product.originalPrice,
+        totalStock: product.stock,
+        imageUrls: product.images,
+        averageRating: product.rating,
+        status: 'Published',
+        isFeatured: product.featured !== undefined ? product.featured : false,
+        totalUnitsSold: product.sold,
+        variants: [], // Empty for now - variants would need separate Variant documents
+        attributes: product.colors ? [{
+          name: 'Color',
+          values: product.colors
+        }] : [],
       };
     });
 
