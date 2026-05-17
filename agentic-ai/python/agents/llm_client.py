@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from config import (
     GROQ_API_KEY,
+    GROQ_API_KEYS,
     GROQ_BASE_URL,
     GROQ_MODEL,
     GROQ_MODEL_FAST,
@@ -140,6 +141,46 @@ def _sanitize_error_text(value: str, max_chars: int = 240) -> str:
     return text
 
 
+def _extract_http_status(error: Exception | str | None) -> int | None:
+    text = str(error or "")
+    match = re.search(r"\((\d{3})\)", text)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def _unique_nonempty(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = (value or "").strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+def _groq_api_key_candidates() -> list[str]:
+    keys = _unique_nonempty(list(GROQ_API_KEYS or []))
+    if not keys and GROQ_API_KEY:
+        keys = [GROQ_API_KEY.strip()]
+    return keys
+
+
+def _groq_model_candidates(requested_model: str) -> list[str]:
+    candidates = _unique_nonempty([
+        requested_model,
+        GROQ_MODEL_SMART,
+        GROQ_MODEL_FAST,
+        GROQ_MODEL,
+    ])
+    return candidates
+
+
 def _build_openai_payload(
     messages: list[dict],
     model: str,
@@ -232,7 +273,9 @@ async def _openai_chat_complete(
                     status_message=f"{provider_name.title()} API error ({resp.status})",
                     output=redact_for_langfuse(safe_error_text),
                 )
-                raise RuntimeError(f"{provider_name.title()} API error ({resp.status})")
+                raise RuntimeError(
+                    f"{provider_name.title()} API error ({resp.status}): {safe_error_text or 'unknown error'}"
+                )
 
             result = await resp.json()
             choices = result.get("choices", [])
@@ -304,7 +347,9 @@ async def _openai_stream_complete(
                     status_message=f"{provider_name.title()} stream error ({resp.status})",
                     output=redact_for_langfuse(safe_error_text),
                 )
-                raise RuntimeError(f"{provider_name.title()} stream error ({resp.status})")
+                raise RuntimeError(
+                    f"{provider_name.title()} stream error ({resp.status}): {safe_error_text or 'unknown error'}"
+                )
 
             async for raw_line in resp.content:
                 line = raw_line.decode("utf-8", errors="ignore").strip()
@@ -365,35 +410,56 @@ async def groq_chat_complete(
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> str:
-    """Groq completion with automatic Featherless fallback."""
-    try:
-        return await _openai_chat_complete(
-            messages=messages,
-            model=model,
-            api_key=GROQ_API_KEY,
-            base_url=GROQ_BASE_URL,
-            referer=GROQ_HTTP_REFERER,
-            title=GROQ_X_TITLE,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            provider_name="groq",
-            max_input_tokens=GROQ_MAX_INPUT_TOKENS,
-        )
-    except Exception as groq_error:
-        if not FEATHERLESS_API_KEY:
-            raise
+    """Groq completion with key/model retry, then Featherless fallback."""
+    model_candidates = _groq_model_candidates(model)
+    key_candidates = _groq_api_key_candidates()
+    last_error: Exception | None = None
+
+    for candidate_model in model_candidates:
+        for candidate_key in key_candidates:
+            try:
+                return await _openai_chat_complete(
+                    messages=messages,
+                    model=candidate_model,
+                    api_key=candidate_key,
+                    base_url=GROQ_BASE_URL,
+                    referer=GROQ_HTTP_REFERER,
+                    title=GROQ_X_TITLE,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    provider_name="groq",
+                    max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+                )
+            except Exception as groq_error:
+                last_error = groq_error
+                status = _extract_http_status(groq_error)
+                print(
+                    f"[llm] Groq attempt failed (model={candidate_model}, status={status or 'n/a'}): {groq_error}"
+                )
+                # 4xx errors tied to the current model usually won't recover with the
+                # same model/key pair, so move to the next model candidate.
+                if status in {400, 404}:
+                    break
+                # Retry other keys for auth / quota / transient failures.
+                continue
+
+    if FEATHERLESS_API_KEY:
         fallback_model = (
             FEATHERLESS_MODEL_SMART
             if model in {GROQ_MODEL_SMART, GROQ_MODEL}
             else FEATHERLESS_MODEL_FAST
         )
-        print(f"[llm] Groq failed ({groq_error}); falling back to Featherless.")
+        print("[llm] Groq exhausted all candidates; falling back to Featherless.")
         return await featherless_complete(
             messages=messages,
             model=fallback_model,
             max_tokens=max_tokens,
             temperature=temperature,
         )
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("Groq is not configured.")
 
 
 async def featherless_complete(
@@ -452,26 +518,43 @@ async def groq_stream_chat_complete(
 
     If Groq fails before any token is emitted, fall back to Featherless.
     """
-    yielded_any = False
-    try:
-        async for token in _openai_stream_complete(
-            messages=messages,
-            model=model,
-            api_key=GROQ_API_KEY,
-            base_url=GROQ_BASE_URL,
-            referer=GROQ_HTTP_REFERER,
-            title=GROQ_X_TITLE,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            provider_name="groq",
-            max_input_tokens=GROQ_MAX_INPUT_TOKENS,
-        ):
-            yielded_any = True
-            yield token
-    except Exception as groq_error:
-        if yielded_any or not FEATHERLESS_API_KEY:
-            raise
-        print(f"[llm] Groq stream failed ({groq_error}); falling back to Featherless.")
+    model_candidates = _groq_model_candidates(model)
+    key_candidates = _groq_api_key_candidates()
+    last_error: Exception | None = None
+
+    for candidate_model in model_candidates:
+        for candidate_key in key_candidates:
+            yielded_any = False
+            try:
+                async for token in _openai_stream_complete(
+                    messages=messages,
+                    model=candidate_model,
+                    api_key=candidate_key,
+                    base_url=GROQ_BASE_URL,
+                    referer=GROQ_HTTP_REFERER,
+                    title=GROQ_X_TITLE,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    provider_name="groq",
+                    max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+                ):
+                    yielded_any = True
+                    yield token
+                return
+            except Exception as groq_error:
+                last_error = groq_error
+                status = _extract_http_status(groq_error)
+                print(
+                    f"[llm] Groq stream attempt failed (model={candidate_model}, status={status or 'n/a'}): {groq_error}"
+                )
+                if yielded_any:
+                    raise
+                if status in {400, 404}:
+                    break
+                continue
+
+    if FEATHERLESS_API_KEY:
+        print("[llm] Groq stream exhausted all candidates; falling back to Featherless.")
         fallback_model = (
             FEATHERLESS_MODEL_SMART
             if model in {GROQ_MODEL_SMART, GROQ_MODEL}
@@ -484,6 +567,11 @@ async def groq_stream_chat_complete(
             temperature=temperature,
         ):
             yield token
+        return
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("Groq is not configured.")
 
 
 async def featherless_stream_complete(
