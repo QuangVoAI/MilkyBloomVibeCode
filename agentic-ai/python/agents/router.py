@@ -444,3 +444,113 @@ def classify(question):
             f"cas={semantic_scores.get('CASUAL', 0):.3f} -> {intent}[/]"
         )
     return intent
+
+
+# ============================================================================
+# FOLLOW-UP DETECTION (Level 2: Enhanced Intent Router)
+# ============================================================================
+
+CATALOG_FOLLOWUP_KEYWORDS = [
+    "còn size", "còn màu", "còn mẫu", "còn mã",
+    "size khác", "màu khác", "mẫu khác",
+    "cái nào", "cái kia", "cái này",
+    "màu nào khác", "size nào khác",
+    "hết hàng", "còn hàng", "tồn kho",
+    "món khác", "sản phẩm khác",
+]
+
+ORDER_FOLLOWUP_KEYWORDS = [
+    "đơn đó", "đơn này", "đơn gì", "đơn nào",
+    "bao giờ giao", "tình trạng như thế nào",
+    "chỗ nào rồi", "đến đâu rồi", "ở đâu rồi",
+    "nó thế nào", "nó đâu rồi",
+    "còn chưa", "chưa giao", "chưa đến",
+    "tình trạng nó", "nó ở đâu",
+]
+
+POLICY_FOLLOWUP_KEYWORDS = [
+    "vậy thì", "vậy là", "tức là", "nghĩa là",
+    "ngoài ra", "còn cách nào", "còn có",
+    "được không", "mất bao lâu", "trình tự thế nào",
+    "chi tiết hơn", "rõ hơn", "cụ thể hơn",
+]
+
+
+def _detect_followup_type(question: str, session_summary: dict) -> str | None:
+    """
+    Detect follow-up patterns based on keywords and session context.
+
+    Returns:
+    - "follow_up_catalog": Follow-up about viewed product
+    - "follow_up_order": Follow-up about last order
+    - "follow_up_policy": Follow-up about policy topic
+    - None: Not a follow-up
+    """
+    q_normalized = _normalize_text(question)
+
+    # Check catalog follow-up
+    if any(_pattern_matches(q_normalized, kw) for kw in CATALOG_FOLLOWUP_KEYWORDS):
+        if session_summary.get("viewed_products"):
+            return "follow_up_catalog"
+
+    # Check order follow-up
+    if any(_pattern_matches(q_normalized, kw) for kw in ORDER_FOLLOWUP_KEYWORDS):
+        if session_summary.get("last_order"):
+            return "follow_up_order"
+
+    # Check policy follow-up
+    if any(_pattern_matches(q_normalized, kw) for kw in POLICY_FOLLOWUP_KEYWORDS):
+        if session_summary.get("last_policy_topic"):
+            return "follow_up_policy"
+
+    return None
+
+
+def classify_with_followup_metadata(
+    question: str, session_summary: dict = None
+) -> dict:
+    """
+    Enhanced routing with follow-up context awareness.
+
+    Returns:
+    {
+        "intent": str,
+        "confidence": float,
+        "method": str,
+        "follow_up_type": str | None,
+        "contextualized_question": str,  # Question with context injected
+        ...existing fields...
+    }
+    """
+    session_summary = session_summary or {}
+
+    # Step 1: Detect follow-up signal
+    follow_up_type = _detect_followup_type(question, session_summary)
+
+    # Step 2: Contextualize question if it's a follow-up
+    contextualized_q = question
+    if follow_up_type == "follow_up_catalog":
+        last_product = session_summary.get("viewed_products", [{}])[-1] if session_summary.get("viewed_products") else {}
+        product_name = last_product.get("name", "sản phẩm")
+        contextualized_q = f"{question} (về {product_name})"
+
+    elif follow_up_type == "follow_up_order":
+        last_order = session_summary.get("last_order", {})
+        order_id = last_order.get("order_id", "đơn")
+        contextualized_q = f"{question} (đơn {order_id})"
+
+    elif follow_up_type == "follow_up_policy":
+        policy_topic = session_summary.get("last_policy_topic", "chính sách")
+        contextualized_q = f"{question} (về {policy_topic})"
+
+    # Step 3: Route with enhanced context
+    base_result = classify_with_metadata(contextualized_q)
+    base_result["follow_up_type"] = follow_up_type
+    base_result["contextualized_question"] = contextualized_q
+
+    console.print(
+        f"[dim]  Router: follow_up_type={follow_up_type}, "
+        f"contextualized='{contextualized_q[:50]}...'{' ' * 30}[/]"
+    )
+
+    return base_result

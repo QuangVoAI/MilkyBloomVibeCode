@@ -67,3 +67,26 @@ class AgentState(TypedDict, total=False):
 
     # --- Streaming ---
     stream_callback: Any
+
+    # --- Level 1: Session Memory ---
+    session_summary: dict              # SessionSummary (user intent, products, budget, etc)
+    session_summary_text: str          # Compressed text for LLM injection
+    budget: dict                       # Flattened from session_summary for easy access
+    viewed_products: list              # Flattened from session_summary for easy access
+
+    # --- Level 2: Follow-up Tracking ---
+    follow_up_type: str               # follow_up_catalog|follow_up_order|follow_up_policy|None
+    contextualized_question_with_followup: str  # Question with follow-up context injected
+
+    # --- Level 3: Tool Execution ---
+    used_llm: bool                    # Whether LLM was used (vs tool-direct answer)
+    tool_result: dict                 # Raw tool execution result
+
+    # --- Level 4: Confidence Gating ---
+    router_gate: dict                 # Gate result from router
+    action_gate: dict                 # Gate result from action_executor
+    gate_decision: str               # proceed | clarify | request_data
+
+    # --- Level 5: Voice Consistency ---
+    session_tone: str                # casual | professional | friendly
+    response_history: list[str]      # Last N responses for repetition check

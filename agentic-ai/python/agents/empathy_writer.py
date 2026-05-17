@@ -558,12 +558,14 @@ async def generate_casual(question):
         return fallback_reply
 
 
-async def generate_inquiry(question, evidence_text, order_info=None, catalog_info=None):
+async def generate_inquiry(question, evidence_text, order_info=None, catalog_info=None, session_summary_text=None):
     """Inquiry response (RAG nhẹ, không cần sentiment)."""
     order_context = _build_order_context(order_info or {})
     catalog_context = _build_catalog_context(catalog_info or {})
+    session_context = f"NGỮ CẢNH PHIÊN:\n{session_summary_text}\n\n" if session_summary_text else ""
     prompt = (
         f"KHÁCH HÀNG HỎI:\n{question}\n\n"
+        f"{session_context}"
         f"{order_context}"
         f"{catalog_context}"
         f"THÔNG TIN CHÍNH SÁCH:\n{evidence_text[:4000]}\n\n"

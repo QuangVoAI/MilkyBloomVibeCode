@@ -26,7 +26,7 @@ from typing import Callable, Awaitable, Optional
 from langgraph.graph import StateGraph, END
 
 from agents.state import AgentState
-from agents.router import classify, classify_with_metadata
+from agents.router import classify, classify_with_metadata, classify_with_followup_metadata
 from agents.router import _is_simple_greeting
 from agents.sentiment_analyzer import sentiment_analyzer_node
 from agents.empathy_writer import (
@@ -43,6 +43,10 @@ from agents.permission_matrix import (
 from agents.grader import grade_documents_node
 from agents.rewriter import rewrite_query_node
 from agents.llm_client import observe
+from agents.session_memory import SessionMemoryManager
+from agents.tool_executor import ToolExecutor
+from agents.confidence_gate import ConfidenceGate
+from agents.voice_consistency import VoiceConsistency
 from indexing.query_engine import retrieve_and_rerank_async, format_evidence
 from tools.order_tool import (
     extract_order_id,
@@ -89,6 +93,10 @@ _session_order_profiles: dict[str, dict] = {}
 # Session-level catalog memory so follow-up turns can reuse the last viewed product.
 # Format: {session_id: {"query": ..., "name": ..., "summary": ..., "products": [...], ...}}
 _session_catalog_profiles: dict[str, dict] = {}
+
+# Session-level conversation summary (Level 1: Session Memory)
+# Format: {session_id: SessionSummary}
+_session_summaries: dict[str, dict] = {}
 
 ORDER_CONTEXT_KEYWORDS = [
     "mã đơn",
@@ -1593,7 +1601,7 @@ def action_executor_node(state: AgentState) -> dict:
     }
 
 
-def router_node(state: AgentState) -> dict:
+async def router_node(state: AgentState) -> dict:
     """Node 1: Classify intent (COMPLAINT / INQUIRY / CASUAL)."""
     t0 = time.time()
     question = state["question"]
@@ -1655,13 +1663,26 @@ def router_node(state: AgentState) -> dict:
         }
     contextualized_q = _build_contextualized_question(question, history)
 
-    meta = classify_with_metadata(contextualized_q)
+    # LEVEL 2: Use follow-up detection for context (session_summary already built in run_streaming)
+    session_summary = state.get("session_summary", {})
+    meta = classify_with_followup_metadata(contextualized_q, session_summary)
     intent = meta["intent"]
     auth_profile = _build_auth_profile(shop_context)
     capability, capability_reason = _infer_capability(question, history, intent, auth_profile)
     if capability == "inquiry":
         intent = "INQUIRY"
     permission_rule = authorize_capability(capability, auth_profile)
+
+    # LEVEL 4: Confidence gating - check if router confidence is low
+    router_gate = {}
+    if meta.get("clarify_reason"):  # Router detected low confidence/ambiguity
+        router_gate = await ConfidenceGate.decide(
+            state,
+            action="route",
+            confidence_score=meta.get("confidence", 0.0),
+            missing_fields={}
+        )
+        console.print(f"[dim]  Router: GATE -> {router_gate.get('decision')} (confidence={meta.get('confidence', 0):.3f})[/]")
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(
@@ -1690,6 +1711,11 @@ def router_node(state: AgentState) -> dict:
         "router_clarify_reason": meta.get("clarify_reason", ""),
         "router_semantic_margin": meta.get("semantic_margin", 0.0),
         "clarification_needed": meta.get("method") == "clarify",
+        # LEVEL 2: Add follow-up fields
+        "follow_up_type": meta.get("follow_up_type"),
+        "contextualized_question_with_followup": meta.get("contextualized_question", contextualized_q),
+        # LEVEL 4: Add router gate
+        "router_gate": router_gate,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "router_decision": intent,
@@ -1701,6 +1727,8 @@ def router_node(state: AgentState) -> dict:
             "router_fallback_used": meta.get("fallback_used", False),
             "router_clarify_reason": meta.get("clarify_reason", ""),
             "router_semantic_margin": meta.get("semantic_margin", 0.0),
+            "router_gate_decision": router_gate.get("decision", "proceed"),
+            "follow_up_type": meta.get("follow_up_type"),
             "trace_id": state.get("trace_id", ""),
             "policy_version": POLICY_VERSION,
             "user_scope": auth_profile.get("user_scope", "guest"),
@@ -1799,7 +1827,7 @@ async def retrieve_node(state: AgentState) -> dict:
 
 
 async def empathy_writer_node(state: AgentState) -> dict:
-    """Node: Generate empathetic response with streaming."""
+    """Node: Generate empathetic response with streaming (LEVEL 3: Tool-First)."""
     t0 = time.time()
     question = state["question"]
     evidence_text = state.get("evidence_text", "")
@@ -1811,6 +1839,36 @@ async def empathy_writer_node(state: AgentState) -> dict:
     action_result = state.get("action_result", {})
     action_intent = state.get("action_intent", {})
     stream_callback = state.get("stream_callback")
+    session_summary_text = state.get("session_summary_text", "")
+
+    # LEVEL 3: Try tool-first execution before LLM
+    action = action_intent.get("action") if action_intent else "no_action"
+    used_llm = True
+    tool_result = {}
+
+    if action and action != "no_action":
+        should_use_llm, tool_result, direct_answer = await ToolExecutor.execute_and_format(
+            action,
+            state,
+            state.get("follow_up_type")
+        )
+
+        if not should_use_llm and direct_answer:
+            # Tool produced conclusive answer → skip LLM entirely
+            elapsed = int((time.time() - t0) * 1000)
+            console.print(f"[dim]  EmpathyWriter: TOOL-DIRECT {action} ({elapsed}ms)[/]")
+            return {
+                "answer": direct_answer,
+                "used_llm": False,
+                "agent_trace": {
+                    **(state.get("agent_trace") or {}),
+                    "writer_answer": direct_answer[:500],
+                    "writer_ms": elapsed,
+                    "writer_type": "tool_direct",
+                    "tool_action": action,
+                },
+            }
+        used_llm = should_use_llm
 
     if action_result.get("pending") and action_result.get("message"):
         answer = action_result["message"]
@@ -1825,6 +1883,7 @@ async def empathy_writer_node(state: AgentState) -> dict:
             action_result=action_result,
             action_intent=action_intent,
             catalog_info=catalog_info,
+            session_summary_text=session_summary_text,
             stream_callback=stream_callback,
         )
 
@@ -1833,10 +1892,12 @@ async def empathy_writer_node(state: AgentState) -> dict:
 
     return {
         "answer": answer,
+        "used_llm": used_llm,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "writer_answer": answer[:500],
             "writer_ms": elapsed,
+            "writer_type": "llm" if used_llm else "tool",
             "empathy_prompt_version": prompt_meta("empathy")["prompt_version"],
             "empathy_policy_version": prompt_meta("empathy")["policy_version"],
         },
@@ -1844,13 +1905,15 @@ async def empathy_writer_node(state: AgentState) -> dict:
 
 
 async def inquiry_writer_node(state: AgentState) -> dict:
-    """Node: Answer inquiry based on policy (no sentiment needed)."""
+    """Node: Answer inquiry (LEVEL 3: Tool-first for catalog/policy)."""
     t0 = time.time()
     question = state["question"]
     evidence_text = state.get("evidence_text", "")
     order_info = state.get("order_info", {})
     catalog_info = state.get("catalog_info", {})
     capability_reason = str(state.get("capability_reason") or "").lower()
+    session_summary_text = state.get("session_summary_text", "")
+    used_llm = False
 
     if "cancel_policy_question" in capability_reason or _is_cancel_policy_question(question):
         answer = _format_cancel_policy_summary()
@@ -1860,20 +1923,36 @@ async def inquiry_writer_node(state: AgentState) -> dict:
         answer = _format_warranty_policy_summary()
     elif "support_contact_request" in capability_reason or _is_support_ticket_request(question):
         answer = _format_support_contact_summary()
+    elif state.get("capability") == "catalog" and catalog_info.get("found"):
+        # LEVEL 3: Tool-direct format for catalog (no LLM)
+        answer = await ToolExecutor.execute_and_format(
+            "lookup_catalog",
+            state,
+            state.get("follow_up_type")
+        )
+        if isinstance(answer, tuple):
+            _, _, answer = answer
     else:
-        answer = await generate_inquiry(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
+        # Default: use LLM for general inquiry
+        answer = await generate_inquiry(
+            question, evidence_text, order_info=order_info, catalog_info=catalog_info,
+            session_summary_text=session_summary_text
+        )
+        used_llm = True
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  InquiryWriter: {len(answer)} chars ({elapsed}ms)[/]")
 
     return {
         "answer": answer,
+        "used_llm": used_llm,
         "reviewer_triggered": False,
         "reviewer_result": {"is_approved": True, "issues": [], "retry_count": 0},
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "inquiry_answer": answer[:500],
             "inquiry_ms": elapsed,
+            "inquiry_type": "policy" if not used_llm and not catalog_info.get("found") else "catalog_direct" if not used_llm else "llm",
             "inquiry_prompt_version": prompt_meta("inquiry")["prompt_version"],
             "inquiry_policy_version": prompt_meta("inquiry")["policy_version"],
         },
@@ -1963,12 +2042,13 @@ async def order_status_writer_node(state: AgentState) -> dict:
 
 
 async def reviewer_node(state: AgentState) -> dict:
-    """Node: Empathy quality check."""
+    """Node: Empathy quality check (LEVEL 5: Voice consistency polish)."""
     t0 = time.time()
     question = state["question"]
     answer = state.get("answer", "")
     evidence_text = state.get("evidence_text", "")
     sentiment = state.get("sentiment", "")
+    session_id = state.get("session_id", "")
 
     # Fast quality checks — không LLM, không dựa vào sentiment hay keyword
     banned = _check_banned_phrases(answer)
@@ -1995,17 +2075,34 @@ async def reviewer_node(state: AgentState) -> dict:
         final_answer = answer
         reviewer_result = {"is_approved": True, "issues": [], "retry_count": 0}
 
+    # LEVEL 5: Polish response for voice consistency
+    session_tone = state.get("session_tone", "casual")
+    if not session_tone:
+        # Pick tone based on session summary
+        session_summary = state.get("session_summary", {})
+        session_tone = await VoiceConsistency.pick_tone_for_session(session_summary)
+
+    response_history = state.get("response_history", [])
+    final_answer = await VoiceConsistency.polish_response(
+        final_answer,
+        session_id,
+        session_tone,
+        response_history
+    )
+
     elapsed = int((time.time() - t0) * 1000)
 
     return {
         "answer": final_answer,
         "reviewer_triggered": reviewer_triggered,
         "reviewer_result": reviewer_result,
+        "session_tone": session_tone,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "reviewer_triggered": reviewer_triggered,
             "reviewer_result": reviewer_result,
             "reviewer_ms": elapsed,
+            "session_tone": session_tone,
             "reviewer_prompt_version": prompt_meta("reviewer")["prompt_version"],
             "reviewer_policy_version": prompt_meta("reviewer")["policy_version"],
         },
@@ -2466,6 +2563,22 @@ async def run_streaming(
     graph = _get_graph()
     trace_id = session_id or f"trace_{uuid.uuid4().hex[:10]}"
 
+    # LEVEL 1: Pre-build session summary for use in follow-up detection
+    session_summary = await SessionMemoryManager.get_summary(session_id, _session_summaries)
+    if not session_summary:
+        # First turn: build summary from question + minimal state
+        temp_state = {
+            "session_id": session_id,
+            "question": question,
+            "history": history or [],
+            "capability": "",
+            "catalog_info": {},
+            "order_info": {},
+            "action_intent": {},
+            "ownership_verified": False,
+        }
+        session_summary = await SessionMemoryManager.build_summary(temp_state)
+
     initial_state: AgentState = {
         "trace_id": trace_id,
         "session_id": session_id,
@@ -2505,6 +2618,13 @@ async def run_streaming(
         "agent_trace": {},
         "processing_time_ms": 0,
         "stream_callback": stream_callback,
+        # LEVEL 1 & 2: Add session memory and follow-up fields
+        "session_summary": session_summary,
+        "session_summary_text": session_summary.get("summary_text", ""),
+        "budget": session_summary.get("budget", {}),  # Flatten for easy access
+        "viewed_products": session_summary.get("viewed_products", []),  # Flatten for easy access
+        "follow_up_type": None,
+        "contextualized_question_with_followup": "",
     }
 
     with _langfuse_attribute_context(session_id, trace_id, shop_context):
@@ -2526,6 +2646,12 @@ async def run_streaming(
 
         processing_time = int((time.time() - start_time) * 1000)
         final_state["processing_time_ms"] = processing_time
+
+        # Sync flattened fields with session_summary
+        if final_state.get("session_summary"):
+            final_state["budget"] = final_state["session_summary"].get("budget", {})
+            final_state["viewed_products"] = final_state["session_summary"].get("viewed_products", [])
+
         update_current_span_safe(
             output=_langfuse_pipeline_output(final_state),
             metadata=_langfuse_pipeline_metadata(final_state),
