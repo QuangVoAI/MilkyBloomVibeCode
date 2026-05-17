@@ -358,6 +358,38 @@ def _is_purchase_request(text: str) -> bool:
     return bool(re.search(r"(?i)\b(?:mua|lấy|đặt|chốt|buy)\b\s+.{2,}", q))
 
 
+def _has_budget_signal(text: str) -> bool:
+    q = (text or "").lower()
+    return bool(
+        re.search(
+            r"(?i)(?:dưới|tối đa|không quá|tầm|khoảng|under|within|budget|ngân sách)\s*[\d.,\s]{1,12}\s*(?:k|nghìn|ngàn|ngan|đ|d|vnđ|vnd)?",
+            q,
+        )
+        or re.search(r"(?i)\b\d{1,6}\s*(?:k|nghìn|ngàn|ngan|đ|d|vnđ|vnd)\b", q)
+    )
+
+
+def _is_budget_catalog_request(text: str) -> bool:
+    q = (text or "").lower()
+    if not _has_budget_signal(q):
+        return False
+    if _is_catalog_recommendation_request(q):
+        return True
+    if any(keyword in q for keyword in PURCHASE_ACTION_KEYWORDS) and any(
+        term in q for term in ("hàng", "món", "sản phẩm", "mặt hàng", "quà", "item")
+    ):
+        return True
+    stripped = re.sub(
+        r"(?i)(?:dưới|tối đa|không quá|tầm|khoảng|under|within|budget|ngân sách)\s*[\d.,\s]{1,12}\s*(?:k|nghìn|ngàn|ngan|đ|d|vnđ|vnd)?",
+        " ",
+        q,
+    )
+    stripped = re.sub(r"\s+", " ", stripped).strip(" ?!.,:-")
+    if not stripped:
+        return True
+    return len(stripped.split()) <= 2
+
+
 def _is_catalog_request(text: str) -> bool:
     q = (text or "").lower()
     return any(keyword in q for keyword in CATALOG_KEYWORDS)
@@ -875,6 +907,9 @@ def _infer_capability(question: str, history: list[dict], intent: str, auth_prof
 
     if _is_support_ticket_request(current):
         return "inquiry", "support_contact_request"
+
+    if _is_budget_catalog_request(current):
+        return "catalog", "budget_catalog_request"
 
     if intent != "INQUIRY" and _is_general_inquiry_request(current) and not _is_existing_order_issue(current):
         return "inquiry", "fresh_inquiry"
@@ -2157,6 +2192,10 @@ def route_by_intent(state: AgentState) -> str:
     if capability == "order_management":
         console.print("[dim]  Router: capability order_management — forcing COMPLAINT path[/]")
         return "complaint"
+
+    if _is_budget_catalog_request(question):
+        console.print("[dim]  Router: budget-based purchase request — forcing catalog path[/]")
+        return "catalog"
 
     explicit_checkout_request = _is_checkout_request(question) or _is_checkout_progression_request(question)
     if explicit_checkout_request:

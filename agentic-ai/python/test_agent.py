@@ -1020,16 +1020,17 @@ def test_budget_purchase_requires_product_selection():
     try:
         checkout_tool.lookup_live_catalog = fake_lookup
         result = checkout_tool.start_checkout(
-            "tôi muốn mua món hàng dưới 200k",
+            "tôi muốn mua hàng dưới 500k",
             history=[],
             shop_context={"guest_session_id": "guest_budget_demo"},
         )
 
         assert result["needs_product_selection"] is True
+        assert result.get("redirect_intent") == "catalog"
         assert result.get("needs_guest_info") is False
         assert "họ tên" not in result["message"].lower()
         assert "Stardust Picnic Box" in result["message"]
-        assert "chọn một món" in result["message"]
+        assert "chọn" in result["message"].lower()
 
         def fake_start_checkout(question, history=None, shop_context=None):
             return result
@@ -1039,7 +1040,7 @@ def test_budget_purchase_requires_product_selection():
         graph_mod._clear_catalog_profile(session_id)
         node_result = graph_mod.checkout_node({
             "session_id": session_id,
-            "question": "tôi muốn mua món hàng dưới 200k",
+            "question": "tôi muốn mua hàng dưới 500k",
             "history": [],
             "shop_context": {"guest_session_id": "guest_budget_demo"},
             "agent_trace": {},
@@ -1048,6 +1049,23 @@ def test_budget_purchase_requires_product_selection():
         assert "họ tên" not in node_result["answer"].lower()
         assert "Stardust Picnic Box" in node_result["answer"]
         assert graph_mod._get_catalog_profile(session_id).get("products")
+
+        route = graph_mod.route_by_intent({
+            "session_id": session_id,
+            "question": "tôi muốn mua hàng dưới 500k",
+            "history": [],
+            "capability": "",
+            "intent": "INQUIRY",
+            "agent_trace": {},
+        })
+        capability, reason = graph_mod._infer_capability(
+            "tôi muốn mua hàng dưới 500k",
+            [],
+            "INQUIRY",
+            graph_mod._build_auth_profile({}),
+        )
+        assert route == "catalog", f"Expected catalog route for budget purchase, got {route} ({reason})"
+        assert capability == "catalog", f"Expected catalog capability for budget purchase, got {capability} ({reason})"
     finally:
         checkout_tool.lookup_live_catalog = original_checkout_lookup
         graph_mod.start_checkout = original_graph_start_checkout

@@ -64,6 +64,7 @@ CHECKOUT_INTENT_HINTS = (
 )
 
 GENERIC_PURCHASE_TERMS = (
+    "hàng",
     "món hàng",
     "món đồ",
     "sản phẩm",
@@ -381,12 +382,89 @@ def _has_budget_signal(text: str) -> bool:
     )
 
 
+def _strip_budget_and_filler_words(question: str) -> str:
+    text = re.sub(r"\s+", " ", (question or "").strip()).lower()
+    text = re.sub(
+        r"(?i)(?:dưới|tối đa|không quá|tầm|khoảng|about|around|within|budget|ngân sách)\s*[\d.,\s]+(?:k|nghìn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd)?",
+        " ",
+        text,
+    )
+    text = re.sub(r"[\d.,]+\s*(?:k|nghìn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd)\b", " ", text, flags=re.IGNORECASE)
+    for filler in (
+        "cho tôi",
+        "cho mình",
+        "mình",
+        "tôi",
+        "em",
+        "anh",
+        "chị",
+        "bạn",
+        "muốn mua",
+        "cần mua",
+        "mua",
+        "lấy",
+        "đặt",
+        "gợi ý",
+        "đề xuất",
+        "tư vấn",
+        "giúp",
+        "giúp mình",
+        "xin",
+        "hãy",
+        "hàng",
+        "món",
+        "sản phẩm",
+        "mặt hàng",
+        "item",
+        "quà tặng",
+        "nào",
+        "phù hợp",
+        "hợp",
+        "thích hợp",
+        "trong",
+        "tầm",
+        "khoảng",
+        "dưới",
+        "trên",
+        "chừng",
+        "từ",
+        "với",
+        "mức",
+        "giá",
+        "ngân sách",
+        "budget",
+        "tặng",
+    ):
+        text = re.sub(rf"(?i)\b{re.escape(filler)}\b", " ", text)
+    return re.sub(r"\s+", " ", text).strip(" ?!.,:-")
+
+
 def _is_generic_budget_purchase(question: str, purchase_query: str = "") -> bool:
     q = (question or "").lower()
     query = (purchase_query or "").lower()
     has_checkout_hint = any(keyword in q for keyword in CHECKOUT_INTENT_HINTS)
     has_generic_term = any(term in q or term in query for term in GENERIC_PURCHASE_TERMS)
     return has_checkout_hint and has_generic_term and _has_budget_signal(q)
+
+
+def _looks_like_budget_catalog_request(question: str, purchase_query: str = "") -> bool:
+    q = (question or "").lower()
+    query = (purchase_query or "").lower()
+    if not _has_budget_signal(q):
+        return False
+    if _is_catalog_recommendation_request(q):
+        return True
+    if _is_generic_purchase_query(query):
+        return True
+
+    stripped_question = _strip_budget_and_filler_words(q)
+    if not stripped_question:
+        return True
+    if any(term in q or term in query for term in ("hàng", "món", "sản phẩm", "mặt hàng", "quà", "item")):
+        return True
+    if len(stripped_question.split()) <= 2:
+        return True
+    return False
 
 
 def _is_generic_purchase_query(purchase_query: str) -> bool:
@@ -533,6 +611,8 @@ def start_checkout(question: str, history: list[dict] | None = None, shop_contex
     )
     payment_method = _detect_payment_method(question)
     purchase_query = _extract_purchase_query(question)
+    if _looks_like_budget_catalog_request(question, purchase_query):
+        return _build_budget_purchase_selection(question, ctx)
     if _is_generic_budget_purchase(question, purchase_query):
         return _build_budget_purchase_selection(question, ctx)
 
