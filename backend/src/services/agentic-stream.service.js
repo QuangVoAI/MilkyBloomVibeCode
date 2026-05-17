@@ -1,3 +1,5 @@
+const WebSocket = require('ws');
+
 const normalizeUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
 
 const hasScheme = (value) => /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
@@ -64,15 +66,30 @@ const streamAgenticChat = async ({
         throw new Error('AGENTIC_AI_WS_URL is not configured');
     }
 
+    const TIMEOUT_MS = 120000; // 2 minute timeout
+    const REQUEST_TIMEOUT_MS = 180000; // 3 minute total timeout
+
     return new Promise((resolve, reject) => {
         let finished = false;
+        let timeoutHandle = null;
+        let requestTimeoutHandle = null;
+
+        const clearAllTimeouts = () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            if (requestTimeoutHandle) clearTimeout(requestTimeoutHandle);
+        };
 
         const fail = (error) => {
             if (finished) return;
             finished = true;
+            clearAllTimeouts();
             const err = error instanceof Error ? error : new Error(String(error || 'Agentic stream failed'));
             if (typeof onError === 'function') {
-                onError(err);
+                try {
+                    onError(err);
+                } catch (callbackErr) {
+                    console.error('[streamAgenticChat] Error in onError callback:', callbackErr);
+                }
             }
             reject(err);
         };
@@ -93,7 +110,9 @@ const streamAgenticChat = async ({
 
             const cleanup = () => {
                 try {
-                    socket?.close();
+                    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+                        socket.close();
+                    }
                 } catch (_err) {
                     // ignore
                 }
@@ -102,6 +121,7 @@ const streamAgenticChat = async ({
             const finalize = (payload) => {
                 if (finished) return;
                 finished = true;
+                clearAllTimeouts();
                 cleanup();
                 resolve(payload);
             };
@@ -117,15 +137,38 @@ const streamAgenticChat = async ({
                 tryNext(attemptIndex + 1, err).catch(fail);
             };
 
+            // Set request timeout (total request time)
+            requestTimeoutHandle = setTimeout(() => {
+                if (!finished) {
+                    retryOrFail(new Error('Request timeout: No response from Agentic service'));
+                }
+            }, REQUEST_TIMEOUT_MS);
+
             try {
-                socket = new WebSocket(wsUrl);
+                socket = new WebSocket(wsUrl, {
+                    handshakeTimeout: TIMEOUT_MS,
+                });
             } catch (err) {
+                clearAllTimeouts();
                 retryOrFail(err);
                 return;
             }
 
-            socket.addEventListener('open', () => {
+            socket.on('open', () => {
+                if (finished) {
+                    socket.close();
+                    return;
+                }
                 opened = true;
+
+                // Reset timeout on open
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+                timeoutHandle = setTimeout(() => {
+                    if (!finished && !receivedFinal) {
+                        retryOrFail(new Error('No data received timeout'));
+                    }
+                }, TIMEOUT_MS);
+
                 try {
                     socket.send(JSON.stringify({
                         type: 'chat',
@@ -139,58 +182,85 @@ const streamAgenticChat = async ({
                 }
             });
 
-            socket.addEventListener('message', (event) => {
-                let data = null;
+            socket.on('message', (data) => {
+                if (finished) return;
+
+                // Reset timeout on each message
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+                timeoutHandle = setTimeout(() => {
+                    if (!finished && !receivedFinal) {
+                        retryOrFail(new Error('No data received timeout'));
+                    }
+                }, TIMEOUT_MS);
+
+                let parsed = null;
                 try {
-                    data = JSON.parse(event.data);
+                    parsed = JSON.parse(data);
                 } catch (_err) {
                     return;
                 }
 
-                if (data.type === 'status' && typeof onStatus === 'function') {
-                    onStatus(data);
+                if (parsed.type === 'status' && typeof onStatus === 'function') {
+                    try {
+                        onStatus(parsed);
+                    } catch (callbackErr) {
+                        console.error('[streamAgenticChat] Error in onStatus callback:', callbackErr);
+                    }
                     return;
                 }
 
-                if (data.type === 'token') {
-                    const chunk = data.content || '';
+                if (parsed.type === 'token') {
+                    const chunk = parsed.content || '';
                     buffer += chunk;
                     yieldedToken = yieldedToken || Boolean(chunk);
                     if (typeof onToken === 'function') {
-                        onToken({ ...data, content: chunk });
+                        try {
+                            onToken({ ...parsed, content: chunk });
+                        } catch (callbackErr) {
+                            console.error('[streamAgenticChat] Error in onToken callback:', callbackErr);
+                        }
                     }
                     return;
                 }
 
-                if (data.type === 'final') {
+                if (parsed.type === 'final') {
                     receivedFinal = true;
                     if (typeof onFinal === 'function') {
-                        onFinal(data);
+                        try {
+                            onFinal(parsed);
+                        } catch (callbackErr) {
+                            console.error('[streamAgenticChat] Error in onFinal callback:', callbackErr);
+                        }
                     }
                     finalize({
-                        reply: data.reply || buffer,
-                        provider: data.provider || 'agentic',
-                        model: data.model || 'empathai-langgraph',
-                        raw: data,
+                        reply: parsed.reply || buffer,
+                        provider: parsed.provider || 'agentic',
+                        model: parsed.model || 'empathai-langgraph',
+                        raw: parsed,
                     });
                     return;
                 }
 
-                if (data.type === 'error') {
-                    const error = new Error(data.message || 'Agentic service error');
+                if (parsed.type === 'error') {
+                    const error = new Error(parsed.message || 'Agentic service error');
                     if (typeof onError === 'function') {
-                        onError(error, data);
+                        try {
+                            onError(error, parsed);
+                        } catch (callbackErr) {
+                            console.error('[streamAgenticChat] Error in onError callback:', callbackErr);
+                        }
                     }
                     retryOrFail(error);
                 }
             });
 
-            socket.addEventListener('error', (event) => {
-                retryOrFail(event?.error || new Error('WebSocket error'));
+            socket.on('error', (event) => {
+                retryOrFail(event || new Error('WebSocket error'));
             });
 
-            socket.addEventListener('close', () => {
+            socket.on('close', () => {
                 if (finished || receivedFinal) {
+                    clearAllTimeouts();
                     return;
                 }
                 retryOrFail(new Error('WebSocket closed before final response'));
