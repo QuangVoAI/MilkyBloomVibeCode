@@ -1199,6 +1199,8 @@ def catalog_lookup_node(state: AgentState) -> dict:
     if catalog_info.get("found") and session_id:
         _remember_catalog_profile(session_id, catalog_info, question)
 
+    answer = _apply_customer_service_postprocess(state, answer)
+
     return {
         "catalog_info": catalog_info,
         "answer": answer,
@@ -1262,6 +1264,7 @@ def loyalty_node(state: AgentState) -> dict:
                 "Bạn gửi mình con số cụ thể, mình kiểm tra và trừ điểm giúp bạn."
             )
             elapsed = int((time.time() - t0) * 1000)
+            answer = _apply_customer_service_postprocess(state, answer)
             return {
                 "answer": answer,
                 "loyalty_info": loyalty_info,
@@ -1283,6 +1286,7 @@ def loyalty_node(state: AgentState) -> dict:
             answer = redeem_res.get("message") or "Mình chưa đổi điểm được lúc này."
 
         elapsed = int((time.time() - t0) * 1000)
+        answer = _apply_customer_service_postprocess(state, answer)
         return {
             "answer": answer,
             "loyalty_info": loyalty_info,
@@ -1304,6 +1308,7 @@ def loyalty_node(state: AgentState) -> dict:
         answer = loyalty_res.get("message") or "Mình chưa lấy được thông tin loyalty của bạn."
 
     answer = f"{_brand_voice_opening('loyalty')}\n{answer}" if answer else answer
+    answer = _apply_customer_service_postprocess(state, answer)
 
     elapsed = int((time.time() - t0) * 1000)
     return {
@@ -1358,6 +1363,7 @@ def support_ticket_node(state: AgentState) -> dict:
         ticket_id = ""
         answer = ticket_res.get("message") or "Mình chưa tạo ticket hỗ trợ được lúc này."
 
+    answer = _apply_customer_service_postprocess(state, answer)
     elapsed = int((time.time() - t0) * 1000)
     return {
         "answer": answer,
@@ -1433,6 +1439,7 @@ def checkout_node(state: AgentState) -> dict:
     answer = _format_checkout_message(checkout_result)
     if checkout_result.get("ok"):
         answer = f"{_brand_voice_opening('sales')}\n{answer}" if answer else answer
+    answer = _apply_customer_service_postprocess(state, answer)
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  CheckoutNode: {checkout_result.get('ok', False)} ({elapsed}ms)[/]")
 
@@ -1795,6 +1802,7 @@ def clarify_node(state: AgentState) -> dict:
     question = state.get("question", "")
     history = state.get("history", [])
     trace = state.get("agent_trace", {}) or {}
+    session_summary = state.get("session_summary", {}) or {}
     recent = " ".join(m.get("content", "") for m in history[-3:]).lower()
     clarify_reason = (
         state.get("router_clarify_reason", "")
@@ -1815,6 +1823,18 @@ def clarify_node(state: AgentState) -> dict:
             "Mình chưa chắc bạn đang muốn xem điểm, hạng thành viên hay đổi điểm. "
             "Bạn chọn một ý cụ thể giúp mình nhé."
         )
+    elif _is_budget_catalog_request(question) or _has_budget_signal(question) or session_summary.get("budget", {}).get("max"):
+        max_budget = session_summary.get("budget", {}).get("max")
+        budget_text = f" dưới {f'{int(max_budget):,}đ'.replace(',', '.')}" if max_budget else ""
+        answer = (
+            f"Mình chưa rõ bạn muốn lọc món{budget_text} theo tiêu chí nào. "
+            "Bạn muốn theo độ tuổi, chủ đề hay mục đích dùng vậy?"
+        )
+    elif state.get("capability") == "catalog" or state.get("follow_up_type") == "follow_up_catalog":
+        answer = (
+            "Mình chưa rõ bạn muốn xem thêm kiểu nào. "
+            "Bạn thích mình lọc theo món rẻ hơn, cùng chủ đề hay cùng độ tuổi nhé?"
+        )
     else:
         answer = (
             "Mình chưa chắc ý bạn lắm. "
@@ -1833,6 +1853,97 @@ def clarify_node(state: AgentState) -> dict:
             "clarify_policy_version": prompt_meta("inquiry")["policy_version"],
         },
     }
+
+
+def _is_generic_context_fallback(answer: str) -> bool:
+    text = (answer or "").lower()
+    return any(
+        phrase in text
+        for phrase in (
+            "mình đang bị lỗi ai tạm thời",
+            "mình vẫn có thể giúp bạn hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hoặc chính sách",
+            "mình có thể giúp bạn hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hoặc chính sách",
+            "mình chưa tìm thấy món nào trong tầm",
+        )
+    )
+
+
+def _should_offer_next_step(state: AgentState, answer: str) -> bool:
+    text = (answer or "").strip()
+    if not text:
+        return False
+    if text.endswith("?"):
+        return False
+    if _is_generic_context_fallback(text):
+        return False
+    return state.get("capability") in {"catalog", "checkout", "inquiry", "order_management", "loyalty"}
+
+
+def _build_next_step_suggestion(state: AgentState) -> str:
+    capability = state.get("capability", "")
+    question = (state.get("question") or "").lower()
+    order_info = state.get("order_info") or {}
+    catalog_info = state.get("catalog_info") or {}
+    checkout_result = state.get("checkout_result") or {}
+    session_summary = state.get("session_summary") or {}
+    viewed_products = session_summary.get("viewed_products") or []
+
+    if capability == "catalog":
+        if catalog_info.get("found"):
+            return "Nếu muốn, mình lọc tiếp theo độ tuổi, chủ đề hoặc ngân sách thấp hơn nhé."
+        if viewed_products:
+            return "Nếu thích, mình lọc thêm theo món tương tự hoặc rẻ hơn cho bạn."
+        return "Bạn cho mình độ tuổi, chủ đề hoặc ngân sách, mình lọc lại sát hơn nhé."
+
+    if capability == "checkout":
+        if checkout_result.get("needs_product_selection"):
+            return "Nếu muốn, bạn gửi tên sản phẩm cụ thể để mình hỗ trợ tiếp nhé."
+        if checkout_result.get("needs_guest_info") or checkout_result.get("needs_address"):
+            return "Bạn gửi mình họ tên, email, số điện thoại và địa chỉ nhận hàng là mình đi tiếp nhé."
+        return "Nếu cần, mình có thể hỗ trợ thêm về thanh toán hoặc giao hàng."
+
+    if capability == "order_management" or order_info.get("found") or "đơn" in question:
+        if order_info.get("found"):
+            return "Nếu muốn, mình tra tiếp theo mã đơn hoặc số điện thoại nhé."
+        return "Bạn gửi mình mã đơn hoặc số điện thoại, mình kiểm tra tiếp ngay."
+
+    if capability == "inquiry":
+        if any(token in question for token in ("bảo hành", "đổi trả", "hoàn tiền", "hủy đơn", "giao hàng", "vận chuyển", "ship")):
+            return "Nếu muốn, mình có thể nói rõ thêm phần đổi trả, bảo hành hoặc giao hàng."
+        return "Nếu cần, mình có thể giải thích thêm một ý nữa cho rõ hơn."
+
+    if capability == "loyalty":
+        if "đổi" in question or "điểm" in question:
+            return "Nếu muốn, mình có thể nói tiếp cách tích điểm hoặc đổi điểm nhé."
+        return "Nếu cần, mình có thể nói nhanh quyền lợi từng hạng thành viên."
+
+    return ""
+
+
+def _apply_customer_service_postprocess(state: AgentState, answer: str) -> str:
+    """Guard and enrich customer-facing answers before returning them."""
+    text = (answer or "").strip()
+    if not text:
+        return text
+
+    lowered = text.lower()
+    if _is_generic_context_fallback(text):
+        capability = state.get("capability", "")
+        question = (state.get("question") or "").lower()
+        if capability == "catalog" or _has_budget_signal(question):
+            return "Mình gợi ý nhanh cho bạn nè. Bạn cho mình độ tuổi, chủ đề hoặc ngân sách cụ thể, mình lọc ngay cho bạn."
+        if capability == "checkout":
+            return "Mình đang hỗ trợ bước mua hàng cho bạn nè. Bạn gửi mình tên sản phẩm cụ thể để mình đi tiếp nhé."
+        if capability == "order_management":
+            return "Mình có thể tra đơn cho bạn nè. Bạn gửi mình mã đơn hoặc số điện thoại đặt hàng nhé."
+        if capability == "inquiry":
+            return "Mình có thể hỗ trợ đổi trả, bảo hành, giao hàng hoặc thanh toán. Bạn muốn hỏi phần nào vậy?"
+
+    suggestion = _build_next_step_suggestion(state)
+    if suggestion and suggestion.lower() not in lowered and _should_offer_next_step(state, text):
+        text = f"{text}\n\n{suggestion}"
+
+    return text
 
 
 async def retrieve_node(state: AgentState) -> dict:
@@ -1975,6 +2086,7 @@ async def inquiry_writer_node(state: AgentState) -> dict:
         )
         used_llm = True
 
+    answer = _apply_customer_service_postprocess(state, answer)
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  InquiryWriter: {len(answer)} chars ({elapsed}ms)[/]")
 
@@ -2060,6 +2172,7 @@ async def order_status_writer_node(state: AgentState) -> dict:
     if customer_name and customer_name not in answer:
         answer = f"Chào {customer_name}! " + answer
 
+    answer = _apply_customer_service_postprocess(state, answer)
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  OrderStatusWriter: {len(answer)} chars ({elapsed}ms)[/]")
 
@@ -2124,6 +2237,9 @@ async def reviewer_node(state: AgentState) -> dict:
         session_tone,
         response_history
     )
+    guarded_answer = _apply_customer_service_postprocess(state, final_answer)
+    context_guarded = guarded_answer != final_answer
+    final_answer = guarded_answer
 
     elapsed = int((time.time() - t0) * 1000)
 
@@ -2138,6 +2254,7 @@ async def reviewer_node(state: AgentState) -> dict:
             "reviewer_result": reviewer_result,
             "reviewer_ms": elapsed,
             "session_tone": session_tone,
+            "context_guarded": context_guarded,
             "reviewer_prompt_version": prompt_meta("reviewer")["prompt_version"],
             "reviewer_policy_version": prompt_meta("reviewer")["policy_version"],
         },

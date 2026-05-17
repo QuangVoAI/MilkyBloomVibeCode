@@ -1075,6 +1075,74 @@ def test_budget_purchase_requires_product_selection():
     console.print("\n[bold green]✓ Level 1k (Budget Purchase Selection) hoàn thành[/]\n")
 
 
+def test_customer_service_postprocess_appends_next_step():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1k1 — Customer Service Postprocess Test[/]\n"
+        "[dim]Kiểm tra bot tự gợi ý bước tiếp theo sau khi đã trả lời xong[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+
+    catalog_state = {
+        "capability": "catalog",
+        "question": "gợi ý cho tôi món đồ dưới 500k",
+        "catalog_info": {"found": True, "products": [{"name": "Stardust Picnic Box"}]},
+        "checkout_result": {},
+        "order_info": {},
+        "session_summary": {"viewed_products": [{"name": "Stardust Picnic Box"}]},
+    }
+    catalog_answer = graph_mod._apply_customer_service_postprocess(
+        catalog_state,
+        "Mình gợi ý nhanh cho bạn nè. Mình gợi ý vài món trong tầm 500.000đ."
+    )
+    assert "Nếu muốn, mình lọc tiếp theo độ tuổi" in catalog_answer
+
+    inquiry_state = {
+        "capability": "inquiry",
+        "question": "cho tôi chính sách bảo hành",
+        "catalog_info": {},
+        "checkout_result": {},
+        "order_info": {},
+        "session_summary": {},
+    }
+    inquiry_answer = graph_mod._apply_customer_service_postprocess(
+        inquiry_state,
+        "Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể giúp bạn hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hoặc chính sách."
+    )
+    assert "lỗi AI tạm thời" not in inquiry_answer
+    assert "bảo hành" in inquiry_answer.lower() or "đổi trả" in inquiry_answer.lower()
+
+    console.print("[green]✓[/] Customer service postprocess adds next steps and repairs generic fallbacks.")
+    console.print("\n[bold green]✓ Level 1k1 (Customer Service Postprocess) hoàn thành[/]\n")
+
+
+def test_smart_clarification_for_budget_catalog():
+    console.print(Panel.fit(
+        "[bold cyan]LEVEL 1k2 — Smart Clarification Test[/]\n"
+        "[dim]Kiểm tra câu hỏi ngân sách được hỏi lại thật ngắn và đúng ngữ cảnh[/]",
+        border_style="cyan"
+    ))
+
+    import agents.graph as graph_mod
+
+    result = graph_mod.clarify_node({
+        "question": "tôi muốn mua hàng dưới 500k",
+        "history": [],
+        "session_summary": {"budget": {"max": 500000}},
+        "agent_trace": {},
+        "capability": "catalog",
+    })
+
+    answer = result["answer"].lower()
+    assert "độ tuổi" in answer
+    assert "chủ đề" in answer or "mục đích" in answer
+    assert "500.000đ" in answer or "500000" in answer
+
+    console.print("[green]✓[/] Smart clarification asks one short follow-up for budget catalog questions.")
+    console.print("\n[bold green]✓ Level 1k2 (Smart Clarification) hoàn thành[/]\n")
+
+
 def test_checkout_progression_wins_over_catalog_history():
     console.print(Panel.fit(
         "[bold cyan]LEVEL 1l — Checkout Progression Routing Test[/]\n"
