@@ -24,6 +24,10 @@ const {
 
 const app = express(); // Tạo app
 
+// Render sits behind a proxy, so rate limiting and IP-based middleware
+// need the forwarded client IP to be trusted.
+app.set('trust proxy', 1);
+
 // ============================================
 // HORIZONTAL SCALING SUPPORT
 // ============================================
