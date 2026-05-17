@@ -10,7 +10,7 @@ const express = require('express');
 const compression = require('compression');
 const http = require('http');
 const session = require('express-session');
-const MongoStore = require('connect-mongo');
+const { MongoStore } = require('connect-mongo');
 const passport = require('passport');
 const {
   getAllowedCorsOrigins,
@@ -86,7 +86,7 @@ app.use(
         secret: getSessionSecret(),
         resave: false,
         saveUninitialized: false,
-        store: MongoStore.create({
+        store: new MongoStore({
             mongoUrl: process.env.MONGO_URI,
             collectionName: 'sessions',
             ttl: 5 * 60,
