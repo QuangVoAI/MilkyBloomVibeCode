@@ -360,7 +360,19 @@ def _is_catalog_recommendation_request(text: str) -> bool:
     has_hint = any(keyword in q for keyword in CATALOG_RECOMMENDATION_HINTS)
     has_budget = bool(re.search(r"\b(?:dưới|tầm|khoảng|budget)\s*\d[\d.,]*\s*(?:k|nghìn|ngàn|vnđ|đ)?", q))
     has_price = bool(re.search(r"\b\d[\d.,]*\s*(?:k|nghìn|ngàn|vnđ|đ)\b", q))
-    return (has_hint and (has_budget or has_price)) or (has_hint and "dưới" in q)
+    has_followup = any(marker in q for marker in (
+        "còn món nào khác",
+        "còn món nào nữa",
+        "còn hàng nào nữa",
+        "còn hàng nào khác",
+        "còn món khác",
+        "thêm món khác",
+        "thêm sản phẩm khác",
+        "món khác",
+        "sản phẩm khác",
+        "mẫu khác",
+    ))
+    return (has_hint and (has_budget or has_price)) or (has_hint and "dưới" in q) or has_followup
 
 
 def _is_loyalty_request(text: str) -> bool:
@@ -752,6 +764,18 @@ def _has_catalog_followup_signal(text: str) -> bool:
     if _extract_catalog_selection_name(text):
         return True
     signals = [
+        "còn món nào khác",
+        "còn món nào nữa",
+        "còn hàng nào nữa",
+        "còn hàng nào khác",
+        "còn món khác không",
+        "còn món nào không",
+        "còn gì nữa",
+        "thêm món khác",
+        "thêm sản phẩm khác",
+        "món khác",
+        "sản phẩm khác",
+        "mẫu khác",
         "món này",
         "mẫu này",
         "sản phẩm này",
@@ -764,6 +788,7 @@ def _has_catalog_followup_signal(text: str) -> bool:
         "còn size nào",
         "còn màu nào",
         "còn không",
+        "còn món nào",
         "size nào",
         "màu nào",
         "giá bao nhiêu",
