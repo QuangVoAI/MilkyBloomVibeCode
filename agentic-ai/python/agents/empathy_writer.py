@@ -352,7 +352,7 @@ def _build_catalog_context(catalog_info: dict) -> str:
     )
 
 
-def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compensation="", order_info=None, action_result=None, action_intent=None, catalog_info=None):
+def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compensation="", order_info=None, action_result=None, action_intent=None, catalog_info=None, session_summary_text=""):
     """Build prompt cho empathy response."""
     sentiment_context = ""
     if sentiment:
@@ -368,6 +368,10 @@ def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compen
     if compensation:
         compensation_context = f"\nBỒI THƯỜNG ÁP DỤNG: {compensation}\nHÃY ĐỀ XUẤT BỒI THƯỜNG CỤ THỂ NÀY CHO KHÁCH.\n"
 
+    session_context = ""
+    if session_summary_text:
+        session_context = f"\nNGỮ CẢNH PHIÊN:\n{session_summary_text}\n"
+
     order_context = _build_order_context(order_info or {})
     catalog_context = _build_catalog_context(catalog_info or {})
     action_context = _build_action_context(action_result or {}, action_intent or {})
@@ -375,6 +379,7 @@ def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compen
     if not evidence_text or len(evidence_text) < 30:
         return (
             f"KHÁCH HÀNG GỬI:\n{question}\n\n"
+            f"{session_context}"
             f"{sentiment_context}"
             f"{order_context}"
             f"{catalog_context}"
@@ -407,6 +412,7 @@ def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compen
 
     return (
         f"KHÁCH HÀNG GỬI:\n{question}\n\n"
+        f"{session_context}"
         f"{sentiment_context}"
         f"{order_context}"
         f"{catalog_context}"
@@ -455,6 +461,7 @@ async def generate_empathy_streaming(
     action_result=None,
     action_intent=None,
     catalog_info=None,
+    session_summary_text="",
     stream_callback=None,
 ):
     """Streaming empathy response."""
@@ -468,6 +475,7 @@ async def generate_empathy_streaming(
         action_result,
         action_intent,
         catalog_info=catalog_info,
+        session_summary_text=session_summary_text,
     )
     
     messages = [
