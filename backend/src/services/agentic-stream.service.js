@@ -1,5 +1,15 @@
 const WebSocket = require('ws');
 
+class AgenticServiceError extends Error {
+    constructor(message, { status = null, retryAfter = '', payload = null } = {}) {
+        super(message);
+        this.name = 'AgenticServiceError';
+        this.status = status;
+        this.retryAfter = retryAfter;
+        this.payload = payload;
+    }
+}
+
 const normalizeUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
 
 const hasScheme = (value) => /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
@@ -123,6 +133,16 @@ const streamAgenticChat = async ({
             reject(err);
         };
 
+        const finalize = (payload, cleanup = null) => {
+            if (finished) return;
+            finished = true;
+            clearAllTimeouts();
+            if (typeof cleanup === 'function') {
+                cleanup();
+            }
+            resolve(payload);
+        };
+
         const postHttpFallback = async () => {
             if (!httpBaseUrl) {
                 return null;
@@ -152,19 +172,16 @@ const streamAgenticChat = async ({
 
             const data = await response.json().catch(() => null);
             if (!response.ok) {
-                const error = new Error(
+                throw new AgenticServiceError(
                     data?.error ||
                     data?.message ||
                     `HTTP ${response.status} from Agentic service`,
+                    {
+                        status: response.status,
+                        retryAfter: response.headers.get('retry-after') || '',
+                        payload: data,
+                    },
                 );
-                if (typeof onError === 'function') {
-                    try {
-                        onError(error, data);
-                    } catch (callbackErr) {
-                        console.error('[streamAgenticChat] Error in onError callback:', callbackErr);
-                    }
-                }
-                throw error;
             }
 
             if (typeof onFinal === 'function') {
@@ -219,14 +236,6 @@ const streamAgenticChat = async ({
                 } catch (_err) {
                     // ignore
                 }
-            };
-
-            const finalize = (payload) => {
-                if (finished) return;
-                finished = true;
-                clearAllTimeouts();
-                cleanup();
-                resolve(payload);
             };
 
             const retryOrFail = (error) => {
@@ -340,7 +349,7 @@ const streamAgenticChat = async ({
                         provider: parsed.provider || 'agentic',
                         model: parsed.model || 'empathai-langgraph',
                         raw: parsed,
-                    });
+                    }, cleanup);
                     return;
                 }
 
@@ -376,5 +385,6 @@ const streamAgenticChat = async ({
 
 module.exports = {
     getAgenticWsUrl,
+    AgenticServiceError,
     streamAgenticChat,
 };

@@ -5,6 +5,8 @@ const { streamAgenticChat } = require('../services/agentic-stream.service');
 let io;
 
 const CHAT_ERROR_FALLBACK = 'Mình đang gặp lỗi kết nối AI tạm thời. Bạn thử lại sau nhé.';
+const CHAT_RATE_LIMIT_FALLBACK =
+    'AI đang quá tải hoặc bị giới hạn lượt gọi tạm thời. Mình đã chuyển sang chế độ hỗ trợ nhanh, bạn thử lại sau ít phút nhé.';
 
 const sanitizeChatErrorMessage = (value) => {
     const text = String(value || '').trim();
@@ -29,6 +31,14 @@ const sanitizeChatErrorMessage = (value) => {
 
 const buildFallbackReply = (message) => {
     const text = String(message || '').toLowerCase();
+    const budgetMatch = text.match(/(?:dưới|khoảng|tầm|ngân sách|budget|mua|đơn hàng)?\s*(\d+(?:[.,]\d+)?)\s*(k|nghìn|ngàn|000|tr|triệu)?/i);
+    if (budgetMatch && /(mua|sản phẩm|món|đồ|budget|ngân sách|giá|k|nghìn|ngàn|tr|triệu|đơn hàng)/i.test(text)) {
+        const amount = budgetMatch[2] === 'tr' || budgetMatch[2] === 'triệu'
+            ? `${budgetMatch[1]} triệu`
+            : `${budgetMatch[1]}k`;
+        return `AI đang quá tải tạm thời, nhưng với ngân sách khoảng ${amount}, bạn có thể vào trang Sản phẩm và lọc theo giá để chọn món phù hợp. Nếu muốn mình gợi ý sát hơn, bạn nhắn thêm chủ đề hoặc độ tuổi người nhận nhé.`;
+    }
+
     if (/(sản phẩm|món|đồ|budget|ngân sách|giá|300k|500k|dưới\s*\d)/i.test(text)) {
         return 'Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể gợi ý sản phẩm nếu bạn cho mình biết ngân sách, độ tuổi hoặc chủ đề bạn thích nhé.';
     }
@@ -151,6 +161,21 @@ module.exports = {
                     status: 'started',
                 });
 
+                let fallbackSent = false;
+                const emitFallback = (reason, raw = null) => {
+                    if (fallbackSent) return;
+                    fallbackSent = true;
+                    socket.emit('chat_final', {
+                        sessionId,
+                        reply: buildFallbackReply(message),
+                        provider: 'fallback',
+                        model: 'fallback-message',
+                        fallback: true,
+                        fallback_reason: reason,
+                        raw,
+                    });
+                };
+
                 try {
                     const basePayload = {
                         message,
@@ -169,23 +194,21 @@ module.exports = {
                             const safeMessage = sanitizeChatErrorMessage(
                                 error?.message || `${providerLabel} AI error`,
                             );
+                            const status = Number(error?.status || data?.status || 0);
                             const shouldFallback =
                                 providerLabel === 'Groq' ||
+                                status === 429 ||
+                                /429|rate limit|too many requests|quota/i.test(String(error?.message || '')) ||
                                 /groq|featherless|api error|stream error|\/chat\/completions/i.test(
                                     String(error?.message || ''),
                                 ) ||
                                 safeMessage === CHAT_ERROR_FALLBACK;
 
                             if (shouldFallback) {
-                                socket.emit('chat_final', {
-                                    sessionId,
-                                    reply: buildFallbackReply(message),
-                                    provider: 'fallback',
-                                    model: 'fallback-message',
-                                    fallback: true,
-                                    fallback_reason: safeMessage,
-                                    raw: data || null,
-                                });
+                                emitFallback(
+                                    status === 429 ? CHAT_RATE_LIMIT_FALLBACK : safeMessage,
+                                    data || null,
+                                );
                                 return;
                             }
 
@@ -213,17 +236,18 @@ module.exports = {
                         },
                     });
                 } catch (error) {
-                    console.error(`[chat_message] session=${sessionId} failed:`, error);
-                    socket.emit('chat_final', {
-                        sessionId,
-                        reply: buildFallbackReply(message),
-                        provider: 'fallback',
-                        model: 'fallback-message',
-                        fallback: true,
-                        fallback_reason: sanitizeChatErrorMessage(
-                            error?.message || `${providerLabel} AI streaming failed`,
-                        ),
-                    });
+                    const status = Number(error?.status || 0);
+                    const safeMessage = status === 429
+                        ? CHAT_RATE_LIMIT_FALLBACK
+                        : sanitizeChatErrorMessage(error?.message || `${providerLabel} AI streaming failed`);
+                    console.warn(
+                        `[chat_message] session=${sessionId} fallback: ${safeMessage}`,
+                        {
+                            status: error?.status || undefined,
+                            retryAfter: error?.retryAfter || undefined,
+                        },
+                    );
+                    emitFallback(safeMessage, error?.payload || null);
                 }
             });
 
