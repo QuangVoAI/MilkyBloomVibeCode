@@ -206,7 +206,7 @@ const About = () => {
                 Skip
               </button>
             )}
-            <div className="handwriting handwriting-text text-lg lg:text-xl leading-9 text-slate-700 min-h-[220px]">
+            <div className="handwriting handwriting-text text-[1.32rem] leading-[2.15rem] text-slate-700 min-h-[260px] sm:text-[1.42rem] sm:leading-[2.28rem] lg:text-[1.58rem] lg:leading-[2.55rem]">
               {renderedLines.map((line, index) => {
                 const isCurrentLine = index === activeLineIndex && !skip;
                 const isComplete = line === messageLines[index];
