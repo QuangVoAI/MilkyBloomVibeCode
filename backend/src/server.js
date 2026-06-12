@@ -98,7 +98,13 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Session-Id', 'X-Guest-Session-Id'],
-  exposedHeaders: ['X-Instance-ID'], // Allow frontend to read custom headers
+  exposedHeaders: [
+    'X-Instance-ID',
+    'RateLimit-Policy',
+    'RateLimit-Limit',
+    'RateLimit-Remaining',
+    'RateLimit-Reset',
+  ], // Allow frontend to read custom headers
 }));
 
 // Cache headers for better PageSpeed scores

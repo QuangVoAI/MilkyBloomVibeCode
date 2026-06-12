@@ -138,16 +138,22 @@ def _normalize_price_text(value: str) -> int | None:
 
 def _extract_budget_limit(question: str) -> int | None:
     text = (question or "").lower()
+    ascii_text = _normalize_text(question)
     patterns = [
         r"(?:dưới|tối đa|không quá|<=?|less than|under)\s*([\d.,\s]+(?:k|nghìn|ngàn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd)?)",
         r"(?:tầm|khoảng|about|around|within|budget)\s*([\d.,\s]+(?:k|nghìn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd)?)",
     ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match:
-            limit = _normalize_price_text(match.group(1))
-            if limit:
-                return limit
+    ascii_patterns = [
+        r"(?:duoi|toi da|khong qua|less than|under|<=?)\s*([\d.,\s]+(?:k|nghin|ngan|trieu|m|d|vnd)?)",
+        r"(?:tam|khoang|about|around|within|budget|ngan sach)\s*([\d.,\s]+(?:k|nghin|ngan|trieu|m|d|vnd)?)",
+    ]
+    for source_text, source_patterns in ((text, patterns), (ascii_text, ascii_patterns)):
+        for pattern in source_patterns:
+            match = re.search(pattern, source_text, flags=re.IGNORECASE)
+            if match:
+                limit = _normalize_price_text(match.group(1))
+                if limit:
+                    return limit
     return None
 
 
@@ -155,6 +161,12 @@ def _strip_budget_and_filler_words(question: str) -> str:
     text = _clean_query(question).lower()
     text = re.sub(
         r"(?:dưới|tối đa|không quá|tầm|khoảng|about|around|within|budget)\s*[\d.,\s]+(?:k|nghìn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd)?",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(?:duoi|toi da|khong qua|tam|khoang|about|around|within|budget|ngan sach)\s*[\d.,\s]+(?:k|nghin|ngan|trieu|m|d|vnd)?",
         " ",
         text,
         flags=re.IGNORECASE,
@@ -472,6 +484,8 @@ def lookup_live_catalog(question: str, context: dict | None = None) -> dict:
     if (remote is None or not _normalize_products(remote)) and search_products:
         remote = search_products(keyword or query, ctx)
     products = _normalize_products(remote or {})
+    if products and budget_limit:
+        products = [product for product in products if _product_within_budget(product, budget_limit)]
     if not products:
         products = _fallback_catalog_search(keyword or query, ctx, budget_limit=budget_limit)
     if not products and budget_limit:
@@ -482,16 +496,11 @@ def lookup_live_catalog(question: str, context: dict | None = None) -> dict:
             limit=5,
             sort="price-asc",
         )
-        products = _normalize_products(remote)
-        if products:
-            return {
-                "found": True,
-                "query": keyword or query,
-                "summary": _build_nearby_budget_message(products, budget_limit, keyword=keyword),
-                "lookup_hints": CATALOG_HINTS,
-                "products": products,
-                "suggested_actions": ["ask_clarify_product"],
-            }
+        products = [
+            product
+            for product in _normalize_products(remote)
+            if _product_within_budget(product, budget_limit)
+        ]
     if not products:
         return {
             "found": False,

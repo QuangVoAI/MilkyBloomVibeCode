@@ -89,11 +89,15 @@ export function useCart(userId = null, authLoading = false) {
       const currentUserId = userIdRef.current;
       const currentMode = forceMode || (currentUserId ? 'user' : 'guest');
       const currentSessionId = getSessionId();
+      const requestOptions = {
+        signal: abortController.signal,
+        suppressNetworkErrorLog: true,
+      };
       
       if (currentUserId) {
-        cartData = await getCartByUser(currentUserId);
+        cartData = await getCartByUser(currentUserId, requestOptions);
       } else {
-        cartData = await getCartBySession(currentSessionId);
+        cartData = await getCartBySession(currentSessionId, requestOptions);
       }
 
       // Check if this response is still relevant
@@ -116,7 +120,10 @@ export function useCart(userId = null, authLoading = false) {
         }
       }
 
-      if (cartData) {
+      if (cartData?.exists === false) {
+        setCart(null);
+        setItems([]);
+      } else if (cartData) {
         setCart(cartData);
         setItems(cartData.items || []);
       } else {
@@ -139,7 +146,10 @@ export function useCart(userId = null, authLoading = false) {
                     err.message?.includes('Cart not found') || 
                     err.message?.includes('Không tìm thấy');
       
-      if (!is404) {
+      const isNetworkFetchFailure =
+        err.name === 'TypeError' && err.message === 'Failed to fetch';
+      
+      if (!is404 && !isNetworkFetchFailure) {
         console.error("Failed to fetch cart:", err);
         setError(err.message || "Failed to fetch cart");
       }

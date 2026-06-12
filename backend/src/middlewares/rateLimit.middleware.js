@@ -77,8 +77,8 @@ const otpLimiter = rateLimit({
 
 /**
  * General API rate limiter
- * Applies to write-heavy requests only so data-loading GETs stay responsive.
- * 200 write requests per minute per IP
+ * Applies to public API endpoints and emits standard rate-limit headers.
+ * 200 requests per minute per IP
  */
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
@@ -87,7 +87,6 @@ const apiLimiter = rateLimit({
     handler: createLimitHandler('Too many requests. Please slow down.'),
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method),
 });
 
 /**

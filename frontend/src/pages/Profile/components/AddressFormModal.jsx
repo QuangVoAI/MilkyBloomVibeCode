@@ -19,7 +19,42 @@ const VN_PROVINCES = [
   'Tây Ninh','Thái Bình','Thái Nguyên','Thanh Hóa','Thừa Thiên Huế','Tiền Giang',
   'TP. Hồ Chí Minh','Trà Vinh','Tuyên Quang','Vĩnh Long','Vĩnh Phúc','Yên Bái'
 ];
-const VN_PROVINCE_SET = new Set(VN_PROVINCES.map((p) => p.toLowerCase()));
+const normalizeProvinceText = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'D')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const VN_PROVINCE_BY_NORMALIZED = new Map(
+  VN_PROVINCES.map((province) => [normalizeProvinceText(province), province])
+);
+
+const PROVINCE_ALIAS_TARGETS = new Map([
+  ['hcm', 'tp ho chi minh'],
+  ['tp hcm', 'tp ho chi minh'],
+  ['tphcm', 'tp ho chi minh'],
+  ['tp ho chi minh', 'tp ho chi minh'],
+  ['ho chi minh', 'tp ho chi minh'],
+  ['sai gon', 'tp ho chi minh'],
+  ['sg', 'tp ho chi minh'],
+  ['hn', 'ha noi'],
+  ['ha noi', 'ha noi'],
+  ['vung tau', 'ba ria vung tau'],
+  ['ba ria', 'ba ria vung tau'],
+  ['ba ria vung tau', 'ba ria vung tau'],
+]);
+
+const findMatchingProvince = (input) => {
+  const normalized = normalizeProvinceText(input);
+  if (!normalized) return '';
+  const aliasTarget = PROVINCE_ALIAS_TARGETS.get(normalized);
+  return VN_PROVINCE_BY_NORMALIZED.get(aliasTarget || normalized) || '';
+};
 
 const AddressFormModal = ({ address, isOpen, onClose, onSave, mode = 'create' }) => {
   const [formData, setFormData] = useState({
@@ -110,10 +145,13 @@ const AddressFormModal = ({ address, isOpen, onClose, onSave, mode = 'create' })
       newErrors.addressLine = 'Address must be at least 10 characters';
     }
     const cityTrim = formData.city.trim();
+    const canonicalCity = findMatchingProvince(cityTrim);
     if (!cityTrim) {
       newErrors.city = 'Please select a province/city';
-    } else if (!VN_PROVINCE_SET.has(cityTrim.toLowerCase())) {
+    } else if (!canonicalCity) {
       newErrors.city = 'City must be selected from the dropdown list';
+    } else if (canonicalCity !== formData.city) {
+      setFormData(prev => ({ ...prev, city: canonicalCity }));
     }
     
     setErrors(newErrors);
@@ -130,7 +168,10 @@ const AddressFormModal = ({ address, isOpen, onClose, onSave, mode = 'create' })
 
     setSaving(true);
     try {
-      await onSave(formData);
+      await onSave({
+        ...formData,
+        city: findMatchingProvince(formData.city) || formData.city.trim(),
+      });
       // Reset form after successful save
       setFormData({
         fullNameOfReceiver: '',

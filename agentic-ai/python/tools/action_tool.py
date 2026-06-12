@@ -248,6 +248,7 @@ def _normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFD", text or "")
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
     text = text.replace("Đ", "d").replace("đ", "d")
+    text = text.replace("Đ", "d").replace("đ", "d")
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
@@ -273,6 +274,91 @@ def _looks_like_noise(question: str) -> bool:
     if len(set(compact)) <= 3 and len(compact) >= 5:
         return True
     return False
+
+
+def _is_payment_policy_question(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not any(marker in normalized for marker in ("thanh toan", "payment", "pay")):
+        return False
+    if any(
+        marker in normalized
+        for marker in (
+            "checkout",
+            "dat hang",
+            "tao don",
+            "len don",
+            "chot don",
+            "xac nhan",
+            "tien hanh thanh toan",
+            "thanh toan luon",
+        )
+    ):
+        return False
+    return any(
+        marker in normalized
+        for marker in (
+            "duoc khong",
+            "co duoc",
+            "phuong thuc",
+            "hinh thuc",
+            "nao",
+            "momo",
+            "cod",
+            "chuyen khoan",
+            "visa",
+            "the",
+            "card",
+            "payment method",
+            "pay by",
+        )
+    )
+
+
+def _is_catalog_advice_question(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if any(
+        marker in normalized
+        for marker in (
+            "chua biet chon",
+            "chua biet mua",
+            "phan van",
+            "nen mua",
+            "mua gi",
+            "chon gi",
+            "chon mon nao",
+        )
+    ):
+        return True
+
+    has_advice_hint = any(
+        marker in normalized
+        for marker in (
+            "goi y",
+            "de xuat",
+            "tu van",
+            "recommend",
+            "suggest",
+            "advice",
+            "tham khao",
+        )
+    )
+    has_catalog_clue = any(
+        marker in normalized
+        for marker in (
+            "qua",
+            "do choi",
+            "san pham",
+            "mon",
+            "hang",
+            "gift",
+            "toy",
+            "stardust",
+            "picnic",
+            "box",
+            "capsule",
+        )
+    )
+    return has_advice_hint and has_catalog_clue
 
 
 def _pattern_matches(text: str, pattern: str) -> bool:
@@ -463,6 +549,16 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
             "needs_order_id": False,
             "block_reason": "",
             "confidence": {**action_meta, "method": "identifier"},
+        }
+
+    if _is_payment_policy_question(question) or _is_catalog_advice_question(question):
+        action_meta = _build_action_meta(question, "no_action", {}, "policy_or_catalog_inquiry", 0)
+        action_meta["decision_reason"] = "policy_or_catalog_inquiry"
+        return {
+            "action": "no_action",
+            "executable": False,
+            "block_reason": "",
+            "confidence": action_meta,
         }
 
     priority_keyword_action = _keyword_detect_action(question)
@@ -865,6 +961,16 @@ def execute_action(action_intent: dict, order_info: dict, context: dict | None =
             "success": False,
             "action": action,
             "message": result.get("message") or "Backend chưa hủy được đơn này.",
+            "status": result.get("status"),
+            "error_code": (
+                "not_found"
+                if result.get("status") == 404
+                else "not_cancellable"
+                if result.get("status") == 400
+                else "forbidden"
+                if result.get("status") == 403
+                else "backend_error"
+            ),
             "ticket_id": None,
             "updated_fields": {},
             "blocked": True,

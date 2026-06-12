@@ -30,7 +30,7 @@ from agents.router import classify, classify_with_metadata, classify_with_follow
 from agents.router import _is_simple_greeting
 from agents.sentiment_analyzer import sentiment_analyzer_node
 from agents.empathy_writer import (
-    generate_empathy_streaming, generate_casual, generate_inquiry,
+    generate_empathy_streaming, generate_casual, generate_inquiry_streaming,
 )
 from agents.reviewer import review_with_retry, _check_banned_phrases, _is_repetitive
 from agents.permission_matrix import (
@@ -171,15 +171,23 @@ CATALOG_RECOMMENDATION_HINTS = [
 
 LOYALTY_KEYWORDS = [
     "loyalty",
-    "điểm",
     "coin",
     "coins",
-    "hạng",
+    "hạng thành viên",
+    "hạng loyalty",
+    "cấp thành viên",
     "tier",
     "thành viên",
     "membership",
     "tích điểm",
+    "điểm tích lũy",
     "điểm thưởng",
+    "điểm loyalty",
+    "điểm coin",
+    "xem điểm",
+    "số điểm",
+    "bao nhiêu điểm",
+    "còn bao nhiêu điểm",
     "đổi điểm",
     "redeem",
     "voucher thành viên",
@@ -199,10 +207,18 @@ SUPPORT_TICKET_KEYWORDS = [
     "mở ticket",
     "support ticket",
     "nhờ hỗ trợ",
+    "cần hỗ trợ",
+    "cần được hỗ trợ",
+    "cần giúp đỡ",
+    "giúp đỡ",
     "liên hệ hỗ trợ",
     "gặp nhân viên",
     "nhân viên hỗ trợ",
     "chat với người thật",
+    "khiếu nại",
+    "phàn nàn",
+    "complain",
+    "complaint",
     "live agent",
     "human support",
     "report issue",
@@ -395,6 +411,119 @@ def _is_catalog_advice_request(text: str) -> bool:
     if not q:
         return False
 
+    normalized_q = _normalize_vi_text(text)
+    ascii_negated_checkout = any(
+        marker in normalized_q
+        for marker in (
+            "chua dat hang",
+            "chua thanh toan",
+            "chua checkout",
+            "khong dat hang",
+            "khong checkout",
+            "khong thanh toan",
+            "chi tu van",
+            "tu van thoi",
+            "tham khao",
+            "advice only",
+            "recommend only",
+            "suggest only",
+            "dont checkout",
+            "do not checkout",
+            "no checkout",
+            "not checkout",
+            "dont order",
+            "do not order",
+            "not order",
+            "not buy yet",
+        )
+    )
+    ascii_explicit_checkout = any(
+        marker in normalized_q
+        for marker in (
+            "dat hang",
+            "checkout",
+            "thanh toan",
+            "chot don",
+            "tao don",
+            "mua ngay",
+            "xac nhan don",
+            "them vao gio",
+            "add to cart",
+            "buy now",
+        )
+    )
+    ascii_has_hint = any(
+        marker in normalized_q
+        for marker in (
+            "goi y",
+            "de xuat",
+            "tu van",
+            "chon",
+            "mon do",
+            "do choi",
+            "qua",
+            "gift",
+            "budget",
+            "ngan sach",
+            "recommend",
+            "suggest",
+            "advice",
+            "advise",
+            "tham khao",
+        )
+    )
+    ascii_has_generic_item = any(
+        marker in normalized_q
+        for marker in (
+            "qua",
+            "qua tang",
+            "do choi",
+            "san pham",
+            "mon",
+            "mon do",
+            "hang",
+            "gift",
+            "toy",
+            "item",
+        )
+    )
+    ascii_has_product_clue = any(
+        marker in normalized_q
+        for marker in (
+            "stardust",
+            "picnic",
+            "box",
+            "capsule",
+            "moon parade",
+            "bead",
+            "lab",
+            "sleepover",
+        )
+    )
+    ascii_has_uncertain_buy = any(
+        marker in normalized_q
+        for marker in (
+            "chua biet chon",
+            "chua biet mua",
+            "phan van",
+            "nen mua",
+            "mua gi",
+            "chon gi",
+            "chon mon nao",
+        )
+    )
+
+    if ascii_has_uncertain_buy:
+        return True
+    if ascii_has_hint and (ascii_has_generic_item or ascii_has_product_clue):
+        return True
+    if ascii_negated_checkout and (
+        ascii_has_hint or ascii_has_generic_item or ascii_has_product_clue
+    ):
+        return True
+    if not ascii_negated_checkout and ascii_explicit_checkout:
+        return False
+
     negated_checkout = any(
         marker in q
         for marker in (
@@ -513,6 +642,12 @@ def _is_product_info_question(text: str) -> bool:
             "chi tiết",
             "thông tin",
             "so sánh",
+            "điểm mạnh",
+            "diem manh",
+            "ưu điểm",
+            "uu diem",
+            "co gi hay",
+            "có gì hay",
             "compare",
             "how much",
             "price",
@@ -1023,7 +1158,6 @@ def _has_catalog_followup_signal(text: str) -> bool:
         "còn món nào",
         "size nào",
         "màu nào",
-        "giá bao nhiêu",
         "tồn kho",
         "đầu tiên",
         "món đầu tiên",
@@ -1174,7 +1308,7 @@ def _infer_capability(question: str, history: list[dict], intent: str, auth_prof
         return "inquiry", "inquiry_intent"
     if intent == "CASUAL":
         return "casual", "casual_intent"
-    return "order_management", "default_fallback"
+    return "inquiry", "general_fallback"
 
 
 def _format_loyalty_config_summary(config: dict) -> str:
@@ -2288,6 +2422,7 @@ async def inquiry_writer_node(state: AgentState) -> dict:
     catalog_info = state.get("catalog_info", {})
     capability_reason = str(state.get("capability_reason") or "").lower()
     session_summary_text = state.get("session_summary_text", "")
+    stream_callback = state.get("stream_callback")
     used_llm = False
 
     if "cancel_policy_question" in capability_reason or _is_cancel_policy_question(question):
@@ -2309,13 +2444,15 @@ async def inquiry_writer_node(state: AgentState) -> dict:
             _, _, answer = answer
     else:
         # Default: use LLM for general inquiry
-        answer = await generate_inquiry(
+        answer = await generate_inquiry_streaming(
             question, evidence_text, order_info=order_info, catalog_info=catalog_info,
-            session_summary_text=session_summary_text
+            session_summary_text=session_summary_text, stream_callback=stream_callback
         )
         used_llm = True
 
     answer = _apply_customer_service_postprocess(state, answer)
+    if stream_callback and answer and not used_llm:
+        await stream_callback(answer)
     elapsed = int((time.time() - t0) * 1000)
     console.print(f"[dim]  InquiryWriter: {len(answer)} chars ({elapsed}ms)[/]")
 

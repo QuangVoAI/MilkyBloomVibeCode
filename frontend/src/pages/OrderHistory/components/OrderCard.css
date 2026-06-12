@@ -77,11 +77,29 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .item-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: min(360px, 48vw);
   font-size: 0.8rem;
   color: #6b7280;
+}
+
+.item-summary-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-summary-count {
+  flex-shrink: 0;
+  color: #9ca3af;
 }
 
 .order-status-badge {

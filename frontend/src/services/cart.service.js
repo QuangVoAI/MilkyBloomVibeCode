@@ -19,13 +19,16 @@ export const getAllCarts = async () => {
 };
 
 // Get cart by user ID
-export const getCartByUser = async (userId) => {
-  return await apiClient.get(`/carts/user/${userId}`);
+export const getCartByUser = async (userId, options = {}) => {
+  return await apiClient.get(`/carts/user/${userId}`, options);
 };
 
 // Get cart by session ID (for guests)
-export const getCartBySession = async (sessionId) => {
-  return await apiClient.get(`/carts/session/${sessionId}`);
+export const getCartBySession = async (sessionId, options = {}) => {
+  return await apiClient.get(`/carts/session/${sessionId}`, {
+    params: { allowEmpty: true },
+    ...options,
+  });
 };
 
 // Create cart

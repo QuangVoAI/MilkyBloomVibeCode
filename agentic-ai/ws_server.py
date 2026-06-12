@@ -28,6 +28,46 @@ def _json_response(payload: dict, status: int = 200) -> web.Response:
     )
 
 
+def _merge_top_level_shop_context(payload: dict) -> dict:
+    context = payload.get("shop_context") or payload.get("context") or {}
+    if not isinstance(context, dict):
+        context = {}
+    else:
+        context = dict(context)
+
+    aliases = {
+        "auth_token": ("auth_token", "authToken", "token"),
+        "order_lookup_token": ("order_lookup_token", "orderLookupToken"),
+        "guest_session_id": ("guest_session_id", "guestSessionId"),
+        "guest_email": ("guest_email", "guestEmail"),
+        "user_id": ("user_id", "userId"),
+        "email": ("email",),
+        "role": ("role",),
+    }
+
+    for target_key, source_keys in aliases.items():
+        if context.get(target_key):
+            continue
+        for source_key in source_keys:
+            value = context.get(source_key)
+            if value:
+                context[target_key] = value
+                break
+        if context.get(target_key):
+            continue
+        for source_key in source_keys:
+            value = payload.get(source_key)
+            if value:
+                context[target_key] = value
+                break
+
+    guest_info = payload.get("guest_info") or payload.get("guestInfo")
+    if guest_info and not context.get("guest_info"):
+        context["guest_info"] = guest_info
+
+    return context
+
+
 async def health(request: web.Request) -> web.Response:
     groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_API_KEYS", "").strip())
     featherless_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip())
@@ -79,7 +119,7 @@ async def chat_http(request: web.Request) -> web.Response:
 
     history = payload.get("history") or []
     session_id = payload.get("session_id") or payload.get("sessionId") or ""
-    shop_context = payload.get("shop_context") or payload.get("context") or {}
+    shop_context = _merge_top_level_shop_context(payload)
 
     try:
         final_state = await run_streaming(
@@ -157,7 +197,7 @@ async def ws_entrypoint(request: web.Request) -> web.StreamResponse:
 
         history = payload.get("history") or []
         session_id = payload.get("session_id") or payload.get("sessionId") or ""
-        shop_context = payload.get("shop_context") or payload.get("context") or {}
+        shop_context = _merge_top_level_shop_context(payload)
 
         await send_json({
             "type": "status",

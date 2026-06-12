@@ -57,6 +57,14 @@ exports.calculateShippingFeeByUser = async (req, res) => {
                 .status(404)
                 .json({ success: false, message: "Không tìm thấy user" });
 
+        const weightGram = Number(req.query.weightGram) || 1000;
+        const orderValue = Number(req.query.orderValue) || 0;
+        const hasFreeship = req.query.hasFreeship === "true";
+        const requestedDeliveryType = req.query.deliveryType || "standard";
+        const deliveryType = DELIVERY_TYPES[requestedDeliveryType]
+            ? requestedDeliveryType
+            : "standard";
+
         // Check if specific addressId is provided, otherwise use default
         let address = null;
         const { addressId } = req.query;
@@ -76,18 +84,26 @@ exports.calculateShippingFeeByUser = async (req, res) => {
             address = await Address.findOne({ userId, isDefault: true }).lean();
         }
 
-        if (!address)
-            return res.status(400).json({
-                success: false,
+        if (!address) {
+            const deliveryConfig = DELIVERY_TYPES[deliveryType] || DELIVERY_TYPES.standard;
+            return res.json({
+                success: true,
+                estimated: true,
+                addressRequired: true,
+                fee: orderValue >= 500000 ? 0 : 50000,
+                region: "unknown",
+                distanceKm: 0,
+                deliveryType,
+                deliveryTypeName: deliveryConfig.name,
+                estimatedDays: deliveryConfig.estimatedDays,
+                notes: ["Estimated fee until a default address is selected."],
+                availableDeliveryTypes: getAvailableDeliveryTypes("unknown"),
                 message: "User chưa có địa chỉ mặc định",
             });
 
-        const weightGram = Number(req.query.weightGram) || 1000;
-        const orderValue = Number(req.query.orderValue) || 0;
-        const hasFreeship = req.query.hasFreeship === "true";
-        const deliveryType = req.query.deliveryType || "standard";
-
         //Tự động định vị nếu thiếu toạ độ
+        }
+
         let { lat, lng } = address;
         if ((!lat || !lng) && address.addressLine) {
             const verified = await verifyAddress(address.addressLine);
