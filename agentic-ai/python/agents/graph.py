@@ -390,9 +390,152 @@ def _is_budget_catalog_request(text: str) -> bool:
     return len(stripped.split()) <= 2
 
 
+def _is_catalog_advice_request(text: str) -> bool:
+    q = (text or "").lower()
+    if not q:
+        return False
+
+    negated_checkout = any(
+        marker in q
+        for marker in (
+            "chưa đặt hàng",
+            "chưa thanh toán",
+            "chưa checkout",
+            "không đặt hàng",
+            "không checkout",
+            "không thanh toán",
+            "chỉ tư vấn",
+            "tư vấn thôi",
+            "tham khảo",
+            "advice only",
+            "recommend only",
+            "suggest only",
+            "don't checkout",
+            "dont checkout",
+            "do not checkout",
+            "no checkout",
+            "not checkout",
+            "don't order",
+            "dont order",
+            "do not order",
+            "not order",
+            "not buy yet",
+        )
+    )
+    explicit_checkout_markers = (
+        "đặt hàng",
+        "checkout",
+        "thanh toán",
+        "chốt đơn",
+        "tạo đơn",
+        "mua ngay",
+        "xác nhận đơn",
+        "thêm vào giỏ",
+        "add to cart",
+        "buy now",
+    )
+    if not negated_checkout and any(marker in q for marker in explicit_checkout_markers):
+        return False
+
+    has_hint = any(keyword in q for keyword in CATALOG_RECOMMENDATION_HINTS) or any(
+        keyword in q for keyword in ("recommend", "suggest", "advice", "advise", "tham khảo", "tham khao")
+    )
+    has_generic_item = any(
+        term in q
+        for term in ("quà", "quà tặng", "đồ chơi", "sản phẩm", "món", "món đồ", "hàng", "gift", "toy", "item")
+    )
+    has_product_clue = any(
+        term in q
+        for term in (
+            "stardust",
+            "picnic",
+            "box",
+            "capsule",
+            "moon parade",
+            "bead",
+            "lab",
+            "sleepover",
+        )
+    )
+    has_uncertain_buy = any(
+        marker in q
+        for marker in (
+            "chưa biết chọn",
+            "chưa biết mua",
+            "phân vân",
+            "nên mua",
+            "mua gì",
+            "chọn gì",
+            "chọn món nào",
+        )
+    )
+    return (has_hint and (has_generic_item or has_product_clue)) or has_uncertain_buy or (
+        negated_checkout and (has_hint or has_generic_item or has_product_clue)
+    )
+
+
+def _is_product_info_question(text: str) -> bool:
+    q = (text or "").lower()
+    if not q or _is_purchase_request(q):
+        return False
+
+    has_product_clue = any(
+        term in q
+        for term in (
+            "stardust",
+            "picnic",
+            "box",
+            "capsule",
+            "bead",
+            "lab",
+            "sleepover",
+            "moon parade",
+            "dream shelf",
+            "sản phẩm này",
+        )
+    )
+    has_info_clue = any(
+        term in q
+        for term in (
+            "phù hợp",
+            "hợp bé",
+            "mấy tuổi",
+            "bao nhiêu tuổi",
+            "độ tuổi",
+            "giá",
+            "bao nhiêu tiền",
+            "còn hàng",
+            "tồn kho",
+            "màu",
+            "size",
+            "loại",
+            "classic",
+            "chi tiết",
+            "thông tin",
+            "so sánh",
+            "compare",
+            "how much",
+            "price",
+            "cost",
+            "suitable",
+            "good for",
+            "age",
+            "year old",
+            "years old",
+            "in stock",
+            "stock",
+        )
+    )
+    return has_product_clue and has_info_clue
+
+
 def _is_catalog_request(text: str) -> bool:
     q = (text or "").lower()
-    return any(keyword in q for keyword in CATALOG_KEYWORDS)
+    return (
+        any(keyword in q for keyword in CATALOG_KEYWORDS)
+        or _is_catalog_advice_request(q)
+        or _is_product_info_question(q)
+    )
 
 
 def _is_catalog_recommendation_request(text: str) -> bool:
@@ -412,7 +555,12 @@ def _is_catalog_recommendation_request(text: str) -> bool:
         "sản phẩm khác",
         "mẫu khác",
     ))
-    return (has_hint and (has_budget or has_price)) or (has_hint and "dưới" in q) or has_followup
+    return (
+        (has_hint and (has_budget or has_price))
+        or (has_hint and "dưới" in q)
+        or has_followup
+        or _is_catalog_advice_request(q)
+    )
 
 
 def _is_loyalty_request(text: str) -> bool:
@@ -428,6 +576,44 @@ def _is_loyalty_redeem_request(text: str) -> bool:
 def _is_support_ticket_request(text: str) -> bool:
     q = (text or "").lower()
     return any(keyword in q for keyword in SUPPORT_TICKET_KEYWORDS)
+
+
+def _is_payment_policy_question(text: str) -> bool:
+    q = _normalize_vi_text(text)
+    if not q or not any(marker in q for marker in ("thanh toan", "payment", "pay")):
+        return False
+    if any(
+        marker in q
+        for marker in (
+            "checkout",
+            "dat hang",
+            "tao don",
+            "len don",
+            "chot don",
+            "xac nhan",
+            "tien hanh thanh toan",
+            "thanh toan luon",
+        )
+    ):
+        return False
+    return any(
+        marker in q
+        for marker in (
+            "duoc khong",
+            "co duoc",
+            "phuong thuc",
+            "hinh thuc",
+            "nao",
+            "momo",
+            "cod",
+            "chuyen khoan",
+            "visa",
+            "the",
+            "card",
+            "payment method",
+            "pay by",
+        )
+    )
 
 
 def _is_existing_order_issue(text: str) -> bool:
@@ -489,33 +675,39 @@ def _is_existing_order_issue(text: str) -> bool:
 
 
 def _is_return_policy_question(text: str) -> bool:
-    q = (text or "").lower()
+    q = _normalize_vi_text(text)
     policy_markers = (
-        "chính sách đổi trả",
-        "đổi trả như thế nào",
-        "đổi trả ra sao",
-        "được đổi trả không",
-        "điều kiện đổi trả",
-        "quy trình đổi trả",
-        "đổi trả bao lâu",
-        "trả hàng như thế nào",
+        "chinh sach doi tra",
+        "doi tra nhu the nao",
+        "doi tra ra sao",
+        "duoc doi tra khong",
+        "dieu kien doi tra",
+        "quy trinh doi tra",
+        "doi tra bao lau",
+        "tra hang nhu the nao",
+        "hoan tien mat bao lau",
+        "bao lau hoan tien",
+        "thoi gian hoan tien",
+        "quy trinh hoan tien",
+        "refund mat bao lau",
+        "refund bao lau",
         "return policy",
     )
     if any(phrase in q for phrase in policy_markers):
         return True
-    if "đổi trả hàng" in q and any(
+    if "doi tra hang" in q and any(
         phrase in q
         for phrase in (
-            "cho tôi biết",
-            "cho mình biết",
-            "muốn biết",
-            "thông tin",
-            "chi tiết",
-            "chính xác",
-            "cụ thể",
-            "điều kiện",
-            "quy trình",
-            "bao lâu",
+            "cho toi biet",
+            "cho minh biet",
+            "muon biet",
+            "thong tin",
+            "chi tiet",
+            "chinh xac",
+            "cu the",
+            "dieu kien",
+            "quy trinh",
+            "bao lau",
         )
     ):
         return True
@@ -833,11 +1025,42 @@ def _has_catalog_followup_signal(text: str) -> bool:
         "màu nào",
         "giá bao nhiêu",
         "tồn kho",
+        "đầu tiên",
+        "món đầu tiên",
+        "cái đầu tiên",
+        "số 1",
+        "mục 1",
+        "xem chi tiết",
+        "chi tiết món",
+        "xem sản phẩm",
         "chốt món này",
         "đặt món này",
         "thêm vào giỏ",
     ]
     return any(sig in text for sig in signals)
+
+
+def _history_has_catalog_prompt(history: list[dict] | None) -> bool:
+    recent = " ".join(
+        str(msg.get("content") or "")
+        for msg in (history or [])[-6:]
+        if isinstance(msg, dict)
+    ).lower()
+    if not recent:
+        return False
+    return any(
+        marker in recent
+        for marker in (
+            "gợi ý",
+            "chọn món",
+            "chọn sản phẩm",
+            "danh sách",
+            "stardust",
+            "picnic",
+            "capsule",
+            "box",
+        )
+    )
 
 
 def _brand_voice_opening(context: str, *, order_id: str = "", product_name: str = "") -> str:
@@ -900,6 +1123,9 @@ def _infer_capability(question: str, history: list[dict], intent: str, auth_prof
     if _extract_catalog_selection_name(current):
         return "catalog", "catalog_selection"
 
+    if _has_catalog_followup_signal(current) and _history_has_catalog_prompt(history):
+        return "catalog", "catalog_followup_history"
+
     if _is_loyalty_request(current):
         if _is_loyalty_redeem_request(current):
             return "loyalty", "loyalty_redeem"
@@ -907,6 +1133,9 @@ def _infer_capability(question: str, history: list[dict], intent: str, auth_prof
 
     if _is_support_ticket_request(current):
         return "inquiry", "support_contact_request"
+
+    if _is_payment_policy_question(current):
+        return "inquiry", "payment_policy_question"
 
     if _is_budget_catalog_request(current):
         return "catalog", "budget_catalog_request"
@@ -2313,6 +2542,10 @@ def route_by_intent(state: AgentState) -> str:
     if _is_budget_catalog_request(question):
         console.print("[dim]  Router: budget-based purchase request — forcing catalog path[/]")
         return "catalog"
+
+    if _is_payment_policy_question(question):
+        console.print("[dim]  Router: payment policy question — forcing inquiry path[/]")
+        return "inquiry"
 
     explicit_checkout_request = _is_checkout_request(question) or _is_checkout_progression_request(question)
     if explicit_checkout_request:

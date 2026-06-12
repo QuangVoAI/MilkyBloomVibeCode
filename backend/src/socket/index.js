@@ -8,6 +8,97 @@ const CHAT_ERROR_FALLBACK = 'Mình đang gặp lỗi kết nối AI tạm thời
 const CHAT_RATE_LIMIT_FALLBACK =
     'AI đang quá tải hoặc bị giới hạn lượt gọi tạm thời. Mình đã chuyển sang chế độ hỗ trợ nhanh, bạn thử lại sau ít phút nhé.';
 
+const CHAT_LOGIN_REQUIRED_FOR_CHECKOUT =
+    'Để tránh sai thông tin đơn hàng, bạn đăng nhập trước khi mình tạo đơn nhé. Sau khi đăng nhập, bạn có thể quay lại giỏ hàng hoặc nhắn mình tiếp để checkout.';
+
+const normalizeChatText = (value) =>
+    String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .toLowerCase();
+
+const hasCheckoutNegation = (text) =>
+    /\b(chua dat hang|chua thanh toan|chua checkout|khong dat hang|khong checkout|khong thanh toan|chi tu van|tu van thoi|tham khao|advice only|recommend only|suggest only|dont checkout|do not checkout|no checkout|not checkout|dont order|do not order|not order|not buy yet)\b/.test(text);
+
+const isCheckoutCreationRequest = (message) => {
+    const text = normalizeChatText(message);
+    if (!text) return false;
+
+    if (hasCheckoutNegation(text)) {
+        return false;
+    }
+
+    if (/\b(huy don|huy order|cancel order|doi dia chi|hoan tien|doi tra|tra hang|kiem tra don|tra cuu don|theo doi don|tracking|refund|return order)\b/.test(text)) {
+        return false;
+    }
+
+    if (
+        /\b(thanh toan|payment|pay)\b/.test(text) &&
+        /\b(duoc khong|co duoc|phuong thuc|hinh thuc|nao|momo|cod|chuyen khoan|visa|the|card|payment method|pay by)\b/.test(text) &&
+        !/\b(checkout|dat hang|tao don|len don|chot don|xac nhan|tien hanh|luon)\b/.test(text)
+    ) {
+        return false;
+    }
+
+    if (/\b(goi y|tu van|suggest|recommend|advice|advise|duoi|tam|khoang|ngan sach|budget|chua biet|phan van|nen mua|chon gi|chon mon nao|mua gi)\b/.test(text)) {
+        return false;
+    }
+
+    if (/\b(dat hang|tao don|len don|chot don|checkout|thanh toan luon|tien hanh thanh toan|di den thanh toan|buy now|place order|create order)\b/.test(text)) {
+        return true;
+    }
+
+    const hasQuantity = /\b(\d+|mot|hai|ba|bon|nam)\b/.test(text);
+    const hasItemCue = /\b(stardust|picnic|box|classic|capsule|toy|do choi|san pham|loai|mau|size)\b/.test(text);
+    const hasDirectBuyCue = /\b(cho minh|giup minh|lay|chon|them vao gio|chot)\b/.test(text);
+
+    if (/\b(dat|order)\b/.test(text) && (hasQuantity || hasItemCue || hasDirectBuyCue)) {
+        return true;
+    }
+
+    if (/\bmua\b/.test(text) && (hasQuantity || hasItemCue || hasDirectBuyCue)) {
+        return true;
+    }
+
+    return hasQuantity && hasItemCue && hasDirectBuyCue;
+};
+
+const hasRecentCheckoutLoginPrompt = (history = []) =>
+    history.slice(-6).some((item) => {
+        if (!item || item.role !== 'assistant') return false;
+        const content = normalizeChatText(item.content);
+        return content.includes('dang nhap truoc khi minh tao don');
+    });
+
+const hasRecentCatalogPrompt = (history = []) =>
+    history.slice(-6).some((item) => {
+        if (!item || item.role !== 'assistant') return false;
+        const content = normalizeChatText(item.content);
+        return /\b(goi y|chon mon|chon san pham|stardust|picnic|capsule|box|danh sach)\b/.test(content);
+    });
+
+const isCatalogPurchaseFollowup = (message) => {
+    const text = normalizeChatText(message);
+    if (!text) return false;
+    if (/\b(xem|chi tiet|thong tin|gia|con hang|so sanh)\b/.test(text)) {
+        return false;
+    }
+    return /\b(cho minh|lay|mua|chon|chot|dat|ok)\b/.test(text) && /\b(dau tien|so 1|muc 1|mon nay|cai nay)\b/.test(text);
+};
+
+const isCheckoutContactFollowup = (message) => {
+    const text = normalizeChatText(message);
+    if (!text) return false;
+
+    const hasContactInfo =
+        /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.test(text) ||
+        /(?:\+?84|0|1)(?:[\s.-]?\d){8,10}\b/.test(text);
+
+    return hasContactInfo && /\b(ten|email|sdt|so dien thoai|dien thoai|dia chi|address)\b/.test(text);
+};
+
 const sanitizeChatErrorMessage = (value) => {
     const text = String(value || '').trim();
     if (!text) return CHAT_ERROR_FALLBACK;
@@ -156,6 +247,37 @@ module.exports = {
                     return;
                 }
 
+                const shouldRequireLoginForCheckout =
+                    !verifiedAuthToken &&
+                    (
+                        isCheckoutCreationRequest(message) ||
+                        (hasRecentCheckoutLoginPrompt(history) && isCheckoutContactFollowup(message)) ||
+                        (hasRecentCatalogPrompt(history) && isCatalogPurchaseFollowup(message))
+                    );
+
+                if (shouldRequireLoginForCheckout) {
+                    socket.emit('chat_status', {
+                        sessionId,
+                        status: 'started',
+                    });
+                    socket.emit('chat_final', {
+                        sessionId,
+                        session_id: sessionId,
+                        reply: CHAT_LOGIN_REQUIRED_FOR_CHECKOUT,
+                        provider: 'socket-guard',
+                        model: 'checkout-login-guard',
+                        fallback: false,
+                        checkout_result: {
+                            needs_login: true,
+                        },
+                        agent_trace: {
+                            capability: 'checkout',
+                            checkout_guard: 'login_required',
+                        },
+                    });
+                    return;
+                }
+
                 socket.emit('chat_status', {
                     sessionId,
                     status: 'started',
@@ -224,6 +346,7 @@ module.exports = {
                         ...basePayload,
                         shopContext: {
                             auth_token: verifiedAuthToken,
+                            require_login_for_checkout: true,
                             order_lookup_token: payload.orderLookupToken || payload.order_lookup_token || '',
                             guest_session_id: payload.guestSessionId || payload.guest_session_id || '',
                             guest_info: payload.guestInfo || payload.guest_info || {},

@@ -371,6 +371,87 @@ def _is_catalog_recommendation_request(text: str) -> bool:
     return has_hint and has_budget and not has_checkout_hint
 
 
+def _is_catalog_advice_request(text: str) -> bool:
+    q = (text or "").lower()
+    if not q:
+        return False
+
+    negated_checkout = any(
+        marker in q
+        for marker in (
+            "chưa đặt hàng",
+            "chưa thanh toán",
+            "chưa checkout",
+            "không đặt hàng",
+            "không checkout",
+            "không thanh toán",
+            "chỉ tư vấn",
+            "tư vấn thôi",
+            "tham khảo",
+            "advice only",
+            "recommend only",
+            "suggest only",
+            "don't checkout",
+            "dont checkout",
+            "do not checkout",
+            "no checkout",
+            "not checkout",
+            "don't order",
+            "dont order",
+            "do not order",
+            "not order",
+            "not buy yet",
+        )
+    )
+    explicit_checkout_markers = (
+        "đặt hàng",
+        "checkout",
+        "thanh toán",
+        "chốt đơn",
+        "tạo đơn",
+        "mua ngay",
+        "xác nhận đơn",
+        "thêm vào giỏ",
+        "add to cart",
+        "buy now",
+    )
+    if not negated_checkout and any(marker in q for marker in explicit_checkout_markers):
+        return False
+
+    has_hint = any(keyword in q for keyword in CATALOG_RECOMMENDATION_HINTS) or any(
+        keyword in q for keyword in ("recommend", "suggest", "advice", "advise", "tham khảo", "tham khao")
+    )
+    has_generic_item = any(term in q for term in GENERIC_PURCHASE_TERMS)
+    has_product_clue = any(
+        term in q
+        for term in (
+            "stardust",
+            "picnic",
+            "box",
+            "capsule",
+            "moon parade",
+            "bead",
+            "lab",
+            "sleepover",
+        )
+    )
+    has_uncertain_buy = any(
+        marker in q
+        for marker in (
+            "chưa biết chọn",
+            "chưa biết mua",
+            "phân vân",
+            "nên mua",
+            "mua gì",
+            "chọn gì",
+            "chọn món nào",
+        )
+    )
+    return (has_hint and (has_generic_item or has_product_clue)) or has_uncertain_buy or (
+        negated_checkout and (has_hint or has_generic_item or has_product_clue)
+    )
+
+
 def _has_budget_signal(text: str) -> bool:
     q = (text or "").lower()
     return bool(
@@ -611,6 +692,11 @@ def start_checkout(question: str, history: list[dict] | None = None, shop_contex
     )
     payment_method = _detect_payment_method(question)
     purchase_query = _extract_purchase_query(question)
+    require_login_for_checkout = str(
+        ctx.get("require_login_for_checkout") or ""
+    ).strip().lower() in ("1", "true", "yes", "on")
+    if _is_catalog_advice_request(question):
+        return _build_budget_purchase_selection(question, ctx)
     if _looks_like_budget_catalog_request(question, purchase_query):
         return _build_budget_purchase_selection(question, ctx)
     if _is_generic_budget_purchase(question, purchase_query):
@@ -621,6 +707,23 @@ def start_checkout(question: str, history: list[dict] | None = None, shop_contex
         return {
             **add_to_cart_result,
             "needs_login": False,
+        }
+
+    if require_login_for_checkout and not (auth_token and user_id):
+        added_message = (
+            add_to_cart_result.get("message", "").strip()
+            if add_to_cart_result and add_to_cart_result.get("ok")
+            else ""
+        )
+        return {
+            "ok": False,
+            "needs_login": True,
+            "message": (
+                (added_message + " " if added_message else "")
+                + "Để tránh sai thông tin đơn hàng, bạn đăng nhập trước khi mình tạo đơn nhé. "
+                "Sau khi đăng nhập, bạn có thể quay lại giỏ hàng hoặc nhắn mình tiếp để checkout."
+            ),
+            "add_to_cart_result": add_to_cart_result,
         }
 
     if auth_token and user_id:

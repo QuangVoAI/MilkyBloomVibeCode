@@ -327,6 +327,36 @@ def _extract_new_address_followup(text: str) -> Optional[str]:
     return None
 
 
+def _extract_email(text: str) -> str:
+    match = re.search(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", text or "")
+    return match.group(0).lower() if match else ""
+
+
+def _looks_like_identifier_only(text: str) -> bool:
+    raw = (text or "").strip()
+    if not raw:
+        return False
+
+    order_id = extract_order_id(raw) or ""
+    phone = extract_phone_number(raw) or ""
+    email = _extract_email(raw)
+    if not (order_id or phone or email):
+        return False
+
+    cleaned = raw
+    for value in (order_id, phone, email):
+        if value:
+            cleaned = re.sub(re.escape(value), " ", cleaned, flags=re.IGNORECASE)
+    cleaned = _normalize_text(cleaned)
+    cleaned = re.sub(
+        r"\b(?:ma|don|order|id|so|dien thoai|phone|email|cua minh la|la|day|ne|nhe|giup minh|giup toi)\b",
+        " ",
+        cleaned,
+    )
+    cleaned = re.sub(r"[\s:：#\-_+().@]+", " ", cleaned).strip()
+    return not cleaned
+
+
 def _fallback_regex_detect(question: str) -> str:
     """Regex fallback when semantic score is ambiguous."""
     if _match_any(question, UPDATE_ADDRESS_PATTERNS):
@@ -416,37 +446,64 @@ def detect_action_intent(question: str, order_info: dict) -> dict:
             "confidence": action_meta,
         }
 
-    # ── Semantic classification ──
-    semantic_scores = _semantic_score_map(question)
-    semantic_action, score = max(semantic_scores.items(), key=lambda item: item[1])
+    if _looks_like_identifier_only(question):
+        action_meta = _build_action_meta(question, "check_order_status", {}, "identifier", 1)
+        action_meta["decision_reason"] = "identifier_only"
+        if not found:
+            return {
+                "action": "check_order_status",
+                "executable": False,
+                "needs_order_id": False,
+                "block_reason": "",
+                "confidence": {**action_meta, "method": "identifier"},
+            }
+        return {
+            "action": "check_order_status",
+            "executable": True,
+            "needs_order_id": False,
+            "block_reason": "",
+            "confidence": {**action_meta, "method": "identifier"},
+        }
 
-    if score >= _semantic_threshold_high:
-        action = semantic_action
-        decision_method = "semantic"
+    priority_keyword_action = _keyword_detect_action(question)
+    if priority_keyword_action in {"request_refund", "cancel_order", "update_address", "check_order_status"}:
+        action = priority_keyword_action
+        decision_method = "keyword"
         keyword_hits = _keyword_score(action, question)
-        console.print(f"[dim]  ActionIntent: semantic -> {action} (score={score})[/]")
+        semantic_scores = _semantic_score_map(question)
+        console.print(f"[dim]  ActionIntent: priority keyword -> {action}[/]")
     else:
-        keyword_action = _keyword_detect_action(question)
-        if keyword_action != "no_action":
-            action = keyword_action
-            decision_method = "keyword"
-            keyword_hits = _keyword_score(action, question)
-            console.print(
-                f"[dim]  ActionIntent: semantic low ({score}) -> keyword fallback -> {action}[/]"
-            )
-        elif score >= _semantic_threshold_low:
-            # Ambiguous but still usable: trust semantic intent if keyword fallback failed.
+        # ── Semantic classification ──
+        semantic_scores = _semantic_score_map(question)
+        semantic_action, score = max(semantic_scores.items(), key=lambda item: item[1])
+
+        if score >= _semantic_threshold_high:
             action = semantic_action
-            decision_method = "semantic-ambiguous"
+            decision_method = "semantic"
             keyword_hits = _keyword_score(action, question)
-            console.print(
-                f"[dim]  ActionIntent: semantic ambiguous ({score}) -> {action}[/]"
-            )
+            console.print(f"[dim]  ActionIntent: semantic -> {action} (score={score})[/]")
         else:
-            action = "no_action"
-            decision_method = "clarify"
-            keyword_hits = 0
-            console.print(f"[dim]  ActionIntent: no action detected (score={score})[/]")
+            keyword_action = priority_keyword_action
+            if keyword_action != "no_action":
+                action = keyword_action
+                decision_method = "keyword"
+                keyword_hits = _keyword_score(action, question)
+                console.print(
+                    f"[dim]  ActionIntent: semantic low ({score}) -> keyword fallback -> {action}[/]"
+                )
+            elif score >= _semantic_threshold_low:
+                # Ambiguous but still usable: trust semantic intent if keyword fallback failed.
+                action = semantic_action
+                decision_method = "semantic-ambiguous"
+                keyword_hits = _keyword_score(action, question)
+                console.print(
+                    f"[dim]  ActionIntent: semantic ambiguous ({score}) -> {action}[/]"
+                )
+            else:
+                action = "no_action"
+                decision_method = "clarify"
+                keyword_hits = 0
+                console.print(f"[dim]  ActionIntent: no action detected (score={score})[/]")
 
     action_meta = _build_action_meta(question, action, semantic_scores, decision_method, keyword_hits)
     if action == "no_action":

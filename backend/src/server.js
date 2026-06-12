@@ -3,6 +3,42 @@ if (process.env.NODE_ENV !== 'production') {
     require('dotenv').config();
 }
 
+const dns = require('dns');
+
+const configureMongoSrvDns = () => {
+    const mongoUri = process.env.MONGO_URI || '';
+    if (!mongoUri.startsWith('mongodb+srv://')) return;
+
+    const configuredServers = String(process.env.MONGO_DNS_SERVERS || '')
+        .split(',')
+        .map((server) => server.trim())
+        .filter(Boolean);
+    const currentServers = dns.getServers();
+    const hasLoopbackOnly =
+        currentServers.length > 0 &&
+        currentServers.every((server) =>
+            ['127.0.0.1', '::1', '0.0.0.0'].includes(server),
+        );
+
+    if (
+        !configuredServers.length &&
+        (process.env.NODE_ENV === 'production' || !hasLoopbackOnly)
+    ) {
+        return;
+    }
+
+    const fallbackServers = configuredServers.length
+        ? configuredServers
+        : ['8.8.8.8', '1.1.1.1'];
+
+    dns.setServers(fallbackServers);
+    console.warn(
+        `[runtime] Using DNS servers for MongoDB SRV lookup: ${fallbackServers.join(', ')}`,
+    );
+};
+
+configureMongoSrvDns();
+
 const crypto = require('crypto');
 const os = require('os');
 const cors = require('cors');
