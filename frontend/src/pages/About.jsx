@@ -4,15 +4,21 @@ import './About.css';
 
 const message = `Xin chào, đây là MilkyBloom.
 
-MilkyBloom là dự án thương mại điện tử full-stack được xây dựng cho dòng sản phẩm sưu tầm, với mục tiêu tạo ra trải nghiệm mua sắm nhẹ nhàng, rõ ràng và dễ dùng trên cả desktop lẫn mobile.
+MilkyBloom là dự án thương mại điện tử full-stack dành cho dòng sản phẩm sưu tầm, được thiết kế với mục tiêu tạo ra trải nghiệm mua sắm nhẹ nhàng, rõ ràng và dễ dùng trên cả desktop lẫn mobile.
 
-Dự án kết hợp backend Node.js, ExpressJS, MongoDB và hệ thống xác thực an toàn, cùng giao diện hiện đại cho người dùng, quản trị viên và chatbot hỗ trợ khách hàng.
+Không chỉ dừng ở việc hiển thị sản phẩm và xử lý đơn hàng, MilkyBloom còn được xây dựng như một trải nghiệm số có cảm xúc: nơi giao diện, tốc độ và nội dung hỗ trợ đều hướng đến sự thân thiện, tinh gọn và dễ hiểu.
+
+Dự án kết hợp React, Node.js, ExpressJS, MongoDB, hệ thống xác thực an toàn và kiến trúc media tối ưu cho deploy thực tế. Trên nền tảng đó, MilkyBloom phát triển thêm lớp hỗ trợ AI nhằm giúp người dùng tìm sản phẩm, theo dõi đơn hàng và xử lý các tình huống sau mua một cách tự nhiên hơn.
+
+Một điểm nhấn quan trọng của MilkyBloom là hướng tiếp cận empathy AI: chatbot không chỉ trả lời đúng thông tin, mà còn cố gắng phản hồi theo ngữ cảnh, rõ ràng, lịch sự và đồng cảm hơn với nhu cầu thực tế của khách hàng.
 
 Trong phiên bản triển khai hiện tại, MilkyBloom tập trung vào:
 • Danh mục sản phẩm, tìm kiếm và bộ lọc thông minh
 • Giỏ hàng, đặt hàng và xử lý thanh toán
-• Chat hỗ trợ sản phẩm, đơn hàng, vận chuyển và đổi trả
-• Hệ thống media, ảnh và video được tối ưu cho deploy thực tế`;
+• AI chat hỗ trợ sản phẩm, đơn hàng, vận chuyển, đổi trả và các tình huống cần phản hồi nhanh
+• Hệ thống media, ảnh và video được tối ưu cho deploy thực tế
+
+MilkyBloom là sự giao thoa giữa e-commerce, trải nghiệm giao diện hiện đại và AI hỗ trợ mang tính đồng hành, với mục tiêu làm cho việc mua sắm trở nên mượt hơn, ấm hơn và đáng tin cậy hơn.`;
 
 const ABOUT_HIGHLIGHTS = [
   {
@@ -21,11 +27,11 @@ const ABOUT_HIGHLIGHTS = [
   },
   {
     title: 'Tính năng nổi bật',
-    value: 'Tìm kiếm, giỏ hàng, thanh toán, chat AI',
+    value: 'Tìm kiếm, giỏ hàng, thanh toán, AI chat hỗ trợ',
   },
   {
-    title: 'Trải nghiệm',
-    value: 'Mượt, rõ, thân thiện trên mọi thiết bị',
+    title: 'AI experience',
+    value: 'Empathy AI, trả lời theo ngữ cảnh, rõ và thân thiện',
   },
 ];
 
