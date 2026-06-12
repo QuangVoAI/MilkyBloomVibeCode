@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import Badge from '@/components/ui/badge';
 import { NotFoundPage } from '@/components/common';
 import { formatPrice } from '@/utils/formatPrice';
+import { normalizeImageUrl } from '@/utils/imageOptimizer';
 import { ROUTES } from '@/config/routes';
 import { useOrderDetail } from './hooks/useOrderDetail';
 import { requestOrderLookupOtp, verifyOrderLookupOtp } from '@/services/orders.service';
@@ -424,7 +425,10 @@ const OrderDetail = () => {
               const isDelivered = order.status === 'delivered';
               
               // Get image: prefer variant image, then product image, then placeholder
-              const imageUrl = item.variantId?.imageUrls?.[0] || item.productId?.imageUrls?.[0] || '/placeholder-product.png';
+              const imageUrl = normalizeImageUrl(
+                item.variantId?.imageUrls?.[0] || item.productId?.imageUrls?.[0],
+                '/placeholder.svg',
+              );
               
               // Get variant attributes for display
               const variantAttrs = item.variantId?.attributes;
@@ -440,6 +444,9 @@ const OrderDetail = () => {
                       alt={item.productId?.name || 'Product'}
                       className="item-image"
                       loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.src = '/placeholder.svg';
+                      }}
                     />
                     <div className="item-info">
                       <h3>{item.productId?.name || 'Unknown Product'}</h3>
