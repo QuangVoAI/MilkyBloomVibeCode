@@ -39,7 +39,7 @@ const getProductById = async (req, res, next) => {
     }
 };
 
-const getProductBySlug = async (req, res) => {
+const getProductBySlug = async (req, res, next) => {
     try {
         const { slug } = req.params;
         const product = await productService.getProductBySlug(slug);
