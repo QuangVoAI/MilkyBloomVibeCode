@@ -167,10 +167,10 @@ const DiscountCodes = () => {
             </Select>
             <button
               onClick={handleCreate}
-              className="px-3 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-sky-400 text-white shadow-[0_10px_26px_-14px_rgba(124,58,237,0.35)] hover:brightness-105 transition flex items-center justify-center gap-2"
+              className="inline-flex min-w-[152px] items-center justify-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-[0_14px_30px_-20px_rgba(15,23,42,0.65)] transition hover:-translate-y-0.5 hover:bg-slate-800"
             >
-              <Plus size={16} />
-              <span className="sm:inline">New Code</span>
+              <Plus size={16} strokeWidth={2.2} />
+              <span>New Code</span>
             </button>
           </div>
         </div>
