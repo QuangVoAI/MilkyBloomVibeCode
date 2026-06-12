@@ -28,8 +28,26 @@ if HF_TOKEN:
         pass
 
 # --- API Keys ---
+def _split_env_list(value: str | None) -> list[str]:
+    return [item.strip() for item in str(value or "").split(",") if item.strip()]
+
+
+def _unique_ordered(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_API_KEYS = [k.strip() for k in os.getenv("GROQ_API_KEYS", GROQ_API_KEY).split(",") if k.strip()]
+GROQ_API_KEYS = _unique_ordered([
+    *_split_env_list(GROQ_API_KEY),
+    *_split_env_list(os.getenv("GROQ_API_KEYS", "")),
+])
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_MODEL_FAST = os.getenv("GROQ_MODEL_FAST", GROQ_MODEL)

@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 import json
 import re
+import time
 from typing import AsyncGenerator
 
 import sys
@@ -58,6 +59,22 @@ FEATHERLESS_CHAT_API_URL = FEATHERLESS_BASE_URL.rstrip("/") + "/chat/completions
 # Token limits
 FEATHERLESS_MAX_INPUT_TOKENS = 12000
 GROQ_MAX_INPUT_TOKENS = 12000
+
+
+class ProviderAPIError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        retry_after: float | None = None,
+    ):
+        super().__init__(message)
+        self.status = status
+        self.retry_after = retry_after
+
+
+_GROQ_KEY_COOLDOWNS: dict[str, float] = {}
 
 # Tokenizer
 try:
@@ -142,6 +159,10 @@ def _sanitize_error_text(value: str, max_chars: int = 240) -> str:
 
 
 def _extract_http_status(error: Exception | str | None) -> int | None:
+    status = getattr(error, "status", None)
+    if isinstance(status, int):
+        return status
+
     text = str(error or "")
     match = re.search(r"\((\d{3})\)", text)
     if match:
@@ -150,6 +171,76 @@ def _extract_http_status(error: Exception | str | None) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+        if seconds >= 0:
+            return seconds
+    except ValueError:
+        return None
+    return None
+
+
+def _extract_retry_after(error: Exception | str | None) -> float | None:
+    retry_after = getattr(error, "retry_after", None)
+    if isinstance(retry_after, (int, float)) and retry_after >= 0:
+        return float(retry_after)
+
+    text = str(error or "").lower()
+    seconds_match = re.search(r"(?:try again in|retry after|in)\s+(\d+(?:\.\d+)?)\s*s", text)
+    if seconds_match:
+        return float(seconds_match.group(1))
+
+    minutes_match = re.search(r"(?:try again in|retry after|in)\s+(\d+(?:\.\d+)?)\s*m", text)
+    if minutes_match:
+        return float(minutes_match.group(1)) * 60
+
+    return None
+
+
+def _is_rate_limit_error(error: Exception | str | None) -> bool:
+    status = _extract_http_status(error)
+    if status == 429:
+        return True
+
+    text = str(error or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "rate limit",
+            "rate_limit",
+            "too many requests",
+            "quota",
+            "requests per minute",
+            "tokens per minute",
+        )
+    )
+
+
+def _cooldown_groq_key(api_key: str, error: Exception | str | None) -> float:
+    retry_after = _extract_retry_after(error)
+    seconds = retry_after if retry_after is not None else 60.0
+    seconds = max(10.0, min(float(seconds), 3600.0))
+    _GROQ_KEY_COOLDOWNS[api_key] = time.monotonic() + seconds
+    return seconds
+
+
+def _is_groq_key_available(api_key: str) -> bool:
+    expires_at = _GROQ_KEY_COOLDOWNS.get(api_key, 0)
+    return expires_at <= time.monotonic()
+
+
+def _available_groq_api_key_candidates() -> list[tuple[int, str]]:
+    keys = _groq_api_key_candidates()
+    return [
+        (index, key)
+        for index, key in enumerate(keys, start=1)
+        if _is_groq_key_available(key)
+    ]
 
 
 def _unique_nonempty(values: list[str]) -> list[str]:
@@ -268,13 +359,16 @@ async def _openai_chat_complete(
             if resp.status != 200:
                 error_text = await resp.text()
                 safe_error_text = _sanitize_error_text(error_text[:500])
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
                 update_current_generation_safe(
                     level="ERROR",
                     status_message=f"{provider_name.title()} API error ({resp.status})",
                     output=redact_for_langfuse(safe_error_text),
                 )
-                raise RuntimeError(
-                    f"{provider_name.title()} API error ({resp.status}): {safe_error_text or 'unknown error'}"
+                raise ProviderAPIError(
+                    f"{provider_name.title()} API error ({resp.status}): {safe_error_text or 'unknown error'}",
+                    status=resp.status,
+                    retry_after=retry_after,
                 )
 
             result = await resp.json()
@@ -342,13 +436,16 @@ async def _openai_stream_complete(
             if resp.status != 200:
                 error_text = await resp.text()
                 safe_error_text = _sanitize_error_text(error_text[:500])
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
                 update_current_generation_safe(
                     level="ERROR",
                     status_message=f"{provider_name.title()} stream error ({resp.status})",
                     output=redact_for_langfuse(safe_error_text),
                 )
-                raise RuntimeError(
-                    f"{provider_name.title()} stream error ({resp.status}): {safe_error_text or 'unknown error'}"
+                raise ProviderAPIError(
+                    f"{provider_name.title()} stream error ({resp.status}): {safe_error_text or 'unknown error'}",
+                    status=resp.status,
+                    retry_after=retry_after,
                 )
 
             async for raw_line in resp.content:
@@ -410,13 +507,21 @@ async def groq_chat_complete(
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> str:
-    """Groq completion with key/model retry, then Featherless fallback."""
+    """Groq completion with ordered key failover only on rate limit/quota."""
     model_candidates = _groq_model_candidates(model)
-    key_candidates = _groq_api_key_candidates()
+    key_candidates = _available_groq_api_key_candidates()
     last_error: Exception | None = None
+    abort_groq = False
+
+    if _groq_api_key_candidates() and not key_candidates:
+        last_error = RuntimeError("All Groq API keys are temporarily rate-limited.")
 
     for candidate_model in model_candidates:
-        for candidate_key in key_candidates:
+        if abort_groq:
+            break
+        for key_index, candidate_key in key_candidates:
+            if not _is_groq_key_available(candidate_key):
+                continue
             try:
                 return await _openai_chat_complete(
                     messages=messages,
@@ -434,14 +539,23 @@ async def groq_chat_complete(
                 last_error = groq_error
                 status = _extract_http_status(groq_error)
                 print(
-                    f"[llm] Groq attempt failed (model={candidate_model}, status={status or 'n/a'}): {groq_error}"
+                    f"[llm] Groq attempt failed (model={candidate_model}, key_index={key_index}, status={status or 'n/a'}): {groq_error}"
                 )
+                if _is_rate_limit_error(groq_error):
+                    cooldown_seconds = _cooldown_groq_key(candidate_key, groq_error)
+                    print(
+                        f"[llm] Groq key_index={key_index} rate-limited; cooling down for {cooldown_seconds:.0f}s and trying next configured key."
+                    )
+                    continue
+                if status in {401, 403}:
+                    abort_groq = True
+                    break
                 # 4xx errors tied to the current model usually won't recover with the
                 # same model/key pair, so move to the next model candidate.
                 if status in {400, 404}:
                     break
-                # Retry other keys for auth / quota / transient failures.
-                continue
+                # Non-rate-limit failures should not switch keys.
+                break
 
     if FEATHERLESS_API_KEY:
         fallback_model = (
@@ -519,11 +633,19 @@ async def groq_stream_chat_complete(
     If Groq fails before any token is emitted, fall back to Featherless.
     """
     model_candidates = _groq_model_candidates(model)
-    key_candidates = _groq_api_key_candidates()
+    key_candidates = _available_groq_api_key_candidates()
     last_error: Exception | None = None
+    abort_groq = False
+
+    if _groq_api_key_candidates() and not key_candidates:
+        last_error = RuntimeError("All Groq API keys are temporarily rate-limited.")
 
     for candidate_model in model_candidates:
-        for candidate_key in key_candidates:
+        if abort_groq:
+            break
+        for key_index, candidate_key in key_candidates:
+            if not _is_groq_key_available(candidate_key):
+                continue
             yielded_any = False
             try:
                 async for token in _openai_stream_complete(
@@ -545,13 +667,23 @@ async def groq_stream_chat_complete(
                 last_error = groq_error
                 status = _extract_http_status(groq_error)
                 print(
-                    f"[llm] Groq stream attempt failed (model={candidate_model}, status={status or 'n/a'}): {groq_error}"
+                    f"[llm] Groq stream attempt failed (model={candidate_model}, key_index={key_index}, status={status or 'n/a'}): {groq_error}"
                 )
                 if yielded_any:
                     raise
+                if _is_rate_limit_error(groq_error):
+                    cooldown_seconds = _cooldown_groq_key(candidate_key, groq_error)
+                    print(
+                        f"[llm] Groq key_index={key_index} rate-limited; cooling down for {cooldown_seconds:.0f}s and trying next configured key."
+                    )
+                    continue
+                if status in {401, 403}:
+                    abort_groq = True
+                    break
                 if status in {400, 404}:
                     break
-                continue
+                # Non-rate-limit failures should not switch keys.
+                break
 
     if FEATHERLESS_API_KEY:
         print("[llm] Groq stream exhausted all candidates; falling back to Featherless.")
