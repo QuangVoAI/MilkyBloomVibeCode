@@ -31,7 +31,7 @@ module.exports = {
         });
     },
 
-    // --- PRODUCT ANALYTICS (GỘP CHUNG DASHBOARD) ---
+    // --- PRODUCT ANALYTICS (GOP CHUNG DASHBOARD) ---
     async getTopSelling(req, res) {
         res.json({
             success: true,
