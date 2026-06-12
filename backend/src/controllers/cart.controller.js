@@ -1,5 +1,16 @@
 const CartService = require('../services/cart.service');
 
+const shouldReturnEmptyCart = (req) =>
+    ['true', '1', 'yes'].includes(String(req.query.allowEmpty || '').toLowerCase());
+
+const buildEmptySessionCart = (sessionId) => ({
+    exists: false,
+    sessionId,
+    items: [],
+    totalPrice: 0,
+    totalItems: 0,
+});
+
 // Get all carts
 const getAllCarts = async (req, res) => {
     try {
@@ -38,8 +49,12 @@ const getCartBySession = async (req, res) => {
         const cart = await CartService.getCartByUserOrSession({
             sessionId: req.params.sessionId,
         });
-        if (!cart)
+        if (!cart) {
+            if (shouldReturnEmptyCart(req)) {
+                return res.status(200).json(buildEmptySessionCart(req.params.sessionId));
+            }
             return res.status(404).json({ message: "Cart not found" });
+        }
         
         // Prevent browser caching cart data
         res.set({

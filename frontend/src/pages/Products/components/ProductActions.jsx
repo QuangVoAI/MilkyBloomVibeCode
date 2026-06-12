@@ -18,7 +18,7 @@ const ProductActions = ({
       {/* Quantity Selector */}
       {selectedVariant && inStock && (
         <div className="my-3 md:my-4">
-          <h3 className="text-sm md:text-base font-semibold mb-2 md:mb-3 text-slate-800">Quantity</h3>
+          <h3 className="text-sm md:text-base font-semibold mb-2 md:mb-3 text-slate-800">Số lượng</h3>
           <div className="flex items-center">
             <Button
               variant="outline"
@@ -69,7 +69,7 @@ const ProductActions = ({
           className="flex-1 text-sm md:text-base font-semibold rounded-none h-10 md:h-12"
         >
           <ShoppingCart size={18} className="mr-2 md:w-5 md:h-5" />
-          {!selectedVariant ? 'Select Options' : 'Add to Cart'}
+          {!selectedVariant ? 'Chọn tùy chọn' : 'Thêm vào giỏ hàng'}
         </Button>
         <Button
           size="lg"
@@ -78,7 +78,7 @@ const ProductActions = ({
           disabled={!selectedVariant || !inStock || loading}
           className="flex-1 text-sm md:text-base font-semibold rounded-none h-10 md:h-12"
         >
-          Buy Now
+          Mua ngay
         </Button>
       </div>
     </>

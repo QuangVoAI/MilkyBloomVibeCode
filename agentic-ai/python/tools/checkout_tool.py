@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -83,6 +84,14 @@ PURCHASE_PREFIXES = (
     "add to cart",
     "buy",
 )
+
+
+def _normalize_vi_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFD", text or "")
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = normalized.replace("Đ", "d").replace("đ", "d")
+    normalized = normalized.replace("Ä", "d").replace("Ä‘", "d")
+    return re.sub(r"\s+", " ", normalized).strip().lower()
 
 
 def _detect_payment_method(question: str) -> str:
@@ -374,6 +383,119 @@ def _is_catalog_recommendation_request(text: str) -> bool:
 def _is_catalog_advice_request(text: str) -> bool:
     q = (text or "").lower()
     if not q:
+        return False
+
+    normalized_q = _normalize_vi_text(text)
+    ascii_negated_checkout = any(
+        marker in normalized_q
+        for marker in (
+            "chua dat hang",
+            "chua thanh toan",
+            "chua checkout",
+            "khong dat hang",
+            "khong checkout",
+            "khong thanh toan",
+            "chi tu van",
+            "tu van thoi",
+            "tham khao",
+            "advice only",
+            "recommend only",
+            "suggest only",
+            "dont checkout",
+            "do not checkout",
+            "no checkout",
+            "not checkout",
+            "dont order",
+            "do not order",
+            "not order",
+            "not buy yet",
+        )
+    )
+    ascii_explicit_checkout = any(
+        marker in normalized_q
+        for marker in (
+            "dat hang",
+            "checkout",
+            "thanh toan",
+            "chot don",
+            "tao don",
+            "mua ngay",
+            "xac nhan don",
+            "them vao gio",
+            "add to cart",
+            "buy now",
+        )
+    )
+    ascii_has_hint = any(
+        marker in normalized_q
+        for marker in (
+            "goi y",
+            "de xuat",
+            "tu van",
+            "chon",
+            "mon do",
+            "do choi",
+            "qua",
+            "gift",
+            "budget",
+            "ngan sach",
+            "recommend",
+            "suggest",
+            "advice",
+            "advise",
+            "tham khao",
+        )
+    )
+    ascii_has_generic_item = any(
+        marker in normalized_q
+        for marker in (
+            "qua",
+            "qua tang",
+            "do choi",
+            "san pham",
+            "mon",
+            "mon do",
+            "hang",
+            "gift",
+            "toy",
+            "item",
+        )
+    )
+    ascii_has_product_clue = any(
+        marker in normalized_q
+        for marker in (
+            "stardust",
+            "picnic",
+            "box",
+            "capsule",
+            "moon parade",
+            "bead",
+            "lab",
+            "sleepover",
+        )
+    )
+    ascii_has_uncertain_buy = any(
+        marker in normalized_q
+        for marker in (
+            "chua biet chon",
+            "chua biet mua",
+            "phan van",
+            "nen mua",
+            "mua gi",
+            "chon gi",
+            "chon mon nao",
+        )
+    )
+
+    if ascii_has_uncertain_buy:
+        return True
+    if ascii_has_hint and (ascii_has_generic_item or ascii_has_product_clue):
+        return True
+    if ascii_negated_checkout and (
+        ascii_has_hint or ascii_has_generic_item or ascii_has_product_clue
+    ):
+        return True
+    if not ascii_negated_checkout and ascii_explicit_checkout:
         return False
 
     negated_checkout = any(

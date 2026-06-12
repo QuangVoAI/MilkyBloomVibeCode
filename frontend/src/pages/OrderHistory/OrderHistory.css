@@ -38,6 +38,91 @@
   min-height: 400px;
 }
 
+.order-history-skeleton-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.order-history-skeleton-filter {
+  height: 52px;
+  margin-bottom: 1rem;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #edf0f4 25%, #f7f8fa 37%, #edf0f4 63%);
+  background-size: 400% 100%;
+  animation: order-history-skeleton 1.2s ease-in-out infinite;
+}
+
+.order-history-skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 96px;
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.order-history-skeleton-image,
+.order-history-skeleton-line {
+  background: linear-gradient(90deg, #edf0f4 25%, #f7f8fa 37%, #edf0f4 63%);
+  background-size: 400% 100%;
+  animation: order-history-skeleton 1.2s ease-in-out infinite;
+}
+
+.order-history-skeleton-image {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.order-history-skeleton-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-history-skeleton-line {
+  height: 14px;
+  border-radius: 999px;
+}
+
+.skeleton-title {
+  width: 180px;
+  height: 24px;
+}
+
+.skeleton-count {
+  width: 80px;
+}
+
+.skeleton-wide {
+  width: min(420px, 70%);
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-medium {
+  width: min(260px, 45%);
+}
+
+.skeleton-price {
+  width: 96px;
+  flex-shrink: 0;
+}
+
+@keyframes order-history-skeleton {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
 .no-orders {
   text-align: center;
   padding: 3rem 1.5rem;
@@ -181,6 +266,25 @@
 
   .order-history-header h1 {
     font-size: 1.25rem;
+  }
+
+  .order-history-skeleton-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .order-history-skeleton-card {
+    padding: 0.875rem 1rem;
+  }
+
+  .order-history-skeleton-image {
+    width: 52px;
+    height: 52px;
+  }
+
+  .skeleton-price {
+    display: none;
   }
 
   .no-orders {

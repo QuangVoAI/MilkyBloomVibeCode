@@ -612,3 +612,85 @@ async def generate_inquiry(question, evidence_text, order_info=None, catalog_inf
         ))
     except Exception:
         return _fallback_inquiry_reply(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
+
+
+async def generate_inquiry_streaming(
+    question,
+    evidence_text,
+    order_info=None,
+    catalog_info=None,
+    session_summary_text=None,
+    stream_callback=None,
+):
+    """Streaming inquiry response for FAQ and policy questions."""
+    order_context = _build_order_context(order_info or {})
+    catalog_context = _build_catalog_context(catalog_info or {})
+    session_context = f"SESSION CONTEXT:\n{session_summary_text}\n\n" if session_summary_text else ""
+    prompt = (
+        f"CUSTOMER ASKED:\n{question}\n\n"
+        f"{session_context}"
+        f"{order_context}"
+        f"{catalog_context}"
+        f"POLICY INFORMATION:\n{evidence_text[:4000]}\n\n"
+        "Reply concretely, warmly, and only in Vietnamese."
+    )
+    messages = [
+        {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    full_answer = ""
+    token_buffer = ""
+    streamed_any = False
+    buffer_size = 12
+
+    async def flush_buffer():
+        nonlocal token_buffer, streamed_any
+        if token_buffer and stream_callback:
+            await stream_callback(token_buffer)
+            streamed_any = True
+            token_buffer = ""
+
+    if EMPATHY_MODE == "featherless":
+        try:
+            async for token in featherless_stream_complete(
+                messages=messages,
+                model=FEATHERLESS_MODEL_FAST,
+                max_tokens=512,
+                temperature=0.3,
+            ):
+                full_answer += token
+                token_buffer += token
+                if len(token_buffer) >= buffer_size or "\n" in token_buffer:
+                    await flush_buffer()
+        except Exception as e:
+            console.print(f"[red]  InquiryWriter featherless stream error: {str(e)[:200]}[/]")
+            full_answer = _fallback_inquiry_reply(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
+            token_buffer = ""
+    else:
+        try:
+            async for token in groq_stream_complete(
+                prompt=prompt,
+                system_prompt=INQUIRY_SYSTEM_PROMPT,
+                model=GROQ_MODEL_FAST,
+                max_tokens=512,
+                temperature=0.3,
+            ):
+                full_answer += token
+                token_buffer += token
+                if len(token_buffer) >= buffer_size or "\n" in token_buffer:
+                    await flush_buffer()
+        except Exception as e:
+            console.print(f"[red]  InquiryWriter groq stream error: {str(e)[:200]}[/]")
+            full_answer = _fallback_inquiry_reply(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
+            token_buffer = ""
+
+    await flush_buffer()
+
+    if not full_answer.strip():
+        full_answer = _fallback_inquiry_reply(question, evidence_text, order_info=order_info, catalog_info=catalog_info)
+
+    answer = _finalize_response(full_answer)
+    if stream_callback and answer and not streamed_any:
+        await stream_callback(answer)
+    return answer

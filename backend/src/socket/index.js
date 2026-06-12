@@ -11,10 +11,70 @@ const CHAT_RATE_LIMIT_FALLBACK =
 const CHAT_LOGIN_REQUIRED_FOR_CHECKOUT =
     'Để tránh sai thông tin đơn hàng, bạn đăng nhập trước khi mình tạo đơn nhé. Sau khi đăng nhập, bạn có thể quay lại giỏ hàng hoặc nhắn mình tiếp để checkout.';
 
+const CHAT_RATE_LIMIT_WINDOW_MS = Number(process.env.CHAT_RATE_LIMIT_WINDOW_MS || 60000);
+const CHAT_RATE_LIMIT_MAX = Number(process.env.CHAT_RATE_LIMIT_MAX || 20);
+const chatRateBuckets = new Map();
+
+const parseOriginList = (value) =>
+    String(value || '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+
+const getAllowedSocketOrigins = () => {
+    const configured = [
+        ...parseOriginList(process.env.SOCKET_CORS_ORIGIN),
+        ...parseOriginList(process.env.FRONTEND_URL),
+        ...parseOriginList(process.env.CLIENT_URL),
+        ...parseOriginList(process.env.CORS_ORIGIN),
+    ];
+    if (configured.length) return [...new Set(configured)];
+    if (process.env.NODE_ENV === 'production') return [];
+    return ['http://localhost:5173', 'http://127.0.0.1:5173'];
+};
+
+const socketCorsOrigin = (origin, callback) => {
+    const allowedOrigins = getAllowedSocketOrigins();
+    if (!origin && process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+        return;
+    }
+    if (origin && allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+    }
+    callback(new Error('Socket origin is not allowed by CORS'), false);
+};
+
+const checkChatRateLimit = (socketId, userId) => {
+    const now = Date.now();
+    const key = userId ? `user:${userId}` : `socket:${socketId}`;
+    const current = chatRateBuckets.get(key);
+    const bucket =
+        current && current.resetAt > now
+            ? current
+            : { count: 0, resetAt: now + CHAT_RATE_LIMIT_WINDOW_MS };
+
+    bucket.count += 1;
+    chatRateBuckets.set(key, bucket);
+
+    if (bucket.count <= CHAT_RATE_LIMIT_MAX) {
+        return { limited: false, key };
+    }
+
+    return {
+        limited: true,
+        key,
+        retryAfter: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+    };
+};
+
 const normalizeChatText = (value) =>
     String(value || '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
         .replace(/đ/g, 'd')
         .replace(/Đ/g, 'D')
         .toLowerCase();
@@ -141,6 +201,35 @@ const buildFallbackReply = (message) => {
     return 'Mình đang bị lỗi AI tạm thời, nhưng mình vẫn có thể giúp bạn hỏi về sản phẩm, đơn hàng, vận chuyển, đổi trả hoặc chính sách.';
 };
 
+const buildFallbackActions = (message) => {
+    const text = normalizeChatText(message);
+    const actions = [
+        {
+            type: 'retry',
+            label: 'Thử lại',
+            value: String(message || ''),
+        },
+    ];
+
+    if (/\b(san pham|mon|do choi|goi y|budget|ngan sach|gia|mua|chon)\b/.test(text)) {
+        actions.push({
+            type: 'navigate',
+            label: 'Xem sản phẩm',
+            path: '/products',
+        });
+    }
+
+    if (/\b(don|order|tracking|ma don|tra cuu|email|so dien thoai|phone)\b/.test(text)) {
+        actions.push({
+            type: 'navigate',
+            label: 'Xem đơn hàng',
+            path: '/order-history',
+        });
+    }
+
+    return actions;
+};
+
 /**
  * ============================================
  * SOCKET.IO CONFIGURATION
@@ -163,7 +252,7 @@ module.exports = {
     init: (httpServer) => {
         io = socketIo(httpServer, {
             cors: {
-                origin: '*', // Cho phép mọi nguồn (Frontend) kết nối. Khi deploy nhớ đổi lại domain cụ thể.
+                origin: socketCorsOrigin,
                 methods: ['GET', 'POST'],
             },
             // Enable sticky session support for horizontal scaling
@@ -247,6 +336,20 @@ module.exports = {
                     return;
                 }
 
+                const chatRateLimit = checkChatRateLimit(
+                    socket.id,
+                    decodedUser?.id || decodedUser?._id || '',
+                );
+                if (chatRateLimit.limited) {
+                    socket.emit('chat_error', {
+                        sessionId,
+                        code: 'CHAT_RATE_LIMITED',
+                        retryAfter: chatRateLimit.retryAfter,
+                        message: 'Bạn nhắn hơi nhanh, thử lại sau ít giây nhé.',
+                    });
+                    return;
+                }
+
                 const shouldRequireLoginForCheckout =
                     !verifiedAuthToken &&
                     (
@@ -290,6 +393,8 @@ module.exports = {
                     socket.emit('chat_final', {
                         sessionId,
                         reply: buildFallbackReply(message),
+                        action_buttons: buildFallbackActions(message),
+                        actionButtons: buildFallbackActions(message),
                         provider: 'fallback',
                         model: 'fallback-message',
                         fallback: true,
@@ -375,6 +480,7 @@ module.exports = {
             });
 
             socket.on('disconnect', () => {
+                chatRateBuckets.delete(`socket:${socket.id}`);
             });
         });
 

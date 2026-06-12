@@ -44,6 +44,7 @@ def _normalize_text(text: str) -> str:
     normalized = unicodedata.normalize("NFD", text or "")
     normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
     normalized = normalized.replace("Đ", "d").replace("đ", "d")
+    normalized = normalized.replace("Đ", "d").replace("đ", "d")
     return re.sub(r"\s+", " ", normalized).strip().lower()
 
 

@@ -36,7 +36,14 @@ const CartSummary = ({ subtotal, onCheckout, onContinueShopping }) => {
           setShipping(subtotal >= 500000 ? 0 : 50000);
         }
       } catch (err) {
-        console.error('Error fetching shipping fee:', err);
+        const normalizedMessage = String(err?.message || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\u0111/g, 'd')
+          .toLowerCase();
+        if (!normalizedMessage.includes('dia chi mac dinh')) {
+          console.error('Error fetching shipping fee:', err);
+        }
         setShipping(subtotal >= 500000 ? 0 : 50000);
       }
     };

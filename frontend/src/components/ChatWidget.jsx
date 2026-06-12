@@ -272,6 +272,7 @@ const ChatWidget = () => {
   const [composerHint, setComposerHint] = useState("");
   const [activeLookupChip, setActiveLookupChip] = useState("");
   const messagesRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
   const inputRef = useRef(null);
   const sheetRef = useRef(null);
   const assistantIndexRef = useRef(null);
@@ -489,6 +490,7 @@ const ChatWidget = () => {
                 actionResult: data.action_result || {},
                 pendingActionIntent: data.pending_action_intent || {},
                 clarificationNeeded: Boolean(data.clarification_needed),
+                actionButtons: data.action_buttons || data.actionButtons || [],
                 catalogProducts: normalizeCatalogCards(
                   data.catalog_info || data.checkout_result?.catalog_info,
                 ),
@@ -573,8 +575,27 @@ const ChatWidget = () => {
 
   useEffect(() => {
     if (!messagesRef.current) return;
-    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    if (!shouldStickToBottomRef.current) return;
+    window.requestAnimationFrame(() => {
+      if (!messagesRef.current) return;
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    });
   }, [messages, open]);
+
+  useEffect(() => {
+    const element = messagesRef.current;
+    if (!element) return undefined;
+
+    const updateStickiness = () => {
+      const distanceFromBottom =
+        element.scrollHeight - element.scrollTop - element.clientHeight;
+      shouldStickToBottomRef.current = distanceFromBottom < 120;
+    };
+
+    updateStickiness();
+    element.addEventListener("scroll", updateStickiness, { passive: true });
+    return () => element.removeEventListener("scroll", updateStickiness);
+  }, [open]);
 
   useEffect(() => {
     return () => {
@@ -664,6 +685,7 @@ const ChatWidget = () => {
 
     const userMessage = { role: "user", content: trimmed };
     const nextMessages = [...messages, userMessage];
+    shouldStickToBottomRef.current = true;
     setMessages(nextMessages);
     setInput("");
     setComposerHint("");
@@ -797,6 +819,42 @@ const ChatWidget = () => {
       const actionLabel = getActionLabel(pendingAction);
       await sendMessage(actionLabel ? `tiếp tục ${actionLabel}` : "xử lý tiếp");
     }
+  };
+
+  const handleAssistantActionButton = async (action) => {
+    if (!action) return;
+    if (action.type === "navigate" && action.path) {
+      navigate(action.path);
+      return;
+    }
+    if (action.type === "retry") {
+      await sendMessage(action.value || action.message || "");
+      return;
+    }
+    if (action.value || action.message) {
+      await sendMessage(action.value || action.message);
+    }
+  };
+
+  const renderAssistantActionButtons = (message) => {
+    const actions = message?.meta?.actionButtons || [];
+    if (!actions.length) return null;
+
+    return (
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-rose-100 pt-3">
+        {actions.map((action, index) => (
+          <button
+            key={`${action.type || "action"}-${index}`}
+            type="button"
+            onClick={() => handleAssistantActionButton(action)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 transition hover:border-rose-300 hover:text-rose-600"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+            {action.label || "Tiếp tục"}
+          </button>
+        ))}
+      </div>
+    );
   };
 
   const renderFollowupActions = (message) => {
@@ -1223,6 +1281,7 @@ const ChatWidget = () => {
                   Boolean(String(message.content || "").trim()) ||
                   isTyping ||
                   Boolean(message.meta?.catalogProducts?.length) ||
+                  Boolean(message.meta?.actionButtons?.length) ||
                   Boolean(message.meta?.actionResult) ||
                   Boolean(message.meta?.pendingActionIntent);
                 const emailLookupMessage = isUser && isEmailLookupText(message.content);
@@ -1269,6 +1328,7 @@ const ChatWidget = () => {
                         })}
                       {isAssistant &&
                         renderProductCards(message.meta?.catalogProducts || [])}
+                      {isAssistant && renderAssistantActionButtons(message)}
                       {isAssistant && renderFollowupActions(message)}
                       {isTyping && (
                         <div className="mt-2 flex items-center gap-1.5">

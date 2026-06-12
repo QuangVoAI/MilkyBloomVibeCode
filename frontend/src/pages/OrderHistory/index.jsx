@@ -2,7 +2,6 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useOrderHistory } from './hooks/useOrderHistory';
 import { useAuth } from '@/hooks';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
 import ErrorMessage from '@/components/common/ErrorMessage';
 
 import Pagination from '@/components/common/Pagination';
@@ -10,6 +9,28 @@ import OrderHistoryList from './components/OrderHistoryList';
 import OrderHistoryFilters from './components/OrderHistoryFilters';
 import { LogIn, ShoppingBag } from 'lucide-react';
 import './OrderHistory.css';
+
+const OrderHistorySkeleton = () => (
+  <div className="order-history-page">
+    <div className="order-history-container">
+      <div className="order-history-skeleton-header">
+        <div className="order-history-skeleton-line skeleton-title" />
+        <div className="order-history-skeleton-line skeleton-count" />
+      </div>
+      <div className="order-history-skeleton-filter" />
+      {[0, 1, 2].map((item) => (
+        <div className="order-history-skeleton-card" key={item}>
+          <div className="order-history-skeleton-image" />
+          <div className="order-history-skeleton-body">
+            <div className="order-history-skeleton-line skeleton-wide" />
+            <div className="order-history-skeleton-line skeleton-medium" />
+          </div>
+          <div className="order-history-skeleton-line skeleton-price" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 const OrderHistory = () => {
   const { user } = useAuth();
@@ -28,11 +49,7 @@ const OrderHistory = () => {
   } = useOrderHistory();
 
   if (loading) {
-    return (
-      <div className="order-history-loading">
-        <LoadingSpinner />
-      </div>
-    );
+    return <OrderHistorySkeleton />;
   }
 
   if (error) {

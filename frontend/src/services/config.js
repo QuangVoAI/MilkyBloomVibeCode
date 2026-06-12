@@ -60,7 +60,14 @@ export const REQUEST_TIMEOUT = 15000;
 // API Client with optimizations
 const apiClient = {
   async request(method, url, options = {}) {
-    const { data, params, headers = {}, signal, ...fetchOptions } = options;
+    const {
+      data,
+      params,
+      headers = {},
+      signal,
+      suppressNetworkErrorLog = false,
+      ...fetchOptions
+    } = options;
     
     // Build URL with query params
     let fullUrl = `${API_BASE_URL}${url}`;
@@ -90,7 +97,6 @@ const apiClient = {
     
     const defaultHeaders = {
       ...(isFormData ? {} : getDefaultHeaders()), // Don't set Content-Type for FormData
-      'Connection': 'keep-alive', // Enable HTTP connection reuse
       ...(token && { Authorization: `Bearer ${token}` }),
       ...(sessionId && { 'X-Session-Id': sessionId }),
       ...headers,
@@ -99,8 +105,8 @@ const apiClient = {
     const config = {
       method,
       headers: defaultHeaders,
-      keepalive: true, // Enable connection pooling
       cache: 'no-store', // Prevent browser caching
+      ...(signal ? {} : { keepalive: true }), // Avoid Chrome fetch failures on externally abortable requests
       signal, // Support abort controller
       ...fetchOptions,
     };
@@ -173,8 +179,10 @@ const apiClient = {
                     error.message?.includes('Không tìm thấy');
       const isTimeout = error.message?.includes('timeout');
       const isRateLimit = error.status === 429 || error.message?.includes('Too many requests');
+      const isNetworkFetchFailure =
+        error.name === 'TypeError' && error.message === 'Failed to fetch';
       
-      if (!is404 && !isTimeout && !isRateLimit) {
+      if (!is404 && !isTimeout && !isRateLimit && !(suppressNetworkErrorLog && isNetworkFetchFailure)) {
         console.error('API request failed:', error);
       }
       throw error;

@@ -83,6 +83,11 @@ const OrderCard = ({ order }) => {
 
   const totalAmount = parseDecimal(order.totalAmount);
   const itemCount = order.items?.length || 0;
+  const firstItemName =
+    order.items?.[0]?.productId?.name ||
+    order.items?.[0]?.product?.name ||
+    order.items?.[0]?.variantId?.productId?.name ||
+    'Sản phẩm';
 
   // Get first item image for preview
   const previewImage = normalizeImageUrl(
@@ -118,7 +123,10 @@ const OrderCard = ({ order }) => {
           
           <div className="order-meta">
             <span className="item-summary">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}
+              <span className="item-summary-name">{firstItemName}</span>
+              <span className="item-summary-count">
+                {itemCount > 1 ? `+${itemCount - 1} món` : '1 món'}
+              </span>
             </span>
             <Badge variant={getStatusVariant(order.status)} className="order-status-badge">
               {getStatusIcon(order.status)}
