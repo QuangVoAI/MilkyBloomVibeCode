@@ -1,268 +1,208 @@
 # MilkyBloom x EmpathAI
 
-Mở web demo ngay: https://milkybloom-frontend.onrender.com/
-
 <p align="center">
-  <img src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="Frontend" />
-  <img src="https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Backend" />
-  <img src="https://img.shields.io/badge/Database-MongoDB%20Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="Database" />
-  <img src="https://img.shields.io/badge/Chat-Streaming%20Only-7C3AED?style=for-the-badge&logo=socket.io&logoColor=white" alt="Chat" />
-  <img src="https://img.shields.io/badge/AI-EmpathAI%20%2B%20Groq-0F766E?style=for-the-badge" alt="AI" />
+  <img src="./VC2026-A-MT03_20260603_153831.png" alt="MilkyBloom x EmpathAI poster" width="860" />
 </p>
 
-MilkyBloom x EmpathAI là một nền tảng thương mại điện tử đồ chơi trẻ em tích hợp lớp CSKH agentic thời gian thực.
+<p align="center">
+  <a href="https://milkybloom-frontend.onrender.com/"><img src="https://img.shields.io/badge/Live%20Demo-MilkyBloom-ff5ca8?style=for-the-badge" alt="Live Demo" /></a>
+  <img src="https://img.shields.io/badge/AI-Empathy%20Assistant-cb6ce6?style=for-the-badge" alt="Empathy AI" />
+  <img src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61dafb?style=for-the-badge&logo=react&logoColor=ffffff" alt="Frontend" />
+  <img src="https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933?style=for-the-badge&logo=node.js&logoColor=ffffff" alt="Backend" />
+  <img src="https://img.shields.io/badge/Database-MongoDB%20Atlas-47a248?style=for-the-badge&logo=mongodb&logoColor=ffffff" alt="Database" />
+</p>
 
-- **MilkyBloom**: storefront e-commerce, product catalog, cart, checkout, orders, profile
-- **EmpathAI**: agentic customer service, xử lý hội thoại thấu cảm, tra cứu ngữ cảnh, và thực thi action hỗ trợ khách hàng
+<p align="center">
+  <strong>MilkyBloom</strong> là một trải nghiệm thương mại điện tử full-stack cho dòng sản phẩm sưu tầm, kết hợp storefront hiện đại với
+  <strong>EmpathAI</strong> - lớp trợ lý AI hỗ trợ khách hàng theo cách tự nhiên, có ngữ cảnh và giàu tính đồng cảm.
+</p>
 
-Mục tiêu của dự án là giữ trải nghiệm mua sắm mượt cho khách hàng, đồng thời để AI hỗ trợ khách hàng theo cách tự nhiên, có ngữ cảnh, và phản hồi realtime.
+<p align="center">
+  Người xem có thể hiểu dự án như một sản phẩm hoàn chỉnh:
+  <strong>xem sản phẩm</strong>, <strong>lọc và mua hàng</strong>, <strong>theo dõi đơn</strong>, và <strong>trò chuyện với AI support</strong>
+  mà không cần đọc code trước.
+</p>
 
-## Tài khoản Test
+---
 
-- Nếu bạn đã seed dữ liệu demo, hãy dùng account đó để vào thử toàn bộ flow mua hàng và chat hỗ trợ.
-- Nếu chưa có account sẵn, có thể đăng ký mới ngay trên web demo để test phần login, giỏ hàng, đơn hàng, và chat.
-- Với vai trò giám khảo, chỉ cần mở web demo ở trên là có thể test ngay mà không cần chạy local.
+## Mục lục
 
-## What to demo first
+- [Demo nhanh](#demo-nhanh)
+- [Dự án này làm gì](#dự-án-này-làm-gì)
+- [Điểm nổi bật](#điểm-nổi-bật)
+- [Hình ảnh dự án](#hình-ảnh-dự-án)
+- [Luồng trải nghiệm người dùng](#luồng-trải-nghiệm-người-dùng)
+- [Kiến trúc tổng thể](#kiến-trúc-tổng-thể)
+- [Công nghệ chính](#công-nghệ-chính)
+- [Cấu trúc repository](#cấu-trúc-repository)
+- [Chạy dự án local](#chạy-dự-án-local)
+- [Tài liệu liên quan](#tài-liệu-liên-quan)
+- [Thành viên](#thành-viên)
 
-- Mở trang Home để xem hero, catalog nổi bật, và layout tổng thể.
-- Vào Shop để kiểm tra danh sách sản phẩm, ảnh, video, và filter.
-- Thử chat MilkyBloom Assistant bằng câu như `Gợi ý cho tôi món đồ dưới 300k`.
-- Đăng nhập hoặc tạo account test, rồi thử thêm giỏ hàng và đặt hàng.
-- Nếu cần xem luồng AI, gửi câu hỏi về sản phẩm, đơn hàng, hoặc đổi trả để thấy EmpathAI phản hồi realtime.
+## Demo nhanh
 
-## Demo Flow
+### Mở ngay bản production
 
-```mermaid
-flowchart LR
-    U([Giám khảo / User]) --> H[Home]
-    H --> S[Shop / Product Detail]
-    S --> C[Cart / Checkout]
-    H --> A[Chat Widget]
-    A --> B[Backend API]
-    B --> E[EmpathAI Agentic]
-    E --> B
-    B --> A
-    C --> O[Orders / History]
-```
+- Storefront: [https://milkybloom-frontend.onrender.com/](https://milkybloom-frontend.onrender.com/)
+- Repo: [https://github.com/QuangVoAI/MilkyBloomVibeCode](https://github.com/QuangVoAI/MilkyBloomVibeCode)
 
-## Demo Online
-
-Link web production: [https://milkybloom-frontend.onrender.com/](https://milkybloom-frontend.onrender.com/)
-
-Quét QR để mở nhanh trên điện thoại:
+### QR mở nhanh trên điện thoại
 
 <p align="center">
   <a href="https://milkybloom-frontend.onrender.com/" target="_blank" rel="noreferrer">
     <img
       src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fmilkybloom-frontend.onrender.com%2F"
-      alt="MilkyBloom live demo QR code"
+      alt="MilkyBloom live demo QR"
       width="220"
       height="220"
     />
   </a>
 </p>
 
-## Project Highlights
+### Nên xem gì đầu tiên
 
-- **Streaming-only chat**: UI chat luôn phản hồi theo thời gian thực, không còn chế độ public trả lời cuối
-- **Mongo-only media**: ảnh demo và ảnh nghiệp vụ được phục vụ qua MongoDB GridFS, không phụ thuộc local assets
-- **Agentic support flow**: EmpathAI có thể hiểu ngữ cảnh, tra cứu, và thực thi hành động hỗ trợ khách hàng
-- **Clone-and-run friendly**: seed catalog, env mẫu, và hướng dẫn chạy đã được chuẩn hóa để dễ triển khai lại
+1. Mở `Home` để xem giao diện tổng thể và tinh thần thương hiệu.
+2. Vào `Shop` để xem danh mục sản phẩm, filter, sort và product cards.
+3. Mở `MilkyBloom Assistant` để hỏi về sản phẩm, đơn hàng, đổi trả hoặc vận chuyển.
+4. Đăng ký hoặc đăng nhập để test giỏ hàng, checkout và `Order History`.
+5. Nếu muốn xem phần quản trị, vào `Admin` để thấy dashboard, users, products, orders và discount codes.
 
-## Mục Lục
+## Dự án này làm gì
 
-- [Tổng Quan](#tổng-quan)
-- [Tài khoản Test](#tài-khoản-test)
-- [What to demo first](#what-to-demo-first)
-- [Demo Flow](#demo-flow)
-- [Kiến Trúc Hệ Thống](#kiến-trúc-hệ-thống)
-- [Luồng Hoạt Động Chi Tiết](#luồng-hoạt-động-chi-tiết)
-- [Cấu Trúc Repository](#cấu-trúc-repository)
-- [Công Nghệ Chính](#công-nghệ-chính)
-- [Chạy Dự Án](#chạy-dự-án)
-- [Thành Viên](#thành-viên)
+MilkyBloom được thiết kế như một storefront nhẹ nhàng, dễ dùng và có cảm giác hiện đại trên cả desktop lẫn mobile. Phần AI không chỉ là chatbot trả lời FAQ, mà đóng vai trò như một lớp hỗ trợ khách hàng thông minh:
 
-## Tổng Quan
+- hiểu câu hỏi theo ngữ cảnh
+- gợi ý sản phẩm phù hợp
+- hỗ trợ tra cứu đơn hàng
+- giải thích chính sách giao hàng, đổi trả
+- phản hồi theo hướng tự nhiên, lịch sự và đồng cảm hơn với người dùng
 
-Repository này gồm 3 lớp chính:
+Nói ngắn gọn, đây là một dự án kết hợp giữa:
 
-- `frontend/` để hiển thị UI cho người dùng và admin
-- `backend/` để xử lý API, database, auth, ảnh, đơn hàng, và bridge chat
-- `agentic-ai/` để chạy pipeline CSKH agentic riêng, stream phản hồi qua WebSocket
+- **e-commerce experience**
+- **real-time AI support**
+- **triển khai full-stack thực tế**
 
-Luồng chat hiện tại là **streaming only**. Người dùng gửi tin nhắn từ frontend, backend chuyển sang EmpathAI, EmpathAI xử lý pipeline agentic, rồi stream token ngược về UI.
+## Điểm nổi bật
 
-## Kiến Trúc Hệ Thống
+| Mảng | Giá trị mang lại |
+|---|---|
+| Storefront | Giao diện mua sắm rõ ràng, pastel, trực quan và dễ thao tác |
+| Catalog | Danh mục sản phẩm, lọc theo nhu cầu, sort và tìm kiếm nhanh |
+| Ordering | Giỏ hàng, checkout, order history và theo dõi trạng thái đơn |
+| AI Support | Trợ lý AI hỗ trợ sản phẩm, vận chuyển, đổi trả, đơn hàng |
+| Empathy Layer | Phản hồi tự nhiên và có tính đồng cảm thay vì chỉ trả lời máy móc |
+| Admin | Quản trị sản phẩm, người dùng, đơn hàng, discount codes |
+| Media | Ảnh và video phục vụ theo luồng deploy thực tế, không chỉ demo local |
+
+## Hình ảnh dự án
+
+### Poster giới thiệu
+
+<p align="center">
+  <img src="./X2-Vision_VoteStory_9x16_v2.png" alt="MilkyBloom x EmpathAI vertical poster" width="340" />
+</p>
+
+### Toàn cảnh sản phẩm
+
+<p align="center">
+  <img src="./VC2026-A-MT03_20260603_153831.png" alt="MilkyBloom x EmpathAI full overview poster" width="860" />
+</p>
+
+### Bạn sẽ thấy trong giao diện
+
+- **Storefront:** home, shop, categories, about, contact
+- **Shopping flow:** product detail, add to cart, checkout, order history
+- **AI assistant:** popup hỗ trợ realtime ngay trên giao diện mua sắm
+- **Admin panel:** quản lý dữ liệu và vận hành hệ thống
+
+## Luồng trải nghiệm người dùng
 
 ```mermaid
 flowchart LR
-    U([Người dùng]) --> F[Frontend\nReact + Vite]
-    F -->|REST API| B[Backend\nExpress + MongoDB]
-    B -->|WebSocket chat| A[EmpathAI\nPython + LangGraph]
-    A -->|Stream token| B
-    B -->|Realtime response| F
-
-    B --> M[(MongoDB Atlas\nGridFS + Collections)]
-    A --> L[Groq / Featherless\nOpenAI-compatible LLM]
-
-    style F fill:#f97316,color:#fff
-    style B fill:#2563eb,color:#fff
-    style A fill:#7c3aed,color:#fff
-    style M fill:#16a34a,color:#fff
-    style L fill:#0f766e,color:#fff
+    A[Người dùng mở MilkyBloom] --> B[Khám phá sản phẩm]
+    B --> C[Lọc / tìm kiếm / xem chi tiết]
+    C --> D[Thêm vào giỏ hàng]
+    D --> E[Đặt hàng và thanh toán]
+    E --> F[Theo dõi đơn hàng]
+    B --> G[Mở MilkyBloom Assistant]
+    G --> H[Hỏi về sản phẩm]
+    G --> I[Hỏi về đơn hàng]
+    G --> J[Hỏi về vận chuyển / đổi trả]
 ```
 
-### Vai trò từng lớp
+### Ví dụ các tình huống demo tốt
 
-- **Frontend** là lớp trình bày, gọi API, hiển thị catalog, checkout, profile, và chat support
-- **Backend** là trung tâm điều phối, xử lý dữ liệu sản phẩm, đơn hàng, auth, ảnh, và bridge qua EmpathAI
-- **EmpathAI** là lớp CSKH agentic, gồm router, retrieval, action execution, reviewer, và writer
-- **MongoDB Atlas** lưu toàn bộ dữ liệu nghiệp vụ và ảnh demo qua GridFS
-- **Groq** là backend LLM chính cho EmpathAI, **Featherless** là fallback và mode thay thế
+- `Gợi ý cho tôi món đồ dưới 300k`
+- `Tôi muốn một món quà dễ thương cho bạn nữ`
+- `Đơn hàng của tôi đang ở đâu`
+- `Chính sách đổi trả như thế nào`
+- `Có mẫu nào hợp để tặng sinh nhật không`
 
-## Luồng Hoạt Động Chi Tiết
+## Kiến trúc tổng thể
 
-### 1. Luồng duyệt sản phẩm
+MilkyBloom không chỉ là frontend demo, mà là một hệ thống gồm 3 lớp chạy cùng nhau:
 
 ```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant BE as Backend
-    participant DB as MongoDB
-
-    U->>FE: Mở trang home / shop / product detail
-    FE->>BE: GET /api/products, /api/categories, /api/orders...
-    BE->>DB: Query dữ liệu + populate relations
-    DB-->>BE: JSON products, variants, categories
-    BE-->>FE: Dữ liệu đã chuẩn hóa
-    FE-->>U: Render catalog, card, gallery, cart
+flowchart LR
+    U[User] --> F[Frontend]
+    F --> B[Backend API]
+    B --> M[(MongoDB Atlas)]
+    B --> A[EmpathAI Service]
+    A --> L[LLM Provider]
+    A --> B
+    B --> F
 ```
 
-Điểm đáng chú ý:
+### 1. Frontend
 
-- Ảnh sản phẩm, biến thể, category, review, comment, avatar được lưu dưới dạng URL stream từ MongoDB GridFS
-- Frontend không phụ thuộc ảnh local trong repo
-- Demo vẫn có ảnh ngay sau khi seed lại database
+- hiển thị storefront và admin panel
+- gọi REST API
+- render sản phẩm, đơn hàng, profile, discount codes
+- mở chat widget ngay trên giao diện người dùng
 
-### 2. Luồng chat streaming
+### 2. Backend
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant BE as Backend
-    participant AI as EmpathAI
-    participant LLM as Groq / Featherless
+- xử lý auth, orders, products, categories, users
+- quản lý media và dữ liệu nghiệp vụ
+- làm cầu nối giữa frontend và EmpathAI
 
-    U->>FE: Nhập câu hỏi trong chat widget
-    FE->>BE: Gửi message qua WebSocket
-    BE->>AI: Forward request sang agentic-ai
-    AI->>AI: Router -> Retrieval -> Action -> Review
-    AI->>LLM: Sinh phản hồi thấu cảm
-    LLM-->>AI: Token stream
-    AI-->>BE: Stream token từng phần
-    BE-->>FE: Đẩy token realtime về UI
-    FE-->>U: Hiển thị chữ chạy dần
-```
+### 3. EmpathAI
 
-Chat UI hiện chỉ dùng streaming, không còn chế độ trả lời cuối trong public UI.
+- nhận yêu cầu chat
+- hiểu ý định người dùng
+- tra cứu ngữ cảnh liên quan
+- tạo câu trả lời phù hợp
+- stream phản hồi về giao diện theo thời gian thực
 
-### 3. Luồng ảnh demo và seed data
+## Công nghệ chính
 
-```mermaid
-flowchart TD
-    S[Seed script] --> P[Load catalog source]
-    P --> G[Upload ảnh vào MongoDB GridFS]
-    G --> U[Store stream URL trong MongoDB documents]
-    U --> F[Frontend đọc imageUrls từ API]
-    F --> R[Render ảnh trực tiếp từ backend stream]
-```
+| Lớp | Công nghệ |
+|---|---|
+| Frontend | React, Vite, Tailwind, Radix UI |
+| Backend | Node.js, Express |
+| Database | MongoDB Atlas, GridFS |
+| AI Service | Python, LangGraph |
+| Realtime | WebSocket / Socket-based streaming |
+| LLM backend | Groq, Featherless-compatible flow |
+| Deploy | Render |
 
-Ý nghĩa của luồng này:
-
-- không cần `frontend/public/seed-images`
-- không cần S3 hay CDN ngoài cho demo
-- clone về là có thể seed và chạy ngay
-
-## Luồng Chi Tiết Theo Chức Năng
-
-### Frontend
-
-- Nhận dữ liệu từ backend qua REST API
-- Render product cards, gallery, cart, checkout, profile, admin panel
-- Kết nối WebSocket để chat streaming
-- Tự fallback ảnh khi URL cũ hoặc URL lỗi
-
-### Backend
-
-- Đóng vai trò API gateway cho app
-- Kết nối MongoDB Atlas
-- Quản lý ảnh qua GridFS
-- Điều phối chat sang EmpathAI
-- Giữ các HTTP chat cũ ở trạng thái internal diagnostics
-
-### EmpathAI
-
-- Router intent
-- Hybrid retrieval / policy lookup
-- Action execution cho các tác vụ hỗ trợ khách hàng
-- Writer / reviewer tạo phản hồi cuối cùng
-- Stream token realtime về backend
-
-## Cấu Trúc Repository
+## Cấu trúc repository
 
 ```text
 MilkyBloomVibeCode/
-├── frontend/              # UI React + Vite
-├── backend/               # API Express + MongoDB + GridFS
-├── agentic-ai/            # EmpathAI service
-├── docs/                  # Tài liệu tích hợp và vận hành
-└── README.md              # Tài liệu tổng quan của toàn bộ hệ thống
+├── frontend/      # Storefront + Admin UI
+├── backend/       # REST API, auth, media, order management
+├── agentic-ai/    # EmpathAI service and streaming pipeline
+├── docs/          # Notes and supporting docs
+└── README.md      # Product-facing overview
 ```
 
-### Backend
+## Chạy dự án local
 
-```text
-backend/
-├── src/
-│   ├── controllers/
-│   ├── routes/
-│   ├── services/
-│   ├── utils/
-│   └── libs/
-├── scripts/
-├── data/
-└── .env.example
-```
+Mỗi service có file `.env.example` riêng. Copy file mẫu tương ứng và điền biến môi trường cần thiết.
 
-### EmpathAI
-
-```text
-agentic-ai/
-├── python/
-├── data/
-├── server.py
-├── ws_server.py
-└── environment.yml
-```
-
-## Công Nghệ Chính
-
-| Lớp | Công nghệ | Vai trò |
-|---|---|---|
-| Frontend | React, Vite, Tailwind, Radix | Giao diện người dùng và admin |
-| Backend | Node.js, Express, MongoDB, GridFS | API, auth, data, media |
-| Chat Streaming | WebSocket | Stream token realtime |
-| Agentic AI | Python, LangGraph | Router, retrieval, action, writer |
-| LLM Backend | Groq / Featherless | Sinh phản hồi cho EmpathAI, Groq là mặc định |
-
-## Chạy Dự Án
-
-Mỗi service có file `.env.example` riêng. Copy file mẫu tương ứng rồi điền biến cần thiết theo môi trường của bạn.
-
-### 1. Terminal 1: Frontend
+### 1. Frontend
 
 ```bash
 cd frontend
@@ -270,9 +210,9 @@ npm install
 npm run dev
 ```
 
-Frontend local mặc định chạy trên `http://localhost:5173`.
+Frontend mặc định chạy ở `http://localhost:5173`.
 
-### 2. Terminal 2: Backend
+### 2. Backend
 
 ```bash
 cd backend
@@ -280,45 +220,45 @@ npm install
 npm run dev
 ```
 
-Backend local mặc định chạy trên `http://localhost:6969`.
+Backend mặc định chạy ở `http://localhost:6969`.
 
-### 3. Terminal 3: EmpathAI WebSocket
+### 3. EmpathAI WebSocket service
 
 ```bash
 cd agentic-ai
 python ws_server.py
 ```
 
-EmpathAI WebSocket local mặc định chạy trên `ws://127.0.0.1:8788`. Khi chạy `ws_server.py`, service sẽ tự warm-up model trước khi nhận WebSocket traffic. Backend kết nối tới service này qua `AGENTIC_AI_WS_URL`.
+Service AI WebSocket mặc định chạy ở `ws://127.0.0.1:8788`.
 
-### 4. Seed Demo Catalog
+### 4. Seed demo catalog
 
 ```bash
 cd backend
 npm run seed:catalog
 ```
 
-Script này:
+Seed script sẽ:
 
-- tạo dữ liệu mẫu trong MongoDB
-- lưu ảnh demo vào MongoDB GridFS
-- phát ảnh qua URL stream của backend
-- không cần ảnh local trong repo
+- tạo dữ liệu mẫu
+- nạp catalog demo
+- upload media cần thiết
+- giúp bạn có một bản demo gần với production
 
-## Tài Liệu Liên Quan
+## Tài liệu liên quan
 
-- [Frontend README](frontend/README.md)
-- [EmpathAI README](agentic-ai/README.md)
-- [EmpathAI local run guide](agentic-ai/README.local.md)
+- [Frontend README](./frontend/README.md)
+- [EmpathAI README](./agentic-ai/README.md)
+- [EmpathAI local run guide](./agentic-ai/README.local.md)
 
-## Thành Viên
+## Thành viên
 
 - `523H0173` - Võ Xuân Quang
 - `523H0178` - Hoàng Xuân Thành
 
-## Ghi Chú
+---
 
-- Chat UI hiện là **streaming only**
-- `GET /providers` chỉ là snapshot nội bộ cho monitoring/debug
-- Các endpoint HTTP chat cũ chỉ còn dùng cho internal diagnostics
-- Ảnh demo và ảnh nghiệp vụ đều đi qua MongoDB GridFS, không cần ảnh local trong repo
+<p align="center">
+  <strong>MilkyBloom x EmpathAI</strong><br />
+  Một storefront sưu tầm kết hợp AI support đồng cảm, realtime và dễ demo cho người không cần biết code.
+</p>
