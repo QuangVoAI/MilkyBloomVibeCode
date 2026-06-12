@@ -587,7 +587,7 @@ const ChatWidget = () => {
     };
   }, []);
 
-  const sendViaWebSocket = (trimmed, nextMessages, options = {}) => {
+  const sendViaWebSocket = async (trimmed, nextMessages, options = {}) => {
     const sessionId =
       chatSessionIdRef.current ||
       `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -612,7 +612,7 @@ const ChatWidget = () => {
     const orderLookupToken = orderId
       ? localStorage.getItem(`orderLookupToken:${orderId}`) || ""
       : "";
-    socketService.sendChatMessage({
+    const payload = {
       message: trimmed,
       history: nextMessages.slice(-MAX_HISTORY),
       provider: provider === "auto" ? "agentic" : provider,
@@ -624,7 +624,38 @@ const ChatWidget = () => {
       guestEmail: localStorage.getItem("guestEmail") || "",
       orderLookupToken,
       authToken: localStorage.getItem("authToken") || "",
-    });
+    };
+
+    try {
+      if (!socketService.isConnected()) {
+        socketService.connect(getUserIdFromStorage(), {
+          token: localStorage.getItem("authToken") || "",
+        });
+        await socketService.waitForConnection(12000);
+      }
+
+      const sent = socketService.sendChatMessage(payload);
+      if (!sent) {
+        throw new Error("Socket is not connected");
+      }
+    } catch {
+      if (assistantIndexRef.current != null) {
+        setMessages((current) => {
+          const next = [...current];
+          const target = next[assistantIndexRef.current];
+          if (!target) return current;
+          next[assistantIndexRef.current] = {
+            ...target,
+            content: CHAT_ERROR_FALLBACK,
+          };
+          return next;
+        });
+      }
+      setLoading(false);
+      setChatPhase("offline");
+      streamingSessionIdRef.current = "";
+      assistantIndexRef.current = null;
+    }
   };
 
   const sendMessage = async (text, options = {}) => {
@@ -638,7 +669,7 @@ const ChatWidget = () => {
     setComposerHint("");
     setActiveLookupChip("");
     setLoading(true);
-    sendViaWebSocket(trimmed, nextMessages, options);
+    await sendViaWebSocket(trimmed, nextMessages, options);
   };
 
   const handleSubmit = async (event) => {

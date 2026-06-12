@@ -210,13 +210,48 @@ class SocketService {
   emit(event, data) {
     if (this.socket?.connected) {
       this.socket.emit(event, data);
+      return true;
     } else {
       console.warn(`⚠️ [Socket] Cannot emit ${event} - not connected`);
+      return false;
     }
   }
 
   sendChatMessage(data) {
-    this.emit('chat_message', data);
+    return this.emit('chat_message', data);
+  }
+
+  waitForConnection(timeoutMs = 10000) {
+    if (this.isConnected()) {
+      return Promise.resolve(this.socket);
+    }
+
+    return new Promise((resolve, reject) => {
+      let timeoutId;
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        this.off('connect', handleConnect);
+        this.off('reconnect', handleConnect);
+        this.off('connect_error', handleConnectError);
+      };
+      const handleConnect = () => {
+        cleanup();
+        resolve(this.socket);
+      };
+      const handleConnectError = () => {
+        cleanup();
+        reject(new Error('Socket connection failed'));
+      };
+
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Socket connection timeout'));
+      }, timeoutMs);
+
+      this.on('connect', handleConnect);
+      this.on('reconnect', handleConnect);
+      this.on('connect_error', handleConnectError);
+    });
   }
 
   // Join a product room for real-time review/comment updates
