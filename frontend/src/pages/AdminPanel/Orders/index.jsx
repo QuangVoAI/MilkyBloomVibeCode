@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Package, Truck, CheckCircle, XCircle, Clock, Eye, Search, Filter } from 'lucide-react'
 import { getAllOrders, updateOrderStatus } from '@/services/orders.service'
@@ -12,26 +13,29 @@ import OrderFilters from './components/OrderFilters'
 import { AdminContent } from '../components'
 import { useDebounce } from '@/hooks'
 import { Pagination } from '@/components/common'
+import { readQueryPositiveInt, readQueryString, updateQueryParams } from '@/utils/queryState'
 
 const ITEMS_PER_PAGE = 10;
 
 const Orders = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = useState(readQueryString(searchParams, 'q', ''))
   const debouncedSearch = useDebounce(searchTerm, 500) // Debounce search input
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState('all')
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState('all')
-  const [sortBy, setSortBy] = useState('newest')
+  const [statusFilter, setStatusFilter] = useState(readQueryString(searchParams, 'status', 'all'))
+  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState(readQueryString(searchParams, 'delivery', 'all'))
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState(readQueryString(searchParams, 'payment', 'all'))
+  const [sortBy, setSortBy] = useState(readQueryString(searchParams, 'sort', 'newest'))
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   
   // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE)
+  const [currentPage, setCurrentPage] = useState(readQueryPositiveInt(searchParams, 'page', 1))
+  const [pageSize, setPageSize] = useState(readQueryPositiveInt(searchParams, 'pageSize', ITEMS_PER_PAGE))
   const [totalItems, setTotalItems] = useState(0)
+  const hasInitializedPageReset = useRef(false)
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -66,8 +70,37 @@ const Orders = () => {
 
   // Reset to page 1 when filters change
   useEffect(() => {
+    if (!hasInitializedPageReset.current) {
+      hasInitializedPageReset.current = true
+      return
+    }
     setCurrentPage(1)
   }, [debouncedSearch, statusFilter, deliveryTypeFilter, paymentMethodFilter, sortBy, pageSize])
+
+  useEffect(() => {
+    setSearchParams(
+      (current) =>
+        updateQueryParams(current, [
+          { key: 'q', value: searchTerm, defaultValue: '' },
+          { key: 'status', value: statusFilter, defaultValue: 'all' },
+          { key: 'delivery', value: deliveryTypeFilter, defaultValue: 'all' },
+          { key: 'payment', value: paymentMethodFilter, defaultValue: 'all' },
+          { key: 'sort', value: sortBy, defaultValue: 'newest' },
+          { key: 'page', value: currentPage, defaultValue: 1 },
+          { key: 'pageSize', value: pageSize, defaultValue: ITEMS_PER_PAGE },
+        ]),
+      { replace: true },
+    )
+  }, [
+    currentPage,
+    deliveryTypeFilter,
+    pageSize,
+    paymentMethodFilter,
+    searchTerm,
+    setSearchParams,
+    sortBy,
+    statusFilter,
+  ])
 
   useEffect(() => {
     fetchOrders()

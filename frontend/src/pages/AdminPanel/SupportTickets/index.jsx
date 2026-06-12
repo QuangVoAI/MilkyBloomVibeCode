@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Filter, Clock, CheckCircle, CircleAlert, UserCheck, Eye, MessageSquare, Calendar, Tag } from 'lucide-react';
 import { AdminContent } from '../components';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Pagination } from '@/components/common';
 import { useAuth, useDebounce } from '@/hooks';
 import { getAllSupportTickets } from '@/services/supportTickets.service';
+import { readQueryPositiveInt, readQueryString, updateQueryParams } from '@/utils/queryState';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -41,21 +42,23 @@ const categoryLabels = {
 
 const SupportTickets = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(readQueryString(searchParams, 'q', ''));
   const debouncedSearch = useDebounce(searchTerm, 450);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [assignedFilter, setAssignedFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('newest');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [statusFilter, setStatusFilter] = useState(readQueryString(searchParams, 'status', 'all'));
+  const [priorityFilter, setPriorityFilter] = useState(readQueryString(searchParams, 'priority', 'all'));
+  const [categoryFilter, setCategoryFilter] = useState(readQueryString(searchParams, 'category', 'all'));
+  const [assignedFilter, setAssignedFilter] = useState(readQueryString(searchParams, 'assigned', 'all'));
+  const [sortBy, setSortBy] = useState(readQueryString(searchParams, 'sort', 'newest'));
+  const [currentPage, setCurrentPage] = useState(readQueryPositiveInt(searchParams, 'page', 1));
+  const [pageSize, setPageSize] = useState(readQueryPositiveInt(searchParams, 'pageSize', ITEMS_PER_PAGE));
   const [totalItems, setTotalItems] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const hasInitializedPageReset = useRef(false);
 
   const fetchTickets = useCallback(async () => {
     try {
@@ -86,8 +89,39 @@ const SupportTickets = () => {
   }, [debouncedSearch, statusFilter, priorityFilter, categoryFilter, assignedFilter, sortBy, currentPage, pageSize, user?.id, user?._id]);
 
   useEffect(() => {
+    if (!hasInitializedPageReset.current) {
+      hasInitializedPageReset.current = true;
+      return;
+    }
     setCurrentPage(1);
   }, [debouncedSearch, statusFilter, priorityFilter, categoryFilter, assignedFilter, sortBy, pageSize]);
+
+  useEffect(() => {
+    setSearchParams(
+      (current) =>
+        updateQueryParams(current, [
+          { key: 'q', value: searchTerm, defaultValue: '' },
+          { key: 'status', value: statusFilter, defaultValue: 'all' },
+          { key: 'priority', value: priorityFilter, defaultValue: 'all' },
+          { key: 'category', value: categoryFilter, defaultValue: 'all' },
+          { key: 'assigned', value: assignedFilter, defaultValue: 'all' },
+          { key: 'sort', value: sortBy, defaultValue: 'newest' },
+          { key: 'page', value: currentPage, defaultValue: 1 },
+          { key: 'pageSize', value: pageSize, defaultValue: ITEMS_PER_PAGE },
+        ]),
+      { replace: true },
+    );
+  }, [
+    assignedFilter,
+    categoryFilter,
+    currentPage,
+    pageSize,
+    priorityFilter,
+    searchTerm,
+    setSearchParams,
+    sortBy,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     fetchTickets();

@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AdminContent } from '../components';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { RefreshCw, MessagesSquare, AlertCircle, GitBranch, Sparkles, Filter } from 'lucide-react';
 import { getChatbotCases, getChatbotInsights } from '@/services';
+import { readQueryString, updateQueryParams } from '@/utils/queryState';
 
 const MetricCard = ({ title, value, subtitle, icon: Icon }) => (
   <Card className="border-stone-200 shadow-sm">
@@ -98,16 +100,32 @@ const CaseTable = ({ title, description, items, badgeLabel, viewMode = 'default'
 );
 
 const ChatbotQuality = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [summary, setSummary] = useState(null);
   const [clarifyCases, setClarifyCases] = useState([]);
   const [fallbackCases, setFallbackCases] = useState([]);
-  const [focusMode, setFocusMode] = useState('all');
-  const [clarifyReason, setClarifyReason] = useState('all');
+  const [focusMode, setFocusMode] = useState(readQueryString(searchParams, 'focus', 'all'));
+  const [clarifyReason, setClarifyReason] = useState(readQueryString(searchParams, 'reason', 'all'));
   const [focusCases, setFocusCases] = useState([]);
   const [clarifyReasons, setClarifyReasons] = useState([]);
+
+  useEffect(() => {
+    setSearchParams(
+      (current) =>
+        updateQueryParams(current, [
+          { key: 'focus', value: focusMode, defaultValue: 'all' },
+          {
+            key: 'reason',
+            value: focusMode === 'clarify-reason' ? clarifyReason : 'all',
+            defaultValue: 'all',
+          },
+        ]),
+      { replace: true },
+    );
+  }, [clarifyReason, focusMode, setSearchParams]);
 
   const loadData = useCallback(async () => {
     try {

@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { UserPlus, Search, Filter, Users as UsersIcon, Crown } from 'lucide-react'
 import UserTable from './components/UserTable'
 import UserStats from './components/UserStats'
@@ -10,13 +11,15 @@ import { AdminContent, AdminHeader } from '../components'
 import { useUsers, useDebounce } from '@/hooks' // Using global hook
 import { PageHeader, SearchBar, ConfirmDialog, Pagination } from '@/components/common'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { readQueryPositiveInt, readQueryString, updateQueryParams } from '@/utils/queryState'
 
 const ITEMS_PER_PAGE = 10;
 
 const Users = () => {
-  const [activeTab, setActiveTab] = useState('users')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [loyaltySearchQuery, setLoyaltySearchQuery] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(readQueryString(searchParams, 'tab', 'users'))
+  const [searchQuery, setSearchQuery] = useState(readQueryString(searchParams, 'q', ''))
+  const [loyaltySearchQuery, setLoyaltySearchQuery] = useState(readQueryString(searchParams, 'loyaltyQ', ''))
   const debouncedSearch = useDebounce(searchQuery, 500) // Debounce search input
   const [selectedUser, setSelectedUser] = useState(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -24,19 +27,20 @@ const Users = () => {
   const [formMode, setFormMode] = useState('create') // 'create' | 'edit'
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [userToDelete, setUserToDelete] = useState(null)
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(readQueryString(searchParams, 'filters', '0') === '1')
   
   // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE)
+  const [currentPage, setCurrentPage] = useState(readQueryPositiveInt(searchParams, 'page', 1))
+  const [pageSize, setPageSize] = useState(readQueryPositiveInt(searchParams, 'pageSize', ITEMS_PER_PAGE))
 
   // Filter state
   const [filters, setFilters] = useState({
-    role: 'all',
-    isVerified: 'all',
-    socialProvider: 'all',
-    sortBy: 'newest' // Default to newest
+    role: readQueryString(searchParams, 'role', 'all'),
+    isVerified: readQueryString(searchParams, 'verified', 'all'),
+    socialProvider: readQueryString(searchParams, 'provider', 'all'),
+    sortBy: readQueryString(searchParams, 'sort', 'newest') // Default to newest
   })
+  const hasInitializedPageReset = useRef(false)
 
   // Build params for API call - send all filters including sortBy to backend
   const apiParams = useMemo(() => {
@@ -75,8 +79,40 @@ const Users = () => {
 
   // Reset page when filters change (but not when page/pageSize changes)
   useEffect(() => {
+    if (!hasInitializedPageReset.current) {
+      hasInitializedPageReset.current = true
+      return
+    }
     setCurrentPage(1)
   }, [debouncedSearch, filters])
+
+  useEffect(() => {
+    setSearchParams(
+      (current) =>
+        updateQueryParams(current, [
+          { key: 'tab', value: activeTab, defaultValue: 'users' },
+          { key: 'q', value: searchQuery, defaultValue: '' },
+          { key: 'loyaltyQ', value: loyaltySearchQuery, defaultValue: '' },
+          { key: 'filters', value: showFilters ? '1' : '0', defaultValue: '0' },
+          { key: 'page', value: currentPage, defaultValue: 1 },
+          { key: 'pageSize', value: pageSize, defaultValue: ITEMS_PER_PAGE },
+          { key: 'role', value: filters.role, defaultValue: 'all' },
+          { key: 'verified', value: filters.isVerified, defaultValue: 'all' },
+          { key: 'provider', value: filters.socialProvider, defaultValue: 'all' },
+          { key: 'sort', value: filters.sortBy, defaultValue: 'newest' },
+        ]),
+      { replace: true },
+    )
+  }, [
+    activeTab,
+    currentPage,
+    filters,
+    loyaltySearchQuery,
+    pageSize,
+    searchQuery,
+    setSearchParams,
+    showFilters,
+  ])
 
   const handlePageChange = (page) => {
     setCurrentPage(page)

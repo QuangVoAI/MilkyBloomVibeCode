@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Plus, Search, Filter, Package, MessageSquare, Star, Layers } from 'lucide-react'
 import ProductGrid from './components/ProductGrid'
 import ProductStats from './components/ProductStats'
@@ -13,6 +14,7 @@ import { useProducts, useDebounce } from '@/hooks' // Using global hook
 import { PageHeader, SearchBar, Pagination } from '@/components/common'
 import { getCategories } from '@/services/categories.service'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { readQueryPositiveInt, readQueryString, updateQueryParams } from '@/utils/queryState'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,11 +29,12 @@ import {
 const ITEMS_PER_PAGE = 12;
 
 const Products = () => {
-  const [activeTab, setActiveTab] = useState('products')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [commentsSearchQuery, setCommentsSearchQuery] = useState('')
-  const [reviewsSearchQuery, setReviewsSearchQuery] = useState('')
-  const [categoriesSearchQuery, setCategoriesSearchQuery] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(readQueryString(searchParams, 'tab', 'products'))
+  const [searchQuery, setSearchQuery] = useState(readQueryString(searchParams, 'q', ''))
+  const [commentsSearchQuery, setCommentsSearchQuery] = useState(readQueryString(searchParams, 'commentsQ', ''))
+  const [reviewsSearchQuery, setReviewsSearchQuery] = useState(readQueryString(searchParams, 'reviewsQ', ''))
+  const [categoriesSearchQuery, setCategoriesSearchQuery] = useState(readQueryString(searchParams, 'categoriesQ', ''))
   const debouncedSearch = useDebounce(searchQuery, 500) // Debounce search input
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -40,23 +43,24 @@ const Products = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [productToDelete, setProductToDelete] = useState(null)
   const [categories, setCategories] = useState([])
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(readQueryString(searchParams, 'filters', '0') === '1')
   
   // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE)
+  const [currentPage, setCurrentPage] = useState(readQueryPositiveInt(searchParams, 'page', 1))
+  const [pageSize, setPageSize] = useState(readQueryPositiveInt(searchParams, 'pageSize', ITEMS_PER_PAGE))
   
   // Filter state
   const [filters, setFilters] = useState({
-    status: 'all',
-    categoryId: 'all',
-    isFeatured: 'all',
-    minPrice: '',
-    maxPrice: '',
-    minRating: 'all',
-    daysAgo: 'all',
-    sort: 'createdAt:desc'
+    status: readQueryString(searchParams, 'status', 'all'),
+    categoryId: readQueryString(searchParams, 'categoryId', 'all'),
+    isFeatured: readQueryString(searchParams, 'featured', 'all'),
+    minPrice: readQueryString(searchParams, 'minPrice', ''),
+    maxPrice: readQueryString(searchParams, 'maxPrice', ''),
+    minRating: readQueryString(searchParams, 'minRating', 'all'),
+    daysAgo: readQueryString(searchParams, 'daysAgo', 'all'),
+    sort: readQueryString(searchParams, 'sort', 'createdAt:desc')
   })
+  const hasInitializedPageReset = useRef(false)
 
   // Fetch categories for filter dropdown
   useEffect(() => {
@@ -115,8 +119,48 @@ const Products = () => {
 
   // Reset page when filters change (but not when page/pageSize changes)
   useEffect(() => {
+    if (!hasInitializedPageReset.current) {
+      hasInitializedPageReset.current = true
+      return
+    }
     setCurrentPage(1)
   }, [debouncedSearch, filters])
+
+  useEffect(() => {
+    setSearchParams(
+      (current) =>
+        updateQueryParams(current, [
+          { key: 'tab', value: activeTab, defaultValue: 'products' },
+          { key: 'q', value: searchQuery, defaultValue: '' },
+          { key: 'commentsQ', value: commentsSearchQuery, defaultValue: '' },
+          { key: 'reviewsQ', value: reviewsSearchQuery, defaultValue: '' },
+          { key: 'categoriesQ', value: categoriesSearchQuery, defaultValue: '' },
+          { key: 'filters', value: showFilters ? '1' : '0', defaultValue: '0' },
+          { key: 'page', value: currentPage, defaultValue: 1 },
+          { key: 'pageSize', value: pageSize, defaultValue: ITEMS_PER_PAGE },
+          { key: 'status', value: filters.status, defaultValue: 'all' },
+          { key: 'categoryId', value: filters.categoryId, defaultValue: 'all' },
+          { key: 'featured', value: filters.isFeatured, defaultValue: 'all' },
+          { key: 'minPrice', value: filters.minPrice, defaultValue: '' },
+          { key: 'maxPrice', value: filters.maxPrice, defaultValue: '' },
+          { key: 'minRating', value: filters.minRating, defaultValue: 'all' },
+          { key: 'daysAgo', value: filters.daysAgo, defaultValue: 'all' },
+          { key: 'sort', value: filters.sort, defaultValue: 'createdAt:desc' },
+        ]),
+      { replace: true },
+    )
+  }, [
+    activeTab,
+    categoriesSearchQuery,
+    commentsSearchQuery,
+    currentPage,
+    filters,
+    pageSize,
+    reviewsSearchQuery,
+    searchQuery,
+    setSearchParams,
+    showFilters,
+  ])
 
   const handlePageChange = (page) => {
     setCurrentPage(page)
