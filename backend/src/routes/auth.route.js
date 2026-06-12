@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const passport = require("passport");
 const passportGoogle = require("../config/passportGoogle.js");
@@ -33,8 +34,132 @@ const {
 const { getCookieDomain, getFrontendUrl, isProduction } = require('../config/runtime.js');
 
 const router = express.Router();
+const OAUTH_RESULT_TTL_MS = 5 * 60 * 1000;
+const oauthResultCache = new Map();
 
 setupFacebookPassport();
+
+const hashAuthCode = (provider, code) =>
+    crypto
+        .createHash("sha256")
+        .update(`${provider}:${code}`)
+        .digest("hex");
+
+const pruneExpiredOAuthResults = () => {
+    const now = Date.now();
+    for (const [key, value] of oauthResultCache.entries()) {
+        if (value.expiresAt <= now) {
+            oauthResultCache.delete(key);
+        }
+    }
+};
+
+const buildFrontendRedirectUrl = (path = "/", params = {}) => {
+    const target = new URL(path, getFrontendUrl());
+    Object.entries(params).forEach(([key, value]) => {
+        if (value != null && value !== "") {
+            target.searchParams.set(key, value);
+        }
+    });
+    return target.toString();
+};
+
+const getAuthCookieOptions = () => {
+    const cookieOptions = {
+        httpOnly: true,
+        secure: isProduction(),
+        sameSite: isProduction() ? "none" : "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
+    const cookieDomain = getCookieDomain();
+    if (cookieDomain) {
+        cookieOptions.domain = cookieDomain;
+    }
+    return cookieOptions;
+};
+
+const issueUserToken = (user) =>
+    jwt.sign(
+        {
+            id: user._id,
+            email: user.email,
+            role: user.role,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "7d" },
+    );
+
+const cacheOAuthSuccess = (provider, code, token) => {
+    if (!code) return;
+    pruneExpiredOAuthResults();
+    oauthResultCache.set(hashAuthCode(provider, code), {
+        token,
+        redirectUrl: buildFrontendRedirectUrl("/", { token }),
+        expiresAt: Date.now() + OAUTH_RESULT_TTL_MS,
+    });
+};
+
+const replayCachedOAuthSuccess = (provider, code, res) => {
+    if (!code) return false;
+    pruneExpiredOAuthResults();
+
+    const cached = oauthResultCache.get(hashAuthCode(provider, code));
+    if (!cached) return false;
+
+    res.cookie("token", cached.token, getAuthCookieOptions());
+    res.redirect(cached.redirectUrl);
+    return true;
+};
+
+const redirectOAuthFailure = (provider, reason, res) => {
+    res.redirect(buildFrontendRedirectUrl("/login", { oauthError: `${provider}_${reason}` }));
+};
+
+const handleOAuthCallback = (provider, strategy) => (req, res, next) => {
+    const authCode =
+        typeof req.query.code === "string" ? req.query.code : undefined;
+
+    if (replayCachedOAuthSuccess(provider, authCode, res)) {
+        return;
+    }
+
+    passport.authenticate(
+        strategy,
+        { session: false },
+        (err, user) => {
+            if (err) {
+                const message = String(err.message || "");
+                const isCodeReuse =
+                    /authorization code has been used/i.test(message);
+
+                if (isCodeReuse && replayCachedOAuthSuccess(provider, authCode, res)) {
+                    return;
+                }
+
+                console.error(`${provider} callback error:`, err);
+                redirectOAuthFailure(
+                    provider,
+                    isCodeReuse ? "code_used" : "callback_failed",
+                    res,
+                );
+                return;
+            }
+
+            if (!user) {
+                redirectOAuthFailure(provider, "denied", res);
+                return;
+            }
+
+            const token = issueUserToken(user);
+            const redirectUrl = buildFrontendRedirectUrl("/", { token });
+
+            res.cookie("token", token, getAuthCookieOptions());
+            cacheOAuthSuccess(provider, authCode, token);
+            res.redirect(redirectUrl);
+        },
+    )(req, res, next);
+};
 
 //google login flow
 router.get(
@@ -49,81 +174,20 @@ router.get(
 //after login google
 router.get(
     '/google/callback',
-    passportGoogle.authenticate('google', {
-        failureRedirect: '/login?error=google',
-        session: false,
-    }),
-    (req, res) => {
-        const token = jwt.sign(
-            {
-                id: req.user._id,
-                email: req.user.email,
-                role: req.user.role,
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" },
-        );
-
-        const target = new URL(getFrontendUrl());
-        target.searchParams.set("token", token);
-
-        const cookieOptions = {
-            httpOnly: true,
-            secure: isProduction(),
-            sameSite: isProduction() ? "none" : "lax",
-            path: "/",
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        };
-        const cookieDomain = getCookieDomain();
-        if (cookieDomain) {
-            cookieOptions.domain = cookieDomain;
-        }
-
-        res.cookie("token", token, cookieOptions);
-        res.redirect(target.toString());
-    },
+    handleOAuthCallback("google", "google"),
 );
 
 router.get(
     "/facebook",
-    passport.authenticate("facebook", { scope: ["email"] }),
+    passport.authenticate("facebook", {
+        scope: ["email"],
+        state: true,
+    }),
 );
 
 router.get(
     "/facebook/callback",
-    passport.authenticate("facebook", {
-        failureRedirect: `/login?error=facebook`,
-        session: false,
-    }),
-    (req, res) => {
-        const token = jwt.sign(
-            {
-                id: req.user._id,
-                email: req.user.email,
-                role: req.user.role,
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" },
-        );
-
-        const target = new URL(getFrontendUrl());
-        target.searchParams.set("token", token);
-
-        const cookieOptions = {
-            httpOnly: true,
-            secure: isProduction(),
-            sameSite: isProduction() ? "none" : "lax",
-            path: "/",
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        };
-        const cookieDomain = getCookieDomain();
-        if (cookieDomain) {
-            cookieOptions.domain = cookieDomain;
-        }
-
-        res.cookie("token", token, cookieOptions);
-        res.redirect(target.toString());
-    },
+    handleOAuthCallback("facebook", "facebook"),
 );
 
 router.get("/verify-email", verifyEmail);

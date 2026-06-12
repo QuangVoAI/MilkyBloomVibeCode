@@ -32,6 +32,30 @@ const Login = () => {
     }
   }, [navigate])
 
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const oauthError = url.searchParams.get('oauthError')
+
+    if (!oauthError) return
+
+    const messages = {
+      facebook_code_used: 'Facebook login bị lặp callback. Hãy thử đăng nhập lại một lần nữa.',
+      facebook_callback_failed: 'Facebook login thất bại ở bước xác thực. Kiểm tra callback URL và thử lại.',
+      facebook_denied: 'Bạn đã hủy hoặc từ chối đăng nhập bằng Facebook.',
+      google_code_used: 'Google login bị lặp callback. Hãy thử đăng nhập lại.',
+      google_callback_failed: 'Google login thất bại ở bước xác thực. Kiểm tra cấu hình OAuth rồi thử lại.',
+      google_denied: 'Bạn đã hủy hoặc từ chối đăng nhập bằng Google.',
+    }
+
+    toast.error(messages[oauthError] || 'Đăng nhập mạng xã hội thất bại. Vui lòng thử lại.', {
+      position: 'top-center',
+      duration: 5000,
+    })
+
+    url.searchParams.delete('oauthError')
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`)
+  }, [])
+
   // Handle OTP input with auto-focus
   const handleOtpChange = (index, value) => {
     if (!/^\d*$/.test(value)) return // Only allow digits
