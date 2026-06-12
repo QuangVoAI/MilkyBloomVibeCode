@@ -13,9 +13,13 @@ const AdminSidebar = ({ onNavigate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const displayName = user?.fullName || user?.fullname || user?.username || 'Admin';
+  const avatarUrl = user?.avatar || user?.profileImage || user?.photoURL || '';
+  const avatarInitial = displayName.charAt(0).toUpperCase();
 
   const navigationTabs = [
     {title: 'Dashboard', route: ADMIN_ROUTES.DASHBOARD },
@@ -119,6 +123,10 @@ const AdminSidebar = ({ onNavigate }) => {
     return () => clearTimeout(timeout);
   }, [searchTerm]);
 
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarUrl]);
+
   const handleResultNavigate = (route) => {
     navigate(route);
     setShowAccountMenu(false);
@@ -141,20 +149,21 @@ const AdminSidebar = ({ onNavigate }) => {
             onClick={() => setShowAccountMenu((v) => !v)}
             className="flex items-center gap-2 w-full min-h-[44px] text-left rounded-lg px-2 py-2 transition hover:bg-slate-50"
           >
-            {user?.avatar || user?.profileImage || user?.photoURL ? (
+            {avatarUrl && !avatarLoadFailed ? (
               <img
-                src={user.avatar || user.profileImage || user.photoURL}
-                alt={user?.fullname || 'Admin'}
+                src={avatarUrl}
+                alt={displayName}
                 className="size-9 rounded-full object-cover border border-slate-200"
                 referrerPolicy="no-referrer"
+                onError={() => setAvatarLoadFailed(true)}
               />
             ) : (
               <div className="size-9 rounded-full bg-slate-700 flex items-center justify-center text-white text-sm font-semibold">
-                {user?.fullname?.[0]?.toUpperCase() || 'A'}
+                {avatarInitial || 'A'}
               </div>
             )}
             <div className="leading-tight overflow-hidden">
-              <span className="text-sm font-semibold text-stone-800 block truncate">{user?.fullname || 'Admin'}</span>
+              <span className="text-sm font-semibold text-stone-800 block truncate">{displayName}</span>
               <span className="text-[11px] text-stone-500 block truncate">{user?.email || 'admin@example.com'}</span>
             </div>
             <ChevronDown className={`size-4 text-stone-500 transition ${showAccountMenu ? 'rotate-180' : ''}`} />
