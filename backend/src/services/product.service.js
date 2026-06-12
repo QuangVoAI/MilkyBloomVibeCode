@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 const productRepository = require('../repositories/product.repository.js');
 const variantRepository = require('../repositories/variant.repository.js');
-const { storeImages, removeImages } = require('../utils/image-storage.js');
+const {
+    storeImages,
+    removeImages,
+    normalizePublicMediaUrlsDeep,
+} = require('../utils/image-storage.js');
 const { default: slugify } = require('slugify');
 const { searchProducts } = require('./atlas.search.service.js');
 
@@ -167,7 +171,7 @@ const getAllProducts = async (query, user = null) => {
     const stats = await productRepository.getStats(filter);
 
     // 6. Trả về kết quả
-    return {
+    return normalizePublicMediaUrlsDeep({
         success: true,
         products,
         pagination: {
@@ -183,7 +187,7 @@ const getAllProducts = async (query, user = null) => {
             usingAtlasSearch: false,
             keyword: null,
         },
-    };
+    });
 };
 
 /**
@@ -192,7 +196,7 @@ const getAllProducts = async (query, user = null) => {
 const getProductById = async (id) => {
     const product = await productRepository.findById(id);
     if (!product) throw new Error('Product not found');
-    return product;
+    return normalizePublicMediaUrlsDeep(product);
 };
 
 const getProductBySlug = async (slug) => {
@@ -200,7 +204,7 @@ const getProductBySlug = async (slug) => {
     if (!product) {
         throw new Error("Product not found");
     }
-    return product;
+    return normalizePublicMediaUrlsDeep(product);
 };
 
 const getProductByPrice = (min, max) => {
@@ -374,7 +378,7 @@ const createProduct = async (productData, imgFiles) => {
         // Atlas Search automatically indexes via MongoDB change streams
         // No manual indexing needed
         
-        return finalProduct;
+        return normalizePublicMediaUrlsDeep(finalProduct);
     } catch (error) {
         // 9. Rollback (Hủy tất cả thao tác DB)
         await session.abortTransaction();
@@ -563,7 +567,7 @@ const updateProduct = async (id, updateData, retryCount = 0) => {
         // Atlas Search automatically updates via MongoDB change streams
         // No manual indexing needed
 
-        return result;
+        return normalizePublicMediaUrlsDeep(result);
 
     } catch (error) {
         console.error('\n❌ UPDATE ERROR:', error.message);
@@ -591,7 +595,7 @@ const addImagesToProduct = async (id, files) => {
     });
 
     if (!updated) throw new Error('Product not found');
-    return updated;
+    return normalizePublicMediaUrlsDeep(updated);
 };
 
 /**
@@ -605,7 +609,7 @@ const removeImagesFromProduct = async (id, urlsToRemove) => {
     });
 
     if (!updated) throw new Error('Product not found');
-    return updated;
+    return normalizePublicMediaUrlsDeep(updated);
 };
 
 // Hàm tự động cập nhật giá

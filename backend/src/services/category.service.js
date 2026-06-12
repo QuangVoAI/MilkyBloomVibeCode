@@ -1,6 +1,10 @@
 const categoryRepository = require('../repositories/category.repository.js');
 const productRepository = require('../repositories/product.repository.js');
-const { storeImages, removeImages } = require('../utils/image-storage.js');
+const {
+    storeImages,
+    removeImages,
+    normalizePublicMediaUrlsDeep,
+} = require('../utils/image-storage.js');
 
 const { default: slugify } = require('slugify');
 
@@ -22,24 +26,26 @@ const createCategory = async (data, imgFiles) => {
 
     const categoryData = { ...data, imageUrl };
 
-    return await categoryRepository.create(categoryData);
+    const category = await categoryRepository.create(categoryData);
+    return normalizePublicMediaUrlsDeep(category);
 };
 
 const getAllCategories = async (options = {}) => {
     const { limit } = options;
-    return await categoryRepository.findAll({ limit });
+    const categories = await categoryRepository.findAll({ limit });
+    return normalizePublicMediaUrlsDeep(categories);
 };
 
 const getCategoryById = async (id) => {
     const category = await categoryRepository.findById(id);
     if (!category) throw new Error('Category not found');
-    return category;
+    return normalizePublicMediaUrlsDeep(category);
 };
 
 const getCategoryBySlug = async (slug) => {
     const category = await categoryRepository.findBySlug(slug);
     if (!category) throw new Error('Category not found');
-    return category;
+    return normalizePublicMediaUrlsDeep(category);
 };
 
 const updateCategory = async (id, data, imgFiles) => {
@@ -78,7 +84,7 @@ const updateCategory = async (id, data, imgFiles) => {
     const updateData = { ...data, imageUrl: newImageUrl };
 
     const updated = await categoryRepository.update(id, updateData);
-    return updated;
+    return normalizePublicMediaUrlsDeep(updated);
 };
 
 const deleteCategory = async (id) => {

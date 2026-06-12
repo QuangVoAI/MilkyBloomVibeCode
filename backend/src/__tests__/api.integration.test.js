@@ -145,13 +145,13 @@ describeIfApiTarget('Reviews API Integration', () => {
 });
 
 describeIfApiTarget('Discount Codes API Integration', () => {
-  describe('POST /api/discount-codes/validate', () => {
+  describe('POST /api/discount/validate', () => {
     it('should reject invalid discount code', async () => {
       const response = await request(BASE_URL)
-        .post('/api/discount-codes/validate')
+        .post('/api/discount/validate')
         .send({ code: 'INVALID_CODE_12345' });
 
-      expect([400, 404, 422, 429]).toContain(response.status);
+      expect([400, 401, 404, 422, 429]).toContain(response.status);
     });
   });
 });

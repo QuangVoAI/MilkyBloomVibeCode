@@ -24,7 +24,6 @@ router.get('/usable', auth, voucherController.getUsableVouchers);
 
 // User thu thập voucher
 router.post("/collect", auth, voucherController.collectVoucher);
-1;
 // User xem voucher đã thu thập
 router.get('/mine', auth, voucherController.getMyVouchers);
 

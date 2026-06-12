@@ -5,6 +5,7 @@
  */
 const { uploadBuffer, deleteFile } = require('../libs/gridfs');
 const { getBackendUrl } = require('../config/runtime');
+const MEDIA_PATH_PREFIX = '/api/media/';
 
 const optimizeImage = async (buffer, mimetype, folder) => {
     if (!mimetype || !mimetype.startsWith('image/')) {
@@ -45,6 +46,72 @@ const buildImageStreamUrl = (fileId) => {
     const backendUrl = getBackendUrl();
     const path = `/api/media/images/${fileId.toString()}/stream`;
     return backendUrl ? `${backendUrl}${path}` : path;
+};
+
+const buildPublicMediaUrl = (path) => {
+    const normalizedPath = String(path || '').trim();
+    if (!normalizedPath.startsWith(MEDIA_PATH_PREFIX)) {
+        return normalizedPath;
+    }
+
+    const backendUrl = getBackendUrl();
+    return backendUrl ? `${backendUrl}${normalizedPath}` : normalizedPath;
+};
+
+const normalizePublicMediaUrl = (value) => {
+    if (typeof value !== 'string') return value;
+
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+
+    if (trimmed.startsWith(MEDIA_PATH_PREFIX)) {
+        return buildPublicMediaUrl(trimmed);
+    }
+
+    try {
+        const parsed = new URL(trimmed);
+        const isLocalHost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(
+            parsed.hostname,
+        );
+
+        if (isLocalHost && parsed.pathname.startsWith(MEDIA_PATH_PREFIX)) {
+            return buildPublicMediaUrl(`${parsed.pathname}${parsed.search}`);
+        }
+    } catch (_error) {
+        return value;
+    }
+
+    return value;
+};
+
+const normalizePublicMediaUrlsDeep = (value) => {
+    if (typeof value === 'string') {
+        return normalizePublicMediaUrl(value);
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => normalizePublicMediaUrlsDeep(item));
+    }
+
+    if (value && typeof value.toObject === 'function') {
+        return normalizePublicMediaUrlsDeep(value.toObject());
+    }
+
+    if (
+        value &&
+        typeof value === 'object' &&
+        !(value instanceof Date) &&
+        !Buffer.isBuffer(value)
+    ) {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, entry]) => [
+                key,
+                normalizePublicMediaUrlsDeep(entry),
+            ]),
+        );
+    }
+
+    return value;
 };
 
 const storeImages = async (files, folder = 'Uncategorized') => {
@@ -94,4 +161,6 @@ module.exports = {
     removeImages,
     optimizeImage,
     buildImageStreamUrl,
+    normalizePublicMediaUrl,
+    normalizePublicMediaUrlsDeep,
 };

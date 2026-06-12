@@ -1,4 +1,5 @@
 const Product = require('../models/product.model.js');
+const { normalizePublicMediaUrlsDeep } = require('../utils/image-storage.js');
 
 /**
  * MongoDB Atlas Search Service
@@ -292,7 +293,7 @@ const searchProducts = async (query = {}, user = null) => {
 
     const took = Date.now() - startTime;
 
-    return {
+    return normalizePublicMediaUrlsDeep({
         success: true,
         products,
         pagination: {
@@ -307,7 +308,7 @@ const searchProducts = async (query = {}, user = null) => {
             usingAtlasSearch: true,
             keyword: keyword || null
         }
-    };
+    });
 };
 
 /**
