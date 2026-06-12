@@ -1047,36 +1047,30 @@ const ChatWidget = () => {
           <button
             type="button"
             onClick={openChat}
-            className="chat-widget-launch group flex min-h-[192px] w-[min(92vw,360px)] flex-col justify-between gap-5 rounded-[30px] px-5 py-5 text-slate-900 sm:min-h-[216px] sm:w-[clamp(280px,24vw,360px)] sm:px-5 sm:py-5"
+            className="chat-widget-launch group flex aspect-[4/3] w-[min(92vw,320px)] flex-col justify-between rounded-[28px] px-4 py-4 text-slate-900 sm:aspect-[16/9] sm:w-[clamp(268px,20vw,360px)]"
             aria-label="Open MilkyBloom chat"
           >
           <div className="flex items-start justify-between gap-4">
-            <span className="chat-widget-launch__orb flex h-11 w-11 items-center justify-center rounded-full text-white sm:h-12 sm:w-12">
-              <MessageCircle className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
-            </span>
-            <span className="chat-widget-launch__eyebrow inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
-              AI support
+            <span className="chat-widget-launch__orb flex h-10 w-10 items-center justify-center rounded-full text-white">
+              <MessageCircle className="h-5 w-5" />
             </span>
           </div>
 
-          <div className="chat-widget-launch__body space-y-2.5 text-left">
-            <span className="chat-widget-launch__title block font-semibold text-slate-900">
+          <div className="space-y-2 text-left">
+            <span className="block max-w-[9.5ch] text-[clamp(2rem,4.2vw,2.8rem)] font-semibold leading-[0.92] tracking-[-0.085em] text-slate-950 [text-rendering:optimizeLegibility]">
               MilkyBloom Assistant
             </span>
             <span
               key={launchSloganIndex}
-              className="chat-widget-launch__slogan block max-w-[24ch] text-slate-600"
+              className="chat-widget-launch__slogan block max-w-[21ch] text-slate-600"
             >
               {LAUNCH_SLOGANS[launchSloganIndex]}
             </span>
           </div>
 
-          <div className="flex items-center justify-between gap-3 pt-0.5">
-            <span className="chat-widget-launch__hint text-[12px] font-medium text-slate-500">
-              Mở chat để hỏi ngay
-            </span>
-            <span className="chat-widget-launch__send inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/78 text-sky-500 shadow-[0_10px_18px_rgba(15,23,42,0.08)]">
-              <Send className="h-4 w-4 -rotate-12" />
+          <div className="flex items-center justify-end pt-1">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/72 text-sky-500 shadow-[0_10px_18px_rgba(15,23,42,0.08)]">
+              <Send className="h-3.5 w-3.5 -rotate-12" />
             </span>
           </div>
           </button>
@@ -1125,7 +1119,7 @@ const ChatWidget = () => {
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h2 className="truncate text-[17px] font-bold tracking-[-0.05em] text-slate-950 sm:text-[19px]">
+                    <h2 className="truncate text-[17px] font-semibold tracking-[-0.06em] text-slate-950 [text-rendering:optimizeLegibility] sm:text-[19px]">
                       MilkyBloom Assistant
                     </h2>
                     {getChatPhaseLabel(chatPhase) ? (

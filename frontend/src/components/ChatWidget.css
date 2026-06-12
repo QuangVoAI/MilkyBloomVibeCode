@@ -45,6 +45,7 @@
 }
 
 .chat-widget-launch {
+  font-family: -apple-system, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -182,53 +183,20 @@
 }
 
 .chat-widget-launch__slogan {
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(0.92rem, 2.2vw, 1.02rem);
+  font-weight: 400;
+  line-height: 1.42;
+  letter-spacing: -0.032em;
+  text-wrap: balance;
+  text-rendering: optimizeLegibility;
   animation:
     chat-widget-launch-slogan-in 320ms ease-out,
     chat-widget-launch-slogan-tilt 5.5s ease-in-out infinite;
 }
 
-.chat-widget-launch__body {
-  position: relative;
-  z-index: 1;
-}
-
-.chat-widget-launch__title {
-  font-size: clamp(1.9rem, 5.4vw, 3rem);
-  line-height: 0.94;
-  letter-spacing: -0.07em;
-  text-wrap: balance;
-  max-width: 10.5ch;
-}
-
-.chat-widget-launch__slogan {
-  font-size: clamp(0.95rem, 2.35vw, 1.12rem);
-  line-height: 1.45;
-  letter-spacing: -0.03em;
-  text-wrap: balance;
-}
-
-.chat-widget-launch__eyebrow {
-  position: relative;
-  z-index: 1;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(12px) saturate(130%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.88),
-    0 10px 22px rgba(15, 23, 42, 0.04);
-}
-
-.chat-widget-launch__hint {
-  letter-spacing: -0.02em;
-}
-
-.chat-widget-launch__send {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-}
-
 .chat-widget-sheet {
+  font-family: -apple-system, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -790,50 +758,8 @@
 }
 
 @media (max-width: 640px) {
-  .chat-widget-launch {
-    min-height: 176px;
-    gap: 1rem;
-    border-radius: 26px;
-  }
-
-  .chat-widget-launch__title {
-    max-width: 9.75ch;
-    font-size: clamp(1.75rem, 7vw, 2.45rem);
-  }
-
   .chat-widget-launch__slogan {
-    max-width: 19ch;
-    font-size: 0.98rem;
-    line-height: 1.4;
-  }
-}
-
-@media (max-width: 460px) {
-  .chat-widget-launch {
-    min-height: 164px;
-    padding: 1rem;
-    gap: 0.85rem;
-    border-radius: 24px;
-  }
-
-  .chat-widget-launch__title {
-    max-width: 8.8ch;
-    font-size: clamp(1.55rem, 8vw, 2.15rem);
-  }
-
-  .chat-widget-launch__slogan {
-    max-width: 18ch;
-    font-size: 0.92rem;
-    line-height: 1.36;
-  }
-
-  .chat-widget-launch__eyebrow {
-    padding: 0.45rem 0.6rem;
-    font-size: 0.62rem;
-    letter-spacing: 0.12em;
-  }
-
-  .chat-widget-launch__hint {
-    font-size: 0.75rem;
+    font-size: 0.94rem;
+    line-height: 1.38;
   }
 }
