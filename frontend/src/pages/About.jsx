@@ -12,9 +12,7 @@ Trong phiên bản triển khai hiện tại, MilkyBloom tập trung vào:
 • Danh mục sản phẩm, tìm kiếm và bộ lọc thông minh
 • Giỏ hàng, đặt hàng và xử lý thanh toán
 • Chat hỗ trợ sản phẩm, đơn hàng, vận chuyển và đổi trả
-• Hệ thống media, ảnh và video được tối ưu cho deploy thực tế
-
-Đây là một sản phẩm được tinh chỉnh liên tục để vừa đẹp, vừa chạy ổn định, vừa đủ linh hoạt cho demo, đồ án và triển khai thật.`;
+• Hệ thống media, ảnh và video được tối ưu cho deploy thực tế`;
 
 const ABOUT_HIGHLIGHTS = [
   {
@@ -196,7 +194,6 @@ const About = () => {
               <button
                 onClick={() => {
                   setSkip(true);
-                  setTyped(message);
                 }}
                 className="absolute top-3 right-3 z-10 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white/90 border border-white/70 rounded-full px-3 py-1 shadow-sm transition-colors"
               >
