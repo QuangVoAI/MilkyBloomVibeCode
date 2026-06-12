@@ -293,8 +293,8 @@
   height: fit-content;
   position: sticky;
   top: 1rem;
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
   transition: transform 0.3s ease, opacity 0.3s ease;
   transform-origin: left;
 }
