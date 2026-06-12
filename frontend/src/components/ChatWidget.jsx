@@ -1047,16 +1047,19 @@ const ChatWidget = () => {
           <button
             type="button"
             onClick={openChat}
-            className="chat-widget-launch group flex aspect-[4/3] w-[min(92vw,320px)] flex-col justify-between rounded-[28px] px-4 py-4 text-slate-900 sm:aspect-[16/9] sm:w-[clamp(268px,20vw,360px)]"
+            className="chat-widget-launch group flex min-h-[188px] w-[min(92vw,340px)] flex-col justify-between rounded-[30px] px-5 py-5 text-slate-900 sm:min-h-[220px] sm:w-[clamp(286px,22vw,360px)]"
             aria-label="Open MilkyBloom chat"
           >
           <div className="flex items-start justify-between gap-4">
-            <span className="chat-widget-launch__orb flex h-10 w-10 items-center justify-center rounded-full text-white">
-              <MessageCircle className="h-5 w-5" />
+            <span className="chat-widget-launch__orb flex h-11 w-11 items-center justify-center rounded-full text-white sm:h-12 sm:w-12">
+              <MessageCircle className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
+            </span>
+            <span className="chat-widget-launch__eyebrow inline-flex items-center rounded-full px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+              AI support
             </span>
           </div>
 
-          <div className="chat-widget-launch__title-wrap space-y-2 text-left">
+          <div className="chat-widget-launch__title-wrap space-y-2.5 text-left">
             <span className="chat-widget-launch__title block text-slate-950">
               <span className="chat-widget-launch__title-main block">
                 MilkyBloom
@@ -1067,15 +1070,18 @@ const ChatWidget = () => {
             </span>
             <span
               key={launchSloganIndex}
-              className="chat-widget-launch__slogan block max-w-[21ch] text-slate-600"
+              className="chat-widget-launch__slogan block max-w-[22ch] text-slate-600"
             >
               {LAUNCH_SLOGANS[launchSloganIndex]}
             </span>
           </div>
 
-          <div className="flex items-center justify-end pt-1">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/72 text-sky-500 shadow-[0_10px_18px_rgba(15,23,42,0.08)]">
-              <Send className="h-3.5 w-3.5 -rotate-12" />
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span className="chat-widget-launch__hint text-[12px] font-medium text-slate-500">
+              Chạm để bắt đầu
+            </span>
+            <span className="chat-widget-launch__send inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/78 text-sky-500 shadow-[0_10px_18px_rgba(15,23,42,0.08)]">
+              <Send className="h-4 w-4 -rotate-12" />
             </span>
           </div>
           </button>
@@ -1122,7 +1128,7 @@ const ChatWidget = () => {
                 <div className="chat-widget-orb mt-0.5 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.99)_0%,rgba(255,239,246,0.94)_20%,rgba(255,214,221,0.76)_44%,rgba(191,219,254,0.46)_70%,rgba(192,132,252,0.62)_88%,rgba(251,113,133,0.88)_100%)] text-white shadow-[0_14px_32px_rgba(251,113,133,0.2)] ring-2 ring-white/70 sm:h-12 sm:w-12">
                   <Sparkles className="h-[18px] w-[18px] drop-shadow-[0_1px_1px_rgba(255,255,255,0.42)]" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-1.5">
                     <h2 className="truncate text-[17px] font-semibold tracking-[-0.06em] text-slate-950 [text-rendering:optimizeLegibility] sm:text-[19px]">
                       MilkyBloom Assistant
@@ -1147,6 +1153,9 @@ const ChatWidget = () => {
                       )
                     ) : null}
                   </div>
+                  <p className="chat-widget-sheet__subtitle truncate text-[12px] text-slate-500 sm:text-[13px]">
+                    Hỏi sản phẩm, đơn hàng, đổi trả và hỗ trợ nhanh.
+                  </p>
                 </div>
               </div>
 
@@ -1154,7 +1163,7 @@ const ChatWidget = () => {
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-800"
+                  className="chat-widget-sheet__icon-button rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-800"
                   aria-label="Clear chat"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -1162,7 +1171,7 @@ const ChatWidget = () => {
                 <button
                   type="button"
                   onClick={closeChat}
-                  className="rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-800"
+                  className="chat-widget-sheet__icon-button rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100/80 hover:text-slate-800"
                   aria-label="Close chat"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -1199,8 +1208,8 @@ const ChatWidget = () => {
                     <div
                       className={`max-w-[92%] rounded-[24px] px-3.5 py-3 text-[14px] leading-[1.6] shadow-[0_12px_34px_rgba(15,23,42,0.08)] sm:max-w-[88%] sm:px-4 sm:text-[15px] ${
                         isUser
-                          ? "bg-slate-900 text-white shadow-[0_14px_28px_rgba(15,23,42,0.2)]"
-                          : "border border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.998),rgba(255,240,246,0.99))] text-slate-950 shadow-[0_14px_34px_rgba(15,23,42,0.1)]"
+                          ? "chat-widget-message--user bg-[linear-gradient(180deg,rgba(58,76,110,0.98),rgba(72,85,124,0.96))] text-white shadow-[0_18px_34px_rgba(71,85,105,0.22)]"
+                          : "chat-widget-message--assistant border border-rose-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.998),rgba(255,244,248,0.985))] text-slate-800 shadow-[0_14px_34px_rgba(15,23,42,0.08)]"
                       }`}
                     >
                       <div className="whitespace-pre-wrap">
@@ -1275,7 +1284,7 @@ const ChatWidget = () => {
                     }
                   }}
                   rows={2}
-                  placeholder={composerHint || "Type to MilkyBloom"}
+                  placeholder={composerHint || "Nhắn MilkyBloom để được hỗ trợ"}
                   className={`chat-widget-siri-input h-[68px] flex-1 resize-none rounded-[20px] px-3.5 py-3.5 text-[16px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_rgba(15,23,42,0.05)] outline-none transition placeholder:text-slate-600 focus:ring-2 sm:h-[82px] sm:rounded-[24px] sm:px-4 sm:py-4 sm:text-[18px] ${
                     activeLookupChip
                       ? "border-amber-300 bg-[linear-gradient(180deg,rgba(255,252,231,0.995),rgba(254,243,199,0.9))] focus:border-amber-400 focus:ring-amber-100/80"
