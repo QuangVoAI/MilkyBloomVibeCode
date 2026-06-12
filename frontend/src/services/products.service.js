@@ -1,6 +1,7 @@
 import { API_BASE_URL, ENDPOINTS } from './config';
 import { handleResponse, createUrl } from '../utils/apiHelpers';
 import { getAuthHeaders } from '../utils/authHelpers';
+import { getProductRouteId } from '../utils/productRouting';
 
 /**
  * Get all products with optional filters
@@ -39,10 +40,12 @@ const isValidObjectId = (str) => {
  * @returns {Promise<Object>}
  */
 export const getProductById = async (idOrSlug) => {
+  const normalizedIdOrSlug = getProductRouteId(idOrSlug);
+
   // Determine if we should use the ID or slug endpoint
-  const endpoint = isValidObjectId(idOrSlug)
-    ? `${API_BASE_URL}${ENDPOINTS.PRODUCTS}/${idOrSlug}`
-    : `${API_BASE_URL}${ENDPOINTS.PRODUCTS}/slug/${idOrSlug}`;
+  const endpoint = isValidObjectId(normalizedIdOrSlug)
+    ? `${API_BASE_URL}${ENDPOINTS.PRODUCTS}/${normalizedIdOrSlug}`
+    : `${API_BASE_URL}${ENDPOINTS.PRODUCTS}/slug/${normalizedIdOrSlug}`;
     
   const response = await fetch(endpoint, {
     method: 'GET',

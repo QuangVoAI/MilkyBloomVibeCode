@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ProductCard, ScrollArrows } from '@/components/common';
 import { ArrowRight } from 'lucide-react';
+import { buildProductPath } from '@/utils/productRouting';
 import './NewArrivalsSection.css';
 
 const NewArrivalsSection = ({ newProducts }) => {
@@ -23,7 +24,7 @@ const NewArrivalsSection = ({ newProducts }) => {
   };
 
   const handleProductClick = (product) => {
-    navigate(`/products/${product._id}`);
+    navigate(buildProductPath(product));
   };
 
   if (!newProducts || newProducts.length === 0) return null;

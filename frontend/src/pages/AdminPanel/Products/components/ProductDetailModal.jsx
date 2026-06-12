@@ -20,6 +20,7 @@ import ProductDescription from './ProductDescription'
 import ProductMetadata from './ProductMetadata'
 import ProductFormModal from './ProductFormModal'
 import VariantManager from './VariantManager'
+import { buildProductPath, getProductRouteId } from '@/utils/productRouting'
 
 const ProductDetailModal = ({ product, onClose, onEdit, onDelete }) => {
   const [showEditModal, setShowEditModal] = useState(false);
@@ -31,7 +32,7 @@ const ProductDetailModal = ({ product, onClose, onEdit, onDelete }) => {
     product: fullProduct, 
     loading: loadingVariants,
     refetch
-  } = useProductDetail(product._id);
+  } = useProductDetail(getProductRouteId(product));
 
   // Use the full product data if available, otherwise fallback to prop
   const productWithVariants = fullProduct || product;
@@ -62,7 +63,7 @@ const ProductDetailModal = ({ product, onClose, onEdit, onDelete }) => {
   };
 
   const handleViewProduct = () => {
-    navigate(`/products/${product._id}`);
+    navigate(buildProductPath(product));
   };
 
   return (

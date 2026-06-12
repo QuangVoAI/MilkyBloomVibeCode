@@ -84,6 +84,31 @@ const normalizePublicMediaUrl = (value) => {
     return value;
 };
 
+const normalizeBsonPrimitive = (value) => {
+    if (!value || typeof value !== 'object' || Buffer.isBuffer(value)) {
+        return null;
+    }
+
+    if (value._bsontype === 'ObjectId' && typeof value.toString === 'function') {
+        return value.toString();
+    }
+
+    if (
+        value.buffer &&
+        value.buffer.type === 'Buffer' &&
+        Array.isArray(value.buffer.data) &&
+        value.buffer.data.length === 12
+    ) {
+        return Buffer.from(value.buffer.data).toString('hex');
+    }
+
+    if (typeof value.$oid === 'string') {
+        return value.$oid;
+    }
+
+    return null;
+};
+
 const normalizePublicMediaUrlsDeep = (value) => {
     if (typeof value === 'string') {
         return normalizePublicMediaUrl(value);
@@ -95,6 +120,11 @@ const normalizePublicMediaUrlsDeep = (value) => {
 
     if (value && typeof value.toObject === 'function') {
         return normalizePublicMediaUrlsDeep(value.toObject());
+    }
+
+    const normalizedBsonPrimitive = normalizeBsonPrimitive(value);
+    if (normalizedBsonPrimitive) {
+        return normalizedBsonPrimitive;
     }
 
     if (

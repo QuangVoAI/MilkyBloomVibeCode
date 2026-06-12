@@ -5,6 +5,7 @@ import { searchProducts } from '@/services/products.service';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/utils/formatPrice';
+import { buildProductPath } from '@/utils/productRouting';
 import './AdvancedSearchBar.css';
 
 /**
@@ -99,9 +100,9 @@ const AdvancedSearchBar = ({
     setSearchResults([]);
   };
 
-  const handleProductClick = (productId) => {
+  const handleProductClick = (productOrId) => {
     saveRecentSearch(searchQuery);
-    navigate(`/products/${productId}`);
+    navigate(buildProductPath(productOrId));
     setIsExpanded(false);
     setSearchQuery('');
   };

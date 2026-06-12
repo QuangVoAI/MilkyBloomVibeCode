@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import HeroSlide from './HeroSlide';
 import HeroNavigation from './HeroNavigation';
 import { useCarouselAutoplay, useCarouselNavigation, useResponsive } from '@/hooks';
+import { buildProductPath } from '@/utils/productRouting';
 import './HeroSection.css';
 
 const HeroSection = ({ featuredProducts }) => {
@@ -59,7 +60,7 @@ const HeroSection = ({ featuredProducts }) => {
   const handleMobileShopNow = useCallback(() => {
     const currentProduct = featuredProducts[activeIndex];
     if (currentProduct) {
-      navigate(`/products/${currentProduct._id}`);
+      navigate(buildProductPath(currentProduct));
     }
   }, [activeIndex, featuredProducts, navigate]);
 

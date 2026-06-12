@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/utils/formatPrice';
 import { parsePrice } from '@/utils/priceUtils';
 import { normalizeImageUrl } from '@/utils/imageOptimizer';
+import { buildProductPath } from '@/utils/productRouting';
 import './CartItem.css';
 
 const CartItem = ({ item, onUpdateQuantity, onRemove }) => {
@@ -15,7 +16,7 @@ const CartItem = ({ item, onUpdateQuantity, onRemove }) => {
   
   // Get product name - product comes from backend transform
   const productName = product?.name || 'Unknown Product';
-  const productId = product?._id || product?.id;
+  const productPath = buildProductPath(product);
   
   // Use item.price first (already calculated by backend), then fallback to variant/product
   const price = parsePrice(item.price || variant?.price || product?.minPrice || product?.price || 0);
@@ -58,8 +59,8 @@ const CartItem = ({ item, onUpdateQuantity, onRemove }) => {
   };
 
   const handleNavigateToProduct = () => {
-    if (productId) {
-      navigate(`/products/${productId}`);
+    if (productPath) {
+      navigate(productPath);
     }
   };
 

@@ -6,6 +6,7 @@ import { ArrowRight, MoreHorizontal } from 'lucide-react';
 import { ProductCard, ScrollArrows } from '@/components/common';
 import { getCategories } from '@/services/categories.service';
 import { getProducts } from '@/services/products.service';
+import { buildProductPath } from '@/utils/productRouting';
 import './CategorizedProductsSection.css';
 
 const CategorizedProductsSection = () => {
@@ -159,7 +160,7 @@ const CategorizedProductsSection = () => {
                     showBadges={false}
                     showCategory={false}
                     showQuickView={false}
-                    onClick={() => navigate(`/products/${product._id}`)}
+                    onClick={() => navigate(buildProductPath(product))}
                   />
                 </div>
               ))}

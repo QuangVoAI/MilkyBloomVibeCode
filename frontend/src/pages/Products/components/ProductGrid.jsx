@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ProductCard from '@/components/common/ProductCard';
 import { ErrorMessage, Pagination, LoadingSpinner } from '@/components/common';
 import { Button } from '@/components/ui/button';
+import { buildProductPath } from '@/utils/productRouting';
 
 const ProductGrid = ({
   products,
@@ -17,7 +18,7 @@ const ProductGrid = ({
   const navigate = useNavigate();
 
   const handleProductClick = (product) => {
-    navigate(`/products/${product._id}`);
+    navigate(buildProductPath(product));
   };
 
   if (error) {
