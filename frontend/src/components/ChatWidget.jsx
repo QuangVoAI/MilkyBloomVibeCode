@@ -1130,7 +1130,7 @@ const ChatWidget = () => {
                 </div>
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-1.5">
-                    <h2 className="truncate text-[17px] font-semibold tracking-[-0.06em] text-slate-950 [text-rendering:optimizeLegibility] sm:text-[19px]">
+                    <h2 className="truncate text-[19px] font-semibold tracking-[-0.06em] text-slate-950 [text-rendering:optimizeLegibility] sm:text-[21px]">
                       MilkyBloom Assistant
                     </h2>
                     {getChatPhaseLabel(chatPhase) ? (
@@ -1153,7 +1153,7 @@ const ChatWidget = () => {
                       )
                     ) : null}
                   </div>
-                  <p className="chat-widget-sheet__subtitle truncate text-[12px] text-slate-500 sm:text-[13px]">
+                  <p className="chat-widget-sheet__subtitle truncate text-[13.5px] text-slate-500 sm:text-[15px]">
                     Hỏi sản phẩm, đơn hàng, đổi trả và hỗ trợ nhanh.
                   </p>
                 </div>
@@ -1206,7 +1206,7 @@ const ChatWidget = () => {
                     className={`chat-widget-message flex ${isUser ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[92%] rounded-[24px] px-3.5 py-3 text-[14px] leading-[1.6] shadow-[0_12px_34px_rgba(15,23,42,0.08)] sm:max-w-[88%] sm:px-4 sm:text-[15px] ${
+                      className={`max-w-[92%] rounded-[24px] px-3.5 py-3.5 text-[15.5px] leading-[1.7] shadow-[0_12px_34px_rgba(15,23,42,0.08)] sm:max-w-[88%] sm:px-4 sm:py-4 sm:text-[16.5px] ${
                         isUser
                           ? "chat-widget-message--user bg-[linear-gradient(180deg,rgba(58,76,110,0.98),rgba(72,85,124,0.96))] text-white shadow-[0_18px_34px_rgba(71,85,105,0.22)]"
                           : "chat-widget-message--assistant border border-rose-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.998),rgba(255,244,248,0.985))] text-slate-800 shadow-[0_14px_34px_rgba(15,23,42,0.08)]"
