@@ -189,21 +189,23 @@
 
 .chat-widget-launch__title {
   max-width: 10ch;
-  line-height: 0.9;
+  line-height: 0.92;
+  color: rgba(51, 65, 85, 0.92);
   text-rendering: optimizeLegibility;
 }
 
 .chat-widget-launch__title-main {
-  font-size: clamp(1.82rem, 4vw, 2.55rem);
-  font-weight: 600;
-  letter-spacing: -0.075em;
+  font-size: clamp(1.76rem, 3.9vw, 2.42rem);
+  font-weight: 560;
+  letter-spacing: -0.06em;
+  color: rgba(51, 65, 85, 0.9);
 }
 
 .chat-widget-launch__title-sub {
-  font-size: clamp(1.7rem, 3.55vw, 2.35rem);
-  font-weight: 520;
-  letter-spacing: -0.07em;
-  color: rgba(15, 23, 42, 0.94);
+  font-size: clamp(1.62rem, 3.35vw, 2.18rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  color: rgba(71, 85, 105, 0.82);
 }
 
 .chat-widget-launch__slogan {
@@ -787,11 +789,11 @@
   }
 
   .chat-widget-launch__title-main {
-    font-size: clamp(1.65rem, 7vw, 2.1rem);
+    font-size: clamp(1.58rem, 6.6vw, 1.98rem);
   }
 
   .chat-widget-launch__title-sub {
-    font-size: clamp(1.54rem, 6.3vw, 1.95rem);
+    font-size: clamp(1.46rem, 5.9vw, 1.82rem);
   }
 
   .chat-widget-launch__slogan {
