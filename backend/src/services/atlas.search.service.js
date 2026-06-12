@@ -1,5 +1,11 @@
+const mongoose = require('mongoose');
 const Product = require('../models/product.model.js');
 const { normalizePublicMediaUrlsDeep } = require('../utils/image-storage.js');
+
+const isValidCategoryFilter = (value) =>
+    typeof value === 'string' &&
+    value !== '[object Object]' &&
+    mongoose.Types.ObjectId.isValid(value);
 
 /**
  * MongoDB Atlas Search Service
@@ -100,7 +106,7 @@ const searchProducts = async (query = {}, user = null) => {
     }
 
     // Category filter
-    if (categoryId && categoryId !== 'all') {
+    if (categoryId && categoryId !== 'all' && isValidCategoryFilter(categoryId)) {
         matchConditions.categoryId = categoryId;
     }
 

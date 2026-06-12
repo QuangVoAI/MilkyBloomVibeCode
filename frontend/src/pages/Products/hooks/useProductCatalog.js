@@ -2,6 +2,19 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getProducts, getProductCategories } from '@/services/products.service';
 
+const normalizeCategoryFilterValue = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === '[object Object]') return '';
+    return trimmed;
+  }
+  if (typeof value === 'object') {
+    return value._id || value.id || value.slug || '';
+  }
+  return String(value);
+};
+
 /**
  * Custom hook for managing product catalog state and data fetching
  * 
@@ -30,7 +43,7 @@ export const useProductCatalog = () => {
   // Get filters from URL (memoized to prevent unnecessary re-renders)
   const filters = useMemo(() => ({
     search: searchParams.get('search') || '',
-    category: searchParams.get('category') || '',
+    category: normalizeCategoryFilterValue(searchParams.get('category') || ''),
     brand: searchParams.get('brand') || '',
     minPrice: searchParams.get('minPrice') || '',
     maxPrice: searchParams.get('maxPrice') || '',
@@ -38,6 +51,21 @@ export const useProductCatalog = () => {
     sortBy: searchParams.get('sortBy') || 'createdAt',
     sortOrder: searchParams.get('sortOrder') || 'desc',
   }), [searchParams]);
+
+  useEffect(() => {
+    const rawCategory = searchParams.get('category');
+    const normalizedCategory = normalizeCategoryFilterValue(rawCategory);
+
+    if (rawCategory && normalizedCategory !== rawCategory) {
+      const nextParams = new URLSearchParams(searchParams);
+      if (normalizedCategory) {
+        nextParams.set('category', normalizedCategory);
+      } else {
+        nextParams.delete('category');
+      }
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Fetch products with debouncing and abort control
   const abortControllerRef = useRef(null);
@@ -110,9 +138,11 @@ export const useProductCatalog = () => {
   // Update filter in URL
   const handleFilterChange = useCallback((filterName, value) => {
     const newParams = new URLSearchParams(searchParams);
+    const normalizedValue =
+      filterName === 'category' ? normalizeCategoryFilterValue(value) : value;
     
-    if (value) {
-      newParams.set(filterName, value);
+    if (normalizedValue) {
+      newParams.set(filterName, normalizedValue);
     } else {
       newParams.delete(filterName);
     }
@@ -126,8 +156,11 @@ export const useProductCatalog = () => {
     const newParams = new URLSearchParams(searchParams);
     
     Object.entries(filtersObj).forEach(([key, value]) => {
-      if (value) {
-        newParams.set(key, value);
+      const normalizedValue =
+        key === 'category' ? normalizeCategoryFilterValue(value) : value;
+
+      if (normalizedValue) {
+        newParams.set(key, normalizedValue);
       } else {
         newParams.delete(key);
       }

@@ -9,6 +9,11 @@ const {
 const { default: slugify } = require('slugify');
 const { searchProducts } = require('./atlas.search.service.js');
 
+const isValidCategoryFilter = (value) =>
+    typeof value === 'string' &&
+    value !== '[object Object]' &&
+    mongoose.Types.ObjectId.isValid(value);
+
 /**
  * Lấy danh sách sản phẩm (có lọc + phân trang)
  * Uses Atlas Search for keyword search, MongoDB for filtering
@@ -38,7 +43,7 @@ const getAllProducts = async (query, user = null) => {
 
     // --- Lọc theo Category ---
     const categoryId = params.get('categoryId') || null;
-    if (categoryId) {
+    if (isValidCategoryFilter(categoryId)) {
         filter.categoryId = categoryId;
     }
 
