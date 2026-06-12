@@ -1056,9 +1056,14 @@ const ChatWidget = () => {
             </span>
           </div>
 
-          <div className="space-y-2 text-left">
-            <span className="block max-w-[9.5ch] text-[clamp(2rem,4.2vw,2.8rem)] font-semibold leading-[0.92] tracking-[-0.085em] text-slate-950 [text-rendering:optimizeLegibility]">
-              MilkyBloom Assistant
+          <div className="chat-widget-launch__title-wrap space-y-2 text-left">
+            <span className="chat-widget-launch__title block text-slate-950">
+              <span className="chat-widget-launch__title-main block">
+                MilkyBloom
+              </span>
+              <span className="chat-widget-launch__title-sub block">
+                Assistant
+              </span>
             </span>
             <span
               key={launchSloganIndex}
