@@ -332,7 +332,7 @@ const toggleHelpful = async (req, res, next) => {
 const getReviewStats = async (req, res, next) => {
     try {
         const { productId } = req.params;
-        const stats = await reviewService.getReviewStats(productId);
+        const stats = await ReviewService.getReviewStats(productId);
         
         res.status(200).json({
             success: true,
