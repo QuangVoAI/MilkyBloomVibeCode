@@ -1646,7 +1646,7 @@ const ChatWidget = () => {
                       {isAssistant && message.meta?.catalogData && renderCatalogCards(message.meta.catalogData)}
                       {isAssistant && renderFollowupActions(message)}
                       {isAssistant && message.meta?.comparison && <ComparisonCard comparison={message.meta.comparison} />}
-                      {isAssistant && message.meta?.cartAdded && renderCartAddedCard(message.meta)}
+                      {isAssistant && (message.meta?.cartAdded || message.meta?.checkout_result?.cartView) && renderCartAddedCard({ cartAdded: true })}
                       {isTyping && (
                         <div className="mt-2 flex items-center gap-1.5">
                           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:-0.2s]" />

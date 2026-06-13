@@ -783,6 +783,15 @@ def _missing_guest_fields(guest_info: dict) -> list[str]:
     return missing
 
 
+def _is_view_cart_request(question: str) -> bool:
+    q = (question or "").lower()
+    if "xem" in q and ("giỏ" in q or "cart" in q):
+        return True
+    if "giỏ hàng của tôi có gì" in q or "trong giỏ có gì" in q:
+        return True
+    return False
+
+
 def start_checkout(question: str, history: list[dict] | None = None, shop_context: dict | None = None) -> dict:
     # Backward compatibility: start_checkout(question, shop_context)
     if shop_context is None and isinstance(history, dict):
@@ -790,6 +799,13 @@ def start_checkout(question: str, history: list[dict] | None = None, shop_contex
         history = None
 
     ctx = shop_context or {}
+    
+    if _is_view_cart_request(question):
+        return {
+            "ok": False,
+            "message": "Giỏ hàng của bạn đây nhé.",
+            "cartView": True,
+        }
     if _is_catalog_recommendation_request(question):
         return {
             "ok": False,
