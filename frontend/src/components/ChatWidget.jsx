@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   CreditCard,
+  ChevronDown,
   Eye,
   Hash,
   Mail,
@@ -256,9 +257,59 @@ const normalizeCatalogCards = (catalogInfo) => {
     .slice(0, 4);
 };
 
+const CartChip = ({ cartSummary, items, onCheckout, fallbackPrice }) => {
+  const [expanded, setExpanded] = useState(false);
+  const count = cartSummary?.itemCount > 0 ? cartSummary.itemCount : 1;
+  const price = cartSummary?.subtotal > 0 ? cartSummary.subtotal : fallbackPrice;
+
+  return (
+    <div className="mt-2 animate-in slide-in-from-bottom-2 fade-in duration-300 w-fit max-w-[90%] flex flex-col gap-2">
+      <div className="overflow-hidden rounded-full border border-emerald-200 bg-emerald-50/90 shadow-sm flex items-center gap-3 pr-1.5 pl-3 py-1.5 w-fit">
+        <button 
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2 text-[13px] font-medium text-emerald-800 hover:text-emerald-900 transition-colors"
+        >
+          <ShoppingCart className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span className="truncate">Giỏ hàng ({count}): <strong className="font-bold">{formatVnd(price)}</strong></span>
+          <ChevronDown className={`h-4 w-4 text-emerald-600 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+        <button
+          type="button"
+          onClick={onCheckout}
+          className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white transition hover:bg-emerald-700 shadow-sm"
+        >
+          Thanh toán
+        </button>
+      </div>
+
+      {expanded && items && items.length > 0 && (
+        <div className="bg-white border border-emerald-100 rounded-xl p-3 shadow-md max-w-xs animate-in slide-in-from-top-2">
+          <h4 className="text-[12px] font-bold text-slate-700 mb-2 border-b pb-1 border-emerald-100">Chi tiết giỏ hàng</h4>
+          <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
+            {items.map((item, idx) => (
+              <div key={idx} className="flex justify-between items-start gap-3 text-[12px]">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-800 truncate" title={item.product?.name}>{item.product?.name}</div>
+                  <div className="text-slate-500 text-[11px] truncate">
+                    {Array.isArray(item.variant?.attributes) ? item.variant.attributes.map(a => a.value).join(', ') : item.variant?.sku || ''}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-slate-700 font-semibold">{item.quantity} x {formatVnd(item.price)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ChatWidget = () => {
   const navigate = useNavigate();
-  const { addItem, cartSummary } = useCartContext();
+  const { addItem, cartSummary, items } = useCartContext();
   const [open, setOpen] = useState(false);
   const [isPresented, setIsPresented] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -295,24 +346,13 @@ const ChatWidget = () => {
 
   const renderCartAddedCard = (cartMeta) => {
     if (!cartMeta?.cartAdded) return null;
-    
-    const count = cartSummary?.itemCount > 0 ? cartSummary.itemCount : 1;
-    const price = cartSummary?.subtotal > 0 ? cartSummary.subtotal : (cartMeta.product?.price || 0);
-
     return (
-      <div className="mt-2 animate-in slide-in-from-bottom-2 fade-in duration-300 w-fit max-w-[90%] overflow-hidden rounded-full border border-emerald-200 bg-emerald-50/90 shadow-sm flex items-center gap-3 pr-1.5 pl-3 py-1.5">
-        <div className="flex items-center gap-2 text-[13px] font-medium text-emerald-800">
-          <ShoppingCart className="h-4 w-4 text-emerald-600 shrink-0" />
-          <span className="truncate">Giỏ hàng ({count}): <strong className="font-bold">{formatVnd(price)}</strong></span>
-        </div>
-        <button
-          type="button"
-          onClick={() => closeChatAndNavigate("/checkout")}
-          className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white transition hover:bg-emerald-700 shadow-sm"
-        >
-          Thanh toán
-        </button>
-      </div>
+      <CartChip 
+        cartSummary={cartSummary} 
+        items={items} 
+        onCheckout={() => closeChatAndNavigate("/checkout")}
+        fallbackPrice={cartMeta.product?.price || 0}
+      />
     );
   };
 
