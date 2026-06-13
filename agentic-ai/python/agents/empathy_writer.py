@@ -353,7 +353,7 @@ def _build_catalog_context(catalog_info: dict) -> str:
     )
 
 
-def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compensation="", order_info=None, action_result=None, action_intent=None, catalog_info=None, session_summary_text=""):
+def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, user_vibe="neutral", compensation="", order_info=None, action_result=None, action_intent=None, catalog_info=None, comparison_info=None, session_summary_text=""):
     """Build prompt cho empathy response."""
     sentiment_context = ""
     if sentiment:
@@ -365,6 +365,16 @@ def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compen
         }
         sentiment_context = f"\nMỨC ĐỘ CẢM XÚC: {sentiment} (score: {score})\nHƯỚNG DẪN: {sentiment_guide.get(sentiment, '')}\n"
 
+    vibe_context = ""
+    if user_vibe:
+        vibe_guide = {
+            "genz": "Khách dùng từ ngữ teen, genZ (haha, hihi, k, nha, chóp, u là trời). Bạn HÃY bắt chước phong cách này: dùng từ dễ thương, nhiều emoji, xưng 'mình-bạn' hoặc 'shop-cậu'.",
+            "formal": "Khách nói chuyện nghiêm túc, trang trọng. Bạn HÃY giữ thái độ chuyên nghiệp, lịch sự, rõ ràng, không đùa cợt.",
+            "short": "Khách nói ngắn gọn, cộc lốc. Bạn HÃY trả lời NHANH, RÕ RÀNG, ĐI THẲNG VÀO VẤN ĐỀ, không dài dòng.",
+            "neutral": "Khách nói chuyện bình thường. Trả lời thân thiện."
+        }
+        vibe_context = f"\nPHONG CÁCH CỦA KHÁCH: {user_vibe}\nHƯỚNG DẪN BẮT CHƯỚC (VIBE MIRRORING): {vibe_guide.get(user_vibe, '')}\n"
+
     compensation_context = ""
     if compensation:
         compensation_context = f"\nBỒI THƯỜNG ÁP DỤNG: {compensation}\nHÃY ĐỀ XUẤT BỒI THƯỜNG CỤ THỂ NÀY CHO KHÁCH.\n"
@@ -375,6 +385,11 @@ def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compen
 
     order_context = _build_order_context(order_info or {})
     catalog_context = _build_catalog_context(catalog_info or {})
+    
+    bundling_context = ""
+    if catalog_info and catalog_info.get("found"):
+        bundling_context = "\nCHIẾN LƯỢC UPSELL (SMART BUNDLING): Khách đang xem/mua sản phẩm. HÃY khéo léo gợi ý khách mua thêm phụ kiện hoặc sản phẩm liên quan (ví dụ: hộp mica, móc khóa, sản phẩm cùng bộ) nếu có thể.\n"
+
     action_context = _build_action_context(action_result or {}, action_intent or {})
 
     if not evidence_text or len(evidence_text) < 30:
@@ -382,8 +397,10 @@ def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compen
             f"KHÁCH HÀNG GỬI:\n{question}\n\n"
             f"{session_context}"
             f"{sentiment_context}"
+            f"{vibe_context}"
             f"{order_context}"
             f"{catalog_context}"
+            f"{bundling_context}"
             f"{compensation_context}\n"
             f"CHÍNH SÁCH: Không tìm thấy chính sách cụ thể. "
             f"Hãy xử lý linh hoạt, thấu cảm và đề nghị chuyển lên cấp trên nếu cần.\n"
@@ -415,8 +432,10 @@ def _build_empathy_prompt(question, evidence_text, sentiment="", score=0, compen
         f"KHÁCH HÀNG GỬI:\n{question}\n\n"
         f"{session_context}"
         f"{sentiment_context}"
+        f"{vibe_context}"
         f"{order_context}"
         f"{catalog_context}"
+        f"{bundling_context}"
         f"{compensation_context}\n"
         f"{closing}"
     )
@@ -457,28 +476,24 @@ async def generate_empathy_response(question, evidence_text, sentiment="", score
 
 
 async def generate_empathy_streaming(
-    question, evidence_text,
-    sentiment="", score=0,
+    question,
+    evidence_text,
+    sentiment="",
+    score=0,
+    user_vibe="neutral",
     compensation="",
     order_info=None,
     action_result=None,
     action_intent=None,
     catalog_info=None,
+    comparison_info=None,
     session_summary_text="",
     stream_callback=None,
 ):
     """Streaming empathy response."""
     prompt = _build_empathy_prompt(
-        question,
-        evidence_text,
-        sentiment,
-        score,
-        compensation,
-        order_info,
-        action_result,
-        action_intent,
-        catalog_info=catalog_info,
-        session_summary_text=session_summary_text,
+        question, evidence_text, sentiment, score, user_vibe, compensation,
+        order_info, action_result, action_intent, catalog_info, comparison_info, session_summary_text
     )
     
     messages = [

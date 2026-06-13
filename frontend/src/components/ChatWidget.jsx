@@ -307,6 +307,50 @@ const CartChip = ({ cartSummary, items, onCheckout, fallbackPrice }) => {
   );
 };
 
+const ComparisonCard = ({ comparison }) => {
+  if (!comparison || !comparison.productA || !comparison.productB) return null;
+  const { productA, productB } = comparison;
+
+  return (
+    <div className="mt-3 animate-in slide-in-from-bottom-2 fade-in duration-300 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm w-full max-w-[280px]">
+      <div className="bg-blue-50 px-3 py-2 text-[13px] font-semibold text-blue-700 flex items-center gap-1.5 border-b border-blue-100">
+        <Sparkles className="h-4 w-4" />
+        <span>So sánh sản phẩm</span>
+      </div>
+      <div className="flex divide-x divide-slate-100">
+        <div className="flex-1 p-2 flex flex-col gap-2">
+          <div className="aspect-square rounded-xl bg-slate-50 border border-slate-100 overflow-hidden relative group">
+            <img src={normalizeImageUrl(productA.image)} alt={productA.name} className="w-full h-full object-cover" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-800 text-[12px] line-clamp-2" title={productA.name}>{productA.name}</h4>
+            <div className="text-rose-600 font-bold text-[13px] mt-1">{formatVnd(productA.price)}</div>
+          </div>
+          {productA.features && (
+            <ul className="text-[11px] text-slate-600 space-y-1 list-disc pl-3 mt-1">
+              {productA.features.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          )}
+        </div>
+        <div className="flex-1 p-2 flex flex-col gap-2">
+          <div className="aspect-square rounded-xl bg-slate-50 border border-slate-100 overflow-hidden relative group">
+            <img src={normalizeImageUrl(productB.image)} alt={productB.name} className="w-full h-full object-cover" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-800 text-[12px] line-clamp-2" title={productB.name}>{productB.name}</h4>
+            <div className="text-rose-600 font-bold text-[13px] mt-1">{formatVnd(productB.price)}</div>
+          </div>
+          {productB.features && (
+            <ul className="text-[11px] text-slate-600 space-y-1 list-disc pl-3 mt-1">
+              {productB.features.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ChatWidget = () => {
   const navigate = useNavigate();
   const { addItem, cartSummary, items } = useCartContext();
@@ -1414,6 +1458,7 @@ const ChatWidget = () => {
                         renderProductCards(message.meta?.catalogProducts || [])}
                       {isAssistant && renderAssistantActionButtons(message)}
                       {isAssistant && renderFollowupActions(message)}
+                      {isAssistant && message.meta?.comparison && <ComparisonCard comparison={message.meta.comparison} />}
                       {isAssistant && message.meta?.cartAdded && renderCartAddedCard(message.meta)}
                       {isTyping && (
                         <div className="mt-2 flex items-center gap-1.5">

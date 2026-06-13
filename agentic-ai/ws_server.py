@@ -250,6 +250,7 @@ async def ws_entrypoint(request: web.Request) -> web.StreamResponse:
             "email_address": final_state.get("email_address", ""),
             "order_info": final_state.get("order_info", {}),
             "catalog_info": final_state.get("catalog_info", {}),
+            "comparison": final_state.get("comparison_info", {}),
             "checkout_result": final_state.get("checkout_result", {}),
             "ticket_info": final_state.get("ticket_info", {}),
             "suggested_actions": final_state.get("suggested_actions", []),

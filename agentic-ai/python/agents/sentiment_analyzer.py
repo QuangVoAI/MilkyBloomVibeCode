@@ -15,6 +15,7 @@ from utils.console import console
 
 # Singleton centroids
 _centroids = None
+_vibe_centroids = None
 
 SENTIMENT_CLUSTERS = {
     "toxic": [
@@ -45,11 +46,28 @@ SENTIMENT_CLUSTERS = {
     ],
 }
 
+VIBE_CLUSTERS = {
+    "genz": [
+        "hihi", "haha", "k", "đc k", "ạ", "nha", "nhé",
+        "quá trời", "đỉnh", "chóp", "xịn", "sao á", "nè",
+        "okela", "ok nha", "dạ", "chốt đơn", "u là trời"
+    ],
+    "formal": [
+        "xin chào", "kính gửi", "vui lòng", "tôi muốn",
+        "thông tin", "chi tiết", "cảm ơn bạn", "tư vấn giúp tôi",
+        "địa chỉ", "trân trọng", "báo giá"
+    ],
+    "short": [
+        "ok", "done", "xong", "rồi", "giá", "nhiêu",
+        "ib", "mua", "còn k", "hết r", "đúng", "không"
+    ]
+}
+
 
 def _ensure_centroids():
-    """Precompute centroids cho 4 sentiment clusters."""
-    global _centroids
-    if _centroids is not None:
+    """Precompute centroids cho 4 sentiment clusters và vibes."""
+    global _centroids, _vibe_centroids
+    if _centroids is not None and _vibe_centroids is not None:
         return
 
     model = get_embed_model()
@@ -62,13 +80,20 @@ def _ensure_centroids():
         centroid /= np.linalg.norm(centroid)
         _centroids[label] = centroid
 
-    console.print("[dim]  Sentiment: centroids ready[/]")
+    _vibe_centroids = {}
+    for label, keywords in VIBE_CLUSTERS.items():
+        embeddings = model.encode(keywords, normalize_embeddings=True, batch_size=64)
+        centroid = np.mean(embeddings, axis=0)
+        centroid /= np.linalg.norm(centroid)
+        _vibe_centroids[label] = centroid
+
+    console.print("[dim]  Sentiment & Vibe: centroids ready[/]")
 
 
-def analyze_sentiment(text: str) -> tuple[str, float]:
+def analyze_sentiment_and_vibe(text: str) -> tuple[str, float, str]:
     """
-    Phân tích cảm xúc từ text.
-    Returns: (sentiment_label, confidence_score)
+    Phân tích cảm xúc và vibe từ text.
+    Returns: (sentiment_label, confidence_score, vibe_label)
     """
     _ensure_centroids()
 
@@ -89,7 +114,13 @@ def analyze_sentiment(text: str) -> tuple[str, float]:
     else:
         confidence = 0.5
 
-    return best_label, round(confidence, 3)
+    vibe_scores = {}
+    for label, centroid in _vibe_centroids.items():
+        vibe_scores[label] = float(np.dot(q_emb, centroid))
+    
+    best_vibe = max(vibe_scores, key=vibe_scores.get)
+
+    return best_label, round(confidence, 3), best_vibe
 
 
 def sentiment_analyzer_node(state: AgentState) -> dict:
@@ -97,16 +128,17 @@ def sentiment_analyzer_node(state: AgentState) -> dict:
     t0 = time.time()
     question = state["question"]
 
-    sentiment, score = analyze_sentiment(question)
+    sentiment, score, vibe = analyze_sentiment_and_vibe(question)
 
     elapsed = int((time.time() - t0) * 1000)
     console.print(
-        f"[dim]  Sentiment: {sentiment} (score={score:.3f}) ({elapsed}ms)[/]"
+        f"[dim]  Sentiment: {sentiment} (score={score:.3f}), Vibe: {vibe} ({elapsed}ms)[/]"
     )
 
     return {
         "sentiment": sentiment,
         "sentiment_score": score,
+        "user_vibe": vibe,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "sentiment": sentiment,

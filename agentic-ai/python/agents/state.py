@@ -28,6 +28,7 @@ class AgentState(TypedDict, total=False):
     # --- Sentiment Analysis Output ---
     sentiment: str              # "toxic" | "frustrated" | "disappointed" | "neutral"
     sentiment_score: float      # 0.0 - 1.0
+    user_vibe: str              # e.g., "genz", "formal", "friendly", "angry", "short"
 
     # --- Retrieval Output ---
     evidence: list[dict]        # Retrieved & reranked policy chunks
@@ -35,6 +36,7 @@ class AgentState(TypedDict, total=False):
     policy_context: str         # Chính sách áp dụng cụ thể
     compensation: str           # Gợi ý bồi thường từ RAG
     catalog_info: dict          # Live catalog lookup result
+    comparison_info: dict       # Side-by-side comparison info if requested
     checkout_result: dict       # Checkout helper result
     ticket_info: dict           # Support ticket creation/lookup result
 

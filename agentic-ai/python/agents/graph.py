@@ -2387,6 +2387,7 @@ async def empathy_writer_node(state: AgentState) -> dict:
             evidence_text=evidence_text,
             sentiment=sentiment,
             score=sentiment_score,
+            user_vibe=state.get("user_vibe", "neutral"),
             compensation=compensation,
             order_info=order_info,
             action_result=action_result,
