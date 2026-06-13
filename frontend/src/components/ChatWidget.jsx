@@ -709,6 +709,7 @@ const ChatWidget = () => {
                 actionConfidence: Number(data.action_confidence || 0),
                 actionMethod: data.action_method || "",
                 actionResult: data.action_result || {},
+                checkout_result: data.checkout_result || {},
                 pendingActionIntent: data.pending_action_intent || {},
                 clarificationNeeded: Boolean(data.clarification_needed),
                 actionButtons: data.action_buttons || data.actionButtons || [],

@@ -130,6 +130,8 @@ CHECKOUT_KEYWORDS = [
     "đặt hàng luôn",
     "xác nhận đặt hàng",
     "tiếp tục đặt hàng",
+    "thanh toán",
+    "vào giỏ",
 ]
 
 PURCHASE_ACTION_KEYWORDS = [
@@ -524,6 +526,9 @@ def _is_catalog_advice_request(text: str) -> bool:
     if not ascii_negated_checkout and ascii_explicit_checkout:
         return False
 
+    q_clean = q.replace("đơn hàng", "").replace("giỏ hàng", "").replace("mua hàng", "").replace("khách hàng", "").replace("ngân hàng", "")
+    q_clean = q_clean.replace("đặt hàng", "").replace("nhận hàng", "").replace("giao hàng", "").replace("trả hàng", "")
+
     negated_checkout = any(
         marker in q
         for marker in (
@@ -566,15 +571,15 @@ def _is_catalog_advice_request(text: str) -> bool:
     if not negated_checkout and any(marker in q for marker in explicit_checkout_markers):
         return False
 
-    has_hint = any(keyword in q for keyword in CATALOG_RECOMMENDATION_HINTS) or any(
-        keyword in q for keyword in ("recommend", "suggest", "advice", "advise", "tham khảo", "tham khao")
+    has_hint = any(keyword in q_clean for keyword in CATALOG_RECOMMENDATION_HINTS) or any(
+        keyword in q_clean for keyword in ("recommend", "suggest", "advice", "advise", "tham khảo", "tham khao")
     )
     has_generic_item = any(
-        term in q
-        for term in ("quà", "quà tặng", "đồ chơi", "sản phẩm", "món", "món đồ", "món hàng", "sản phẩm", "hàng", "mua", "hàng", "gift", "toy", "item")
+        term in q_clean
+        for term in ("quà", "quà tặng", "đồ chơi", "sản phẩm", "món", "món đồ", "món hàng", "hàng", "gift", "toy", "item")
     )
     has_product_clue = any(
-        term in q
+        term in q_clean
         for term in (
             "stardust",
             "picnic",
@@ -2260,6 +2265,9 @@ def _build_next_step_suggestion(state: AgentState) -> str:
     checkout_result = state.get("checkout_result") or {}
     session_summary = state.get("session_summary") or {}
     viewed_products = session_summary.get("viewed_products") or []
+
+    if checkout_result.get("cartView"):
+        return ""
 
     if capability == "catalog":
         if catalog_info.get("found"):

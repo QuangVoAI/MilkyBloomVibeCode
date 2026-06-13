@@ -498,6 +498,9 @@ def _is_catalog_advice_request(text: str) -> bool:
     if not ascii_negated_checkout and ascii_explicit_checkout:
         return False
 
+    q_clean = q.replace("đơn hàng", "").replace("giỏ hàng", "").replace("mua hàng", "").replace("khách hàng", "").replace("ngân hàng", "")
+    q_clean = q_clean.replace("đặt hàng", "").replace("nhận hàng", "").replace("giao hàng", "").replace("trả hàng", "")
+
     negated_checkout = any(
         marker in q
         for marker in (
@@ -540,12 +543,12 @@ def _is_catalog_advice_request(text: str) -> bool:
     if not negated_checkout and any(marker in q for marker in explicit_checkout_markers):
         return False
 
-    has_hint = any(keyword in q for keyword in CATALOG_RECOMMENDATION_HINTS) or any(
-        keyword in q for keyword in ("recommend", "suggest", "advice", "advise", "tham khảo", "tham khao")
+    has_hint = any(keyword in q_clean for keyword in CATALOG_RECOMMENDATION_HINTS) or any(
+        keyword in q_clean for keyword in ("recommend", "suggest", "advice", "advise", "tham khảo", "tham khao")
     )
-    has_generic_item = any(term in q for term in GENERIC_PURCHASE_TERMS)
+    has_generic_item = any(term in q_clean for term in GENERIC_PURCHASE_TERMS)
     has_product_clue = any(
-        term in q
+        term in q_clean
         for term in (
             "stardust",
             "picnic",
