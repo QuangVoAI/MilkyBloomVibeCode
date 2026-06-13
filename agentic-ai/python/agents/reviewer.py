@@ -103,7 +103,7 @@ async def review_with_retry(question, answer, evidence, sentiment="", action_con
             f"Viết lại phản hồi tự nhiên, không dùng văn mẫu. Tối đa 4-5 câu.\n"
             f"Nếu có QUYẾT ĐỊNH HỆ THỐNG bên trên, ưu tiên QUYẾT ĐỊNH HỆ THỐNG hơn CHÍNH SÁCH THAM KHẢO.\n"
             f"CẤM: 'chúng tôi rất tiếc', 'mình rất tiếc', 'xin lỗi vì sự bất tiện', 'theo chính sách của chúng tôi', 'không có quyền truy cập'.\n"
-            f"ĐƯỢC PHÉP: 'Theo chính sách đổi trả của MyKingdom, ...' (có brand + nội dung cụ thể)."
+            f"ĐƯỢC PHÉP: 'Theo chính sách đổi trả của MilkyBloom, ...' (có brand + nội dung cụ thể)."
         )
 
         try:
@@ -113,7 +113,7 @@ async def review_with_retry(question, answer, evidence, sentiment="", action_con
                         {
                             "role": "system",
                             "content": (
-                                "Bạn là EmpathAI - trợ lý CSKH MyKingdom. "
+                                "Bạn là EmpathAI - trợ lý CSKH MilkyBloom. "
                                 "Viết phản hồi thấu cảm, tự nhiên, ngắn gọn. Dùng 'bạn/mình'."
                             ),
                         },
@@ -127,7 +127,7 @@ async def review_with_retry(question, answer, evidence, sentiment="", action_con
                 current_answer = await groq_complete(
                     prompt=retry_prompt,
                     system_prompt=(
-                        "Bạn là EmpathAI - trợ lý CSKH MyKingdom. "
+                        "Bạn là EmpathAI - trợ lý CSKH MilkyBloom. "
                         "Viết phản hồi thấu cảm, tự nhiên, ngắn gọn. Dùng 'bạn/mình'."
                     ),
                     model=GROQ_MODEL_FAST,

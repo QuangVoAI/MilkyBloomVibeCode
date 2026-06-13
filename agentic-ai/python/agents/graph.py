@@ -161,7 +161,7 @@ CATALOG_RECOMMENDATION_HINTS = [
     "đề xuất",
     "tư vấn",
     "chọn",
-    "món đồ",
+    "món đồ", "món hàng", "sản phẩm", "hàng", "mua",
     "đồ chơi",
     "quà",
     "gift",
@@ -571,7 +571,7 @@ def _is_catalog_advice_request(text: str) -> bool:
     )
     has_generic_item = any(
         term in q
-        for term in ("quà", "quà tặng", "đồ chơi", "sản phẩm", "món", "món đồ", "hàng", "gift", "toy", "item")
+        for term in ("quà", "quà tặng", "đồ chơi", "sản phẩm", "món", "món đồ", "món hàng", "sản phẩm", "hàng", "mua", "hàng", "gift", "toy", "item")
     )
     has_product_clue = any(
         term in q
