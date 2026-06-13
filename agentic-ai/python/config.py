@@ -81,9 +81,8 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 
-# --- EmpathAI Configuration ---
-# Default backend is Groq; Featherless stays available as fallback or alternate mode.
-EMPATHY_MODE = os.getenv("EMPATHY_MODE", "groq")
+def get_empathy_mode():
+    return os.getenv("EMPATHY_MODE", "featherless")
 
 # Sentiment labels
 SENTIMENT_LABELS = ["toxic", "frustrated", "disappointed", "neutral"]

@@ -14,7 +14,7 @@ from agents.llm_client import (
     GROQ_MODEL_FAST,
     FEATHERLESS_MODEL_FAST,
 )
-from config import EMPATHY_MODE
+from config import get_empathy_mode
 from utils.console import console
 
 REWRITE_SYSTEM_PROMPT = """\
@@ -65,7 +65,7 @@ async def rewrite_query_node(state: AgentState) -> dict:
         {"role": "user", "content": prompt},
     ]
     
-    if EMPATHY_MODE == "featherless":
+    if get_empathy_mode() == "featherless":
         rewritten = await featherless_complete(
             messages=messages,
             model=FEATHERLESS_MODEL_FAST,

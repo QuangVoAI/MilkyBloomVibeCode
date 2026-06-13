@@ -17,7 +17,7 @@ from agents.llm_client import (
 )
 from agents.prompt_registry import prompt_header, brand_voice_block
 from agents.response_postprocess import normalize_vietnamese_output, should_rewrite_to_vietnamese
-from config import EMPATHY_MODE
+from config import get_empathy_mode
 from tools.order_tool import extract_order_id, extract_phone_number
 
 EMPATHY_SYSTEM_PROMPT = f"""{prompt_header('empathy')}
@@ -431,7 +431,7 @@ async def generate_empathy_response(question, evidence_text, sentiment="", score
         {"role": "user", "content": prompt},
     ]
 
-    if EMPATHY_MODE == "featherless":
+    if get_empathy_mode() == "featherless":
         try:
             return _finalize_response(await featherless_complete(
                 messages=messages,
@@ -490,7 +490,7 @@ async def generate_empathy_streaming(
     token_buffer = ""
     BUFFER_SIZE = 12
 
-    if EMPATHY_MODE == "featherless":
+    if get_empathy_mode() == "featherless":
         try:
             async for token in featherless_stream_complete(
                 messages=messages,
@@ -545,7 +545,7 @@ async def generate_casual(question):
         {"role": "user", "content": question},
     ]
     
-    if EMPATHY_MODE == "featherless":
+    if get_empathy_mode() == "featherless":
         try:
             return _finalize_response(await featherless_complete(
                 messages=[
@@ -589,7 +589,7 @@ async def generate_inquiry(question, evidence_text, order_info=None, catalog_inf
         {"role": "user", "content": prompt},
     ]
     
-    if EMPATHY_MODE == "featherless":
+    if get_empathy_mode() == "featherless":
         try:
             return _finalize_response(await featherless_complete(
                 messages=[
@@ -652,7 +652,7 @@ async def generate_inquiry_streaming(
             streamed_any = True
             token_buffer = ""
 
-    if EMPATHY_MODE == "featherless":
+    if get_empathy_mode() == "featherless":
         try:
             async for token in featherless_stream_complete(
                 messages=messages,

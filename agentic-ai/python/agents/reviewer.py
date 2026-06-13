@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from agents.llm_client import groq_complete, featherless_complete, GROQ_MODEL_FAST, FEATHERLESS_MODEL_FAST
-from config import EMPATHY_MODE
+from config import get_empathy_mode
 from utils.console import console
 
 # Banned phrases: tuple (pattern, is_regex)
@@ -107,7 +107,7 @@ async def review_with_retry(question, answer, evidence, sentiment="", action_con
         )
 
         try:
-            if EMPATHY_MODE == "featherless":
+            if get_empathy_mode() == "featherless":
                 current_answer = await featherless_complete(
                     messages=[
                         {
