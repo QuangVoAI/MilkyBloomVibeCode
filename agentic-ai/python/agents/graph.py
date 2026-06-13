@@ -2489,10 +2489,10 @@ async def order_status_writer_node(state: AgentState) -> dict:
     )
     item_suffix = f" ({item_names})" if item_names else ""
     lookup_hints = order_info.get("lookup_hints") or [
-        "đăng nhập tài khoản đã đặt đơn",
-        "xác minh OTP của tài khoản chủ đơn",
-        "mã truy cập đơn hàng trong email xác nhận",
-        "email bạn dùng khi đặt hàng để mình giúp bạn tìm email xác nhận",
+        "đăng nhập tài khoản",
+        "xác minh OTP",
+        "cung cấp mã truy cập đơn hàng",
+        "cung cấp email đặt hàng",
     ]
     lookup_hint_text = _join_lookup_hints(lookup_hints)
 

@@ -322,7 +322,7 @@ def _build_order_context(order_info: dict) -> str:
             else:
                 lookup_text = ", ".join(lookup_hints[:-1]) + f", hoặc {lookup_hints[-1]}"
         else:
-            lookup_text = "đăng nhập tài khoản đã đặt đơn, xác minh OTP, hoặc gửi mã truy cập đơn hàng trong email xác nhận"
+            lookup_text = "đăng nhập tài khoản, xác minh OTP, hoặc cung cấp mã truy cập đơn hàng"
         return (
             f"\nTHÔNG TIN ĐƠN HÀNG:\n"
             f"Mã đơn **{oid}** KHÔNG TÌM THẤY trong hệ thống.\n"
@@ -337,7 +337,8 @@ def _build_order_context(order_info: dict) -> str:
     return (
         f"\nTHÔNG TIN ĐƠN HÀNG (đã tra cứu):\n{summary}\n"
         f"Action gợi ý hệ thống: {actions_str}\n"
-        f"=> Sử dụng thông tin này để trả lời CỤ THỂ, KHÔNG hỏi lại mã đơn nếu đã xác minh chủ đơn.\n"
+        f"=> Bạn HÃY báo cho khách biết các thông tin chi tiết: TÊN SẢN PHẨM, TỔNG TIỀN, TRẠNG THÁI ĐƠN, và địa chỉ giao hàng (nếu có).\n"
+        f"=> Không hỏi lại mã đơn nếu đã xác minh chủ đơn.\n"
     )
 
 

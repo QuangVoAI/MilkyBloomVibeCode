@@ -390,6 +390,14 @@ const ChatWidget = () => {
   const chatSessionIdRef = useRef("");
   const closeTimerRef = useRef(null);
   const navigationTimerRef = useRef(null);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    // Initialize audio for chat messages
+    const TING_SOUND_URL = "https://actions.google.com/sounds/v1/ui/pop.ogg";
+    audioRef.current = new Audio(TING_SOUND_URL);
+    audioRef.current.volume = 0.5;
+  }, []);
 
   const { proactiveMessage, setProactiveMessage } = useProactiveEngine(isPresented, cartSummary?.itemCount || 0);
 
@@ -627,6 +635,14 @@ const ChatWidget = () => {
       if (data?.session_id && data.session_id !== streamingSessionIdRef.current)
         return;
       if (data?.status === "started" || data?.status === "streaming") {
+        if (data?.status === "started") {
+          try {
+            if (audioRef.current) {
+              audioRef.current.currentTime = 0;
+              audioRef.current.play().catch((e) => console.log("Audio play blocked:", e));
+            }
+          } catch (err) {}
+        }
         setChatPhase("streaming");
       }
     };

@@ -32,11 +32,11 @@ except Exception:
 GUEST_ORDER_ACCESS_TOKEN_HINT = "mã truy cập đơn hàng"
 
 ORDER_LOOKUP_HELP = {
-    "login": "đăng nhập tài khoản đã đặt đơn",
-    "otp": "xác minh OTP của tài khoản chủ đơn",
-    "access_token": "mã truy cập đơn hàng trong email xác nhận",
-    "order_email": "email bạn dùng khi đặt hàng để mình giúp bạn tìm email xác nhận",
-    "phone": "số điện thoại đặt hàng để bộ phận hỗ trợ nội bộ đối chiếu",
+    "login": "đăng nhập tài khoản",
+    "otp": "xác minh OTP",
+    "access_token": "cung cấp mã truy cập đơn hàng",
+    "order_email": "cung cấp email đặt hàng",
+    "phone": "cung cấp số điện thoại đặt hàng",
 }
 
 
@@ -164,16 +164,21 @@ def _normalize_real_order(order: dict, order_id: str) -> dict:
     ) or "Không có item chi tiết"
     total_raw = order_data.get("totalAmount") or order_data.get("total") or 0
     try:
-        total = int(float(str(total_raw).replace(",", "")))
+        if isinstance(total_raw, dict) and "$numberDecimal" in total_raw:
+            total = int(float(str(total_raw["$numberDecimal"]).replace(",", "")))
+        else:
+            total = int(float(str(total_raw).replace(",", "")))
     except Exception:
         total = 0
     status = (order_data.get("status") or "unknown").lower()
     shipping_fee = order_data.get("shippingFee", 0)
     delivery_type = order_data.get("deliveryType", "standard")
     return_eligible = status == "delivered"
+    
+    display_id = f"#{order_id[-8:].upper()}" if len(order_id) == 24 else order_id
 
     summary = (
-        f"Đơn **{order_id}** — {items_str} — {total:,}đ\n"
+        f"Đơn **{display_id}** — {items_str} — {total:,}đ\n"
         f"Trạng thái: {status}\n"
         f"Phí ship: {shipping_fee}\n"
         f"Loại giao hàng: {delivery_type}\n"
@@ -331,12 +336,17 @@ def _normalize_order_detail(order: dict) -> dict:
     status = (order.get("status") or "unknown").lower()
     total_raw = order.get("totalAmount") or order.get("total") or 0
     try:
-        total = int(float(str(total_raw).replace(",", "")))
+        if isinstance(total_raw, dict) and "$numberDecimal" in total_raw:
+            total = int(float(str(total_raw["$numberDecimal"]).replace(",", "")))
+        else:
+            total = int(float(str(total_raw).replace(",", "")))
     except Exception:
         total = 0
 
+    display_id = f"#{order_id[-8:].upper()}" if len(order_id) == 24 else order_id
+
     summary = (
-        f"Đơn **{order_id}** — {items_str} — {total:,}đ\n"
+        f"Đơn **{display_id}** — {items_str} — {total:,}đ\n"
         f"Trạng thái: {status}\n"
         f"Địa chỉ: {address_line}"
     )
