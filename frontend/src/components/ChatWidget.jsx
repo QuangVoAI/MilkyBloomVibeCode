@@ -621,6 +621,7 @@ const ChatWidget = () => {
 
     const handleSocketDisconnect = () => {
       setChatPhase("offline");
+      setLoading(false);
     };
 
     const handleSocketReconnect = () => {
@@ -629,6 +630,7 @@ const ChatWidget = () => {
 
     const handleSocketConnectError = () => {
       setChatPhase("offline");
+      setLoading(false);
     };
 
     const handleStatus = (data) => {
