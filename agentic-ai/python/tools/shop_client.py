@@ -32,7 +32,7 @@ def _get_base_url() -> str:
         os.getenv("SHOP_API_BASE_URL")
         or os.getenv("BACKEND_URL")
         or os.getenv("BACKEND_BASE_URL")
-        or "http://127.0.0.1:6969/api"
+        or "http://localhost:6969/api"
     )
 
 
