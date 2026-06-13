@@ -2673,6 +2673,11 @@ def route_by_intent(state: AgentState) -> str:
         or bool(_extract_catalog_selection_name(question, cached_catalog))
     )
 
+    from tools.checkout_tool import _is_view_cart_request
+    if _is_view_cart_request(question):
+        console.print("[dim]  Router: explicit view cart request — forcing checkout path[/]")
+        return "checkout"
+
     if capability == "loyalty":
         console.print("[dim]  Router: capability loyalty — forcing loyalty path[/]")
         return "loyalty"
