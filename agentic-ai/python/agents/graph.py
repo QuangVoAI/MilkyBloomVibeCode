@@ -2147,7 +2147,7 @@ async def router_node(state: AgentState) -> dict:
 
 async def casual_node(state: AgentState) -> dict:
     """Node: Casual response (không cần RAG)."""
-    answer = await generate_casual(state["question"])
+    answer = await generate_casual(state["question"], question_image=state.get("question_image"))
     return {
         "answer": answer,
         "reviewer_triggered": False,
@@ -2395,6 +2395,7 @@ async def empathy_writer_node(state: AgentState) -> dict:
             catalog_info=catalog_info,
             session_summary_text=session_summary_text,
             stream_callback=stream_callback,
+            question_image=state.get("question_image"),
         )
 
     elapsed = int((time.time() - t0) * 1000)
@@ -2447,7 +2448,8 @@ async def inquiry_writer_node(state: AgentState) -> dict:
         # Default: use LLM for general inquiry
         answer = await generate_inquiry_streaming(
             question, evidence_text, order_info=order_info, catalog_info=catalog_info,
-            session_summary_text=session_summary_text, stream_callback=stream_callback
+            session_summary_text=session_summary_text, stream_callback=stream_callback,
+            question_image=state.get("question_image")
         )
         used_llm = True
 
@@ -3081,6 +3083,7 @@ async def run_streaming(
     history: list[dict] = None,
     session_id: str = "",
     shop_context: dict | None = None,
+    image_data: str | None = None,
     stream_callback: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> dict:
     """Run full EmpathAI pipeline with streaming."""
@@ -3112,6 +3115,7 @@ async def run_streaming(
         "question": question,
         "history": history or [],
         "shop_context": shop_context or {},
+        "question_image": image_data or "",
         "user_scope": "guest",
         "is_authenticated": False,
         "ownership_verified": False,

@@ -17,7 +17,7 @@ from agents.llm_client import (
 )
 from agents.prompt_registry import prompt_header, brand_voice_block
 from agents.response_postprocess import normalize_vietnamese_output, should_rewrite_to_vietnamese
-from config import get_empathy_mode
+from config import get_empathy_mode, FEATHERLESS_MODEL_VISION
 from tools.order_tool import extract_order_id, extract_phone_number
 
 EMPATHY_SYSTEM_PROMPT = f"""{prompt_header('empathy')}
@@ -497,6 +497,7 @@ async def generate_empathy_streaming(
     comparison_info=None,
     session_summary_text="",
     stream_callback=None,
+    question_image=None,
 ):
     """Streaming empathy response."""
     prompt = _build_empathy_prompt(
@@ -504,9 +505,16 @@ async def generate_empathy_streaming(
         order_info, action_result, action_intent, catalog_info, comparison_info, session_summary_text
     )
     
+    user_content = prompt
+    if question_image:
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": question_image}}
+        ]
+
     messages = [
         {"role": "system", "content": EMPATHY_SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
+        {"role": "user", "content": user_content},
     ]
 
     full_answer = ""
@@ -515,9 +523,10 @@ async def generate_empathy_streaming(
 
     if get_empathy_mode() == "featherless":
         try:
+            model_choice = FEATHERLESS_MODEL_VISION if question_image else FEATHERLESS_MODEL_FAST
             async for token in featherless_stream_complete(
                 messages=messages,
-                model=FEATHERLESS_MODEL_FAST,
+                model=model_choice,
                 max_tokens=350,
                 temperature=0.7,
             ):
@@ -556,26 +565,31 @@ async def generate_empathy_streaming(
     return _finalize_response(full_answer)
 
 
-async def generate_casual(question):
+async def generate_casual(question, question_image=None):
     """Casual response (không cần RAG)."""
     fallback_reply = _fallback_casual_reply(question)
     compact = re.sub(r"\s+", "", question or "")
     if extract_order_id(question) or extract_phone_number(question) or re.fullmatch(r"[\d\+\-\(\)]{8,}", compact):
         return fallback_reply
 
+    user_content = question
+    if question_image:
+        user_content = [
+            {"type": "text", "text": question},
+            {"type": "image_url", "image_url": {"url": question_image}}
+        ]
+
     messages = [
         {"role": "system", "content": CASUAL_SYSTEM_PROMPT},
-        {"role": "user", "content": question},
+        {"role": "user", "content": user_content},
     ]
     
     if get_empathy_mode() == "featherless":
         try:
+            model_choice = FEATHERLESS_MODEL_VISION if question_image else FEATHERLESS_MODEL_FAST
             return _finalize_response(await featherless_complete(
-                messages=[
-                    {"role": "system", "content": CASUAL_SYSTEM_PROMPT},
-                    {"role": "user", "content": question},
-                ],
-                model=FEATHERLESS_MODEL_FAST,
+                messages=messages,
+                model=model_choice,
                 max_tokens=256,
                 temperature=0.7,
             ))
@@ -594,7 +608,7 @@ async def generate_casual(question):
         return fallback_reply
 
 
-async def generate_inquiry(question, evidence_text, order_info=None, catalog_info=None, session_summary_text=None):
+async def generate_inquiry(question, evidence_text, order_info=None, catalog_info=None, session_summary_text=None, question_image=None):
     """Inquiry response (RAG nhẹ, không cần sentiment)."""
     order_context = _build_order_context(order_info or {})
     catalog_context = _build_catalog_context(catalog_info or {})
@@ -607,19 +621,25 @@ async def generate_inquiry(question, evidence_text, order_info=None, catalog_inf
         f"THÔNG TIN CHÍNH SÁCH:\n{evidence_text[:4000]}\n\n"
         f"Trả lời cụ thể, thân thiện."
     )
+
+    user_content = prompt
+    if question_image:
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": question_image}}
+        ]
+
     messages = [
         {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
+        {"role": "user", "content": user_content},
     ]
     
     if get_empathy_mode() == "featherless":
         try:
+            model_choice = FEATHERLESS_MODEL_VISION if question_image else FEATHERLESS_MODEL_FAST
             return _finalize_response(await featherless_complete(
-                messages=[
-                    {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                model=FEATHERLESS_MODEL_FAST,
+                messages=messages,
+                model=model_choice,
                 max_tokens=512,
                 temperature=0.3,
             ))
@@ -645,6 +665,7 @@ async def generate_inquiry_streaming(
     catalog_info=None,
     session_summary_text=None,
     stream_callback=None,
+    question_image=None,
 ):
     """Streaming inquiry response for FAQ and policy questions."""
     order_context = _build_order_context(order_info or {})
@@ -658,11 +679,19 @@ async def generate_inquiry_streaming(
         f"POLICY INFORMATION:\n{evidence_text[:4000]}\n\n"
         "Reply concretely, warmly, and only in Vietnamese."
     )
+    
+    user_content = prompt
+    if question_image:
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": question_image}}
+        ]
+
     messages = [
         {"role": "system", "content": INQUIRY_SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
+        {"role": "user", "content": user_content},
     ]
-
+    
     full_answer = ""
     token_buffer = ""
     streamed_any = False
@@ -677,9 +706,10 @@ async def generate_inquiry_streaming(
 
     if get_empathy_mode() == "featherless":
         try:
+            model_choice = FEATHERLESS_MODEL_VISION if question_image else FEATHERLESS_MODEL_FAST
             async for token in featherless_stream_complete(
                 messages=messages,
-                model=FEATHERLESS_MODEL_FAST,
+                model=model_choice,
                 max_tokens=512,
                 temperature=0.3,
             ):

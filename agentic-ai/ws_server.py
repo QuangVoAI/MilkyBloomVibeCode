@@ -128,6 +128,7 @@ async def chat_http(request: web.Request) -> web.Response:
             history=history,
             session_id=session_id,
             shop_context=shop_context,
+            image_data=payload.get("image_data"),
             stream_callback=None,
         )
     except Exception as exc:
@@ -220,6 +221,7 @@ async def ws_entrypoint(request: web.Request) -> web.StreamResponse:
                 history=history,
                 session_id=session_id,
                 shop_context=shop_context,
+                image_data=payload.get("image_data"),
                 stream_callback=stream_callback,
             )
         except Exception as exc:

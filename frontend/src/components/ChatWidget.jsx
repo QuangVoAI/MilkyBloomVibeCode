@@ -453,20 +453,10 @@ const ChatWidget = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Simulate Vision AI Visual Search response since real model isn't hooked up yet
     const reader = new FileReader();
     reader.onload = (event) => {
-      // In a real app, send event.target.result to backend via socket
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: `[Đã gửi ảnh đính kèm: ${file.name}]` },
-        { 
-          role: "assistant", 
-          content: "Ảnh bạn gửi trông có vẻ là tông màu hồng/pastel. Để mình tìm một số bó hoa tương tự trong hệ thống MilkyBloom cho bạn nhé!",
-          meta: { catalogProducts: [] } // Normally the backend would populate this
-        }
-      ]);
-      // Reset input
+      const base64 = event.target.result;
+      sendMessage(`[Đã gửi ảnh đính kèm: ${file.name}]`, { image_data: base64 });
       e.target.value = null;
       scrollToBottom(true);
     };
@@ -873,6 +863,9 @@ const ChatWidget = () => {
       orderLookupToken,
       authToken: localStorage.getItem("authToken") || "",
     };
+    if (options.image_data) {
+      payload.image_data = options.image_data;
+    }
 
     try {
       if (!socketService.isConnected()) {

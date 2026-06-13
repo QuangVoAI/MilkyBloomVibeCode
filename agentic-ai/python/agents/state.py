@@ -13,6 +13,7 @@ class AgentState(TypedDict, total=False):
     question: str               # Tin nhắn của khách hàng
     history: list[dict]         # Chat history [{role, content}, ...]
     shop_context: dict          # Real shop access context (auth, email, user_id, etc.)
+    question_image: str         # Base64 image data if attached
 
     # --- Triage / Permission ---
     user_scope: str             # guest | logged_in | admin
