@@ -76,7 +76,7 @@ def _request_json(method: str, path: str, context: dict | None = None, data: dic
         parsed.setdefault("status", err.code)
         return parsed
     except URLError as err:
-        return {"success": False, "message": str(err)}
+        print(f"\n[ERROR] API Request Failed: {err}", file=sys.stderr); return {"success": False, "message": str(err)}
 
 
 def search_products(query: str, context: dict | None = None) -> dict:

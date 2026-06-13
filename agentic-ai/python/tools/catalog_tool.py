@@ -486,6 +486,8 @@ def lookup_live_catalog(question: str, context: dict | None = None) -> dict:
             products = _normalize_products(remote)
     if (remote is None or not _normalize_products(remote)) and search_products:
         remote = search_products(keyword or query, ctx)
+    if remote and isinstance(remote, dict) and not remote.get("success", True):
+        return {"found": False, "query": keyword or query, "summary": f"Xin lỗi, mình không kết nối được với dữ liệu cửa hàng ({remote.get(\"message\", \"Lỗi hệ thống\")}). Vui lòng kiểm tra lại backend đang chạy trên port 6969 chưa nhé.", "products": []}
     products = _normalize_products(remote or {})
     if products and budget_limit:
         products = [product for product in products if _product_within_budget(product, budget_limit)]
