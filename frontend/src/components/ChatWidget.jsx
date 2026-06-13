@@ -1,3 +1,4 @@
+import ProductQuickViewModal from "./ProductQuickViewModal";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -269,6 +270,7 @@ const ChatWidget = () => {
   const [chatPhase, setChatPhase] = useState("idle");
   const [launchSloganIndex, setLaunchSloganIndex] = useState(0);
   const [cartActionLoading, setCartActionLoading] = useState("");
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [composerHint, setComposerHint] = useState("");
   const [activeLookupChip, setActiveLookupChip] = useState("");
   const messagesRef = useRef(null);
@@ -750,12 +752,8 @@ const ChatWidget = () => {
   };
 
   const handleViewProduct = (product) => {
-    const routeId = getProductRouteId(product);
-    if (!routeId) {
-      toast.error("Mình chưa có link chi tiết cho sản phẩm này.");
-      return;
-    }
-    closeChatAndNavigate(`/products/${routeId}`);
+    if (!product) return;
+    setQuickViewProduct(product);
   };
 
   const handleCartProductAction = async (product, variant, { buyNow = false } = {}) => {
@@ -1396,6 +1394,14 @@ const ChatWidget = () => {
           </div>
         </div>
         </div>
+      )}
+      
+      {/* Render Quick View Modal outside the ChatWidget container logic */}
+      {quickViewProduct && (
+        <ProductQuickViewModal 
+          product={quickViewProduct} 
+          onClose={() => setQuickViewProduct(null)} 
+        />
       )}
     </>
   );
