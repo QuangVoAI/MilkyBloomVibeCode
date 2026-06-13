@@ -8,18 +8,25 @@ import {
   Eye,
   Hash,
   Mail,
+  MapPin,
   MessageCircle,
+  Package,
+  RefreshCcw,
   Send,
   ShoppingCart,
+  ShoppingBag,
   Sparkles,
   Ticket,
   Trash2,
   X,
+  Truck,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCartContext } from "@/context/CartContext";
 import { socketService } from "@/services/socket.service";
 import { normalizeImageUrl } from "@/utils/imageOptimizer";
+import { useProactiveEngine } from "@/hooks/useProactiveEngine";
 import "./ChatWidget.css";
 
 const STORAGE_KEY = "milkybloom-chat-session-v2";
@@ -368,9 +375,6 @@ const ChatWidget = () => {
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [composerHint, setComposerHint] = useState("");
   const [activeLookupChip, setActiveLookupChip] = useState("");
-  const [proactiveMessage, setProactiveMessage] = useState(null);
-  const location = useLocation();
-  const prevItemCountRef = useRef(cartSummary?.itemCount || 0);
   const messagesRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const inputRef = useRef(null);
@@ -380,6 +384,8 @@ const ChatWidget = () => {
   const chatSessionIdRef = useRef("");
   const closeTimerRef = useRef(null);
   const navigationTimerRef = useRef(null);
+
+  const { proactiveMessage, setProactiveMessage } = useProactiveEngine(isPresented, cartSummary?.itemCount || 0);
 
   const openChat = () => {
     if (closeTimerRef.current) {
@@ -1270,39 +1276,6 @@ const ChatWidget = () => {
 
     return () => window.clearInterval(interval);
   }, [open]);
-
-  useEffect(() => {
-    if (isPresented) {
-      setProactiveMessage(null);
-      return;
-    }
-
-    let timer;
-    if (location.pathname.startsWith("/product/")) {
-      timer = setTimeout(() => {
-        setProactiveMessage("Sản phẩm này đang có giá tốt, bạn cần mình tư vấn thêm không?");
-      }, 5000);
-    } else if (location.pathname === "/cart" || location.pathname === "/checkout") {
-      timer = setTimeout(() => {
-        setProactiveMessage("Bạn đang cân nhắc thanh toán? Để mình hỗ trợ nhé!");
-      }, 3000);
-    } else {
-      setProactiveMessage(null);
-    }
-    
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [location.pathname, isPresented]);
-
-  useEffect(() => {
-    if (isPresented) return;
-    const currentCount = cartSummary?.itemCount || 0;
-    if (currentCount > prevItemCountRef.current) {
-      setProactiveMessage("Bạn vừa thêm sản phẩm vào giỏ! Cần hỗ trợ thanh toán không nè?");
-    }
-    prevItemCountRef.current = currentCount;
-  }, [cartSummary?.itemCount, isPresented]);
 
   return (
     <>
