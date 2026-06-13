@@ -1,6 +1,6 @@
 import ProductQuickViewModal from "./ProductQuickViewModal";
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowRight,
   CreditCard,
@@ -368,6 +368,9 @@ const ChatWidget = () => {
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [composerHint, setComposerHint] = useState("");
   const [activeLookupChip, setActiveLookupChip] = useState("");
+  const [proactiveMessage, setProactiveMessage] = useState(null);
+  const location = useLocation();
+  const prevItemCountRef = useRef(cartSummary?.itemCount || 0);
   const messagesRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const inputRef = useRef(null);
@@ -386,6 +389,17 @@ const ChatWidget = () => {
     setIsClosing(false);
     setIsPresented(true);
     setOpen(true);
+
+    if (proactiveMessage) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: proactiveMessage,
+        },
+      ]);
+      setProactiveMessage(null);
+    }
   };
 
   const renderCartAddedCard = (cartMeta) => {
@@ -1257,10 +1271,60 @@ const ChatWidget = () => {
     return () => window.clearInterval(interval);
   }, [open]);
 
+  useEffect(() => {
+    if (isPresented) {
+      setProactiveMessage(null);
+      return;
+    }
+
+    let timer;
+    if (location.pathname.startsWith("/product/")) {
+      timer = setTimeout(() => {
+        setProactiveMessage("Sản phẩm này đang có giá tốt, bạn cần mình tư vấn thêm không?");
+      }, 5000);
+    } else if (location.pathname === "/cart" || location.pathname === "/checkout") {
+      timer = setTimeout(() => {
+        setProactiveMessage("Bạn đang cân nhắc thanh toán? Để mình hỗ trợ nhé!");
+      }, 3000);
+    } else {
+      setProactiveMessage(null);
+    }
+    
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [location.pathname, isPresented]);
+
+  useEffect(() => {
+    if (isPresented) return;
+    const currentCount = cartSummary?.itemCount || 0;
+    if (currentCount > prevItemCountRef.current) {
+      setProactiveMessage("Bạn vừa thêm sản phẩm vào giỏ! Cần hỗ trợ thanh toán không nè?");
+    }
+    prevItemCountRef.current = currentCount;
+  }, [cartSummary?.itemCount, isPresented]);
+
   return (
     <>
       {!isPresented ? (
-        <div className="fixed bottom-3 right-3 z-[80] sm:bottom-6 sm:right-6">
+        <div className="fixed bottom-3 right-3 z-[80] sm:bottom-6 sm:right-6 flex flex-col items-end">
+          {proactiveMessage && (
+            <div 
+              className="mb-4 mr-2 max-w-[260px] animate-in slide-in-from-bottom-3 fade-in duration-500 cursor-pointer group"
+              onClick={openChat}
+            >
+              <div className="bg-white px-4 py-3 rounded-2xl rounded-br-sm shadow-[0_12px_28px_rgba(0,0,0,0.12)] border border-slate-100 relative group-hover:-translate-y-1 transition-transform">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center text-white shadow-sm">
+                    <Sparkles className="w-3 h-3" />
+                  </div>
+                  <span className="font-bold text-rose-600 text-[12px] uppercase tracking-wide">Trợ lý MilkyBloom</span>
+                </div>
+                <p className="text-[14px] text-slate-700 leading-snug">{proactiveMessage}</p>
+                <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-b border-r border-slate-100 transform rotate-45 shadow-[3px_3px_5px_rgba(0,0,0,0.02)]"></div>
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={openChat}
