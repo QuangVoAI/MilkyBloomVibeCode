@@ -237,7 +237,7 @@ async def ws_entrypoint(request: web.Request) -> web.StreamResponse:
             "session_id": session_id,
             "reply": final_state.get("answer", ""),
             "answer": final_state.get("answer", ""),
-            "provider": "groq",
+            "provider": "agentic",
             "model": "empathai-langgraph",
             "trace_id": final_state.get("trace_id", "") or final_state.get("agent_trace", {}).get("trace_id", ""),
             "sentiment": final_state.get("sentiment", ""),
@@ -286,12 +286,9 @@ async def init_app() -> web.Application:
 
 async def main():
     port = int(os.getenv("PORT", os.getenv("AGENTIC_WS_PORT", "8788")))
-    groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_API_KEYS", "").strip())
     featherless_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip())
-    if not groq_configured:
-        print("[agentic] GROQ_API_KEY/GROQ_API_KEYS is missing. Groq requests will fail unless Featherless fallback is available.")
     if not featherless_configured:
-        print("[agentic] FEATHERLESS_API_KEY is missing. If Groq fails, responses will fall back to canned messages only.")
+        print("[agentic] FEATHERLESS_API_KEY is missing. Responses will fall back to canned messages only.")
     if os.getenv("AGENTIC_WARMUP", "true").lower() != "false":
         print("Warming up EmpathAI models before accepting WebSocket traffic...")
         startup_warmup()
