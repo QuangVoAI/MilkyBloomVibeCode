@@ -767,6 +767,12 @@ def _is_existing_order_issue(text: str) -> bool:
             "tra cuu don",
             "theo doi don",
             "trang thai don",
+            "tra cuu thong tin don",
+            "kiem tra thong tin don",
+            "tra cuu don hang",
+            "kiem tra don hang",
+            "thong tin don hang",
+            "tinh trang don hang",
         )
     ):
         return True
@@ -791,6 +797,10 @@ def _is_existing_order_issue(text: str) -> bool:
         "mã đơn",
         "order id",
         "tracking",
+        "tra cứu thông tin",
+        "kiểm tra thông tin",
+        "thông tin đơn hàng",
+        "tình trạng đơn hàng",
         "muốn đổi trả",
         "cần đổi trả",
         "yêu cầu đổi trả",

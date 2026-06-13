@@ -203,6 +203,8 @@ COMPLAINT_FAST = [
     "kiểm tra đơn", "tra cứu đơn", "tình trạng đơn", "đơn đâu",
     "trạng thái đơn hàng", "kiểm tra trạng thái đơn hàng",
     "xem trạng thái đơn hàng", "theo dõi trạng thái đơn hàng",
+    "tra cứu đơn hàng", "kiểm tra đơn hàng", "thông tin đơn hàng",
+    "tra cứu thông tin đơn", "kiểm tra thông tin đơn",
     "track đơn", "theo dõi đơn", "đơn đến đâu", "bao giờ giao",
     "chưa thấy giao", "chưa nhận được hàng", "hàng chưa đến",
     # Delivery failure keywords

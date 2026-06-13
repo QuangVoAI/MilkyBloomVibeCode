@@ -634,8 +634,8 @@ const ChatWidget = () => {
     const handleStatus = (data) => {
       if (data?.session_id && data.session_id !== streamingSessionIdRef.current)
         return;
-      if (data?.status === "started" || data?.status === "streaming") {
-        if (data?.status === "started") {
+      if (data?.status === "started" || data?.message === "started" || data?.status === "streaming") {
+        if (data?.status === "started" || data?.message === "started") {
           try {
             if (audioRef.current) {
               audioRef.current.currentTime = 0;
@@ -1178,6 +1178,43 @@ const ChatWidget = () => {
     );
   };
 
+  const renderOrderCard = (orderInfo) => {
+    if (!orderInfo) return null;
+    return (
+      <div className="mt-3 animate-in slide-in-from-bottom-2 fade-in duration-300 overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm w-full max-w-[280px]">
+        <div className="bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-700 flex items-center justify-between border-b border-emerald-100">
+          <div className="flex items-center gap-1.5 truncate pr-2">
+            <Package className="h-4 w-4 shrink-0" />
+            <span className="truncate">Đơn hàng #{orderInfo.display_id || orderInfo.order_id || orderInfo.id}</span>
+          </div>
+          <span className="bg-white px-2 py-0.5 rounded-full text-[11px] font-bold border border-emerald-100 whitespace-nowrap">
+            {orderInfo.status || "N/A"}
+          </span>
+        </div>
+        <div className="p-3 text-[12px] text-slate-700 space-y-2">
+          {orderInfo.customer_name && (
+            <div className="flex items-start gap-2">
+              <span className="font-semibold w-[60px] shrink-0 text-slate-500">Khách hàng:</span>
+              <span className="font-medium text-slate-800">{orderInfo.customer_name}</span>
+            </div>
+          )}
+          {orderInfo.address && (
+            <div className="flex items-start gap-2">
+              <span className="font-semibold w-[60px] shrink-0 text-slate-500">Giao đến:</span>
+              <span className="line-clamp-2">{orderInfo.address}</span>
+            </div>
+          )}
+          {orderInfo.total_amount != null && (
+            <div className="flex items-start gap-2 pt-1 border-t border-slate-100">
+              <span className="font-semibold w-[60px] shrink-0 text-slate-500">Tổng tiền:</span>
+              <span className="font-bold text-emerald-600">{formatVnd(orderInfo.total_amount)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderProductCards = (products = []) => {
     if (!products.length) return null;
 
@@ -1582,6 +1619,7 @@ const ChatWidget = () => {
                         })}
                       {isAssistant &&
                         renderProductCards(message.meta?.catalogProducts || [])}
+                      {isAssistant && message.meta?.orderInfo?.found && renderOrderCard(message.meta.orderInfo)}
                       {isAssistant && renderAssistantActionButtons(message)}
                       {isAssistant && renderFollowupActions(message)}
                       {isAssistant && message.meta?.comparison && <ComparisonCard comparison={message.meta.comparison} />}
