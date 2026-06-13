@@ -84,6 +84,9 @@ CATALOG_FILLER_WORDS = [
     "ngân sách",
     "budget",
     "tặng",
+    "tìm",
+    "kiếm",
+    "tìm kiếm",
 ]
 
 STOCK_PATTERNS = [

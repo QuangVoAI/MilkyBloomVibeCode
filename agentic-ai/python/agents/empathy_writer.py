@@ -336,15 +336,16 @@ def _build_order_context(order_info: dict) -> str:
 def _build_catalog_context(catalog_info: dict) -> str:
     if not catalog_info:
         return ""
+    summary = catalog_info.get("summary", "")
     if not catalog_info.get("found"):
         hints = catalog_info.get("lookup_hints") or []
         hint_text = ", ".join(hints) if hints else "tên sản phẩm hoặc mã sản phẩm"
         return (
             f"\nTHÔNG TIN CATALOG LIVE:\n"
-            f"Không tìm thấy sản phẩm khớp.\n"
+            f"{summary or 'Không tìm thấy sản phẩm khớp.'}\n"
             f"=> Hãy hỏi khách mô tả rõ hơn: {hint_text}.\n"
+            f"=> KHÔNG được tự ý bịa đặt (hallucinate) tên sản phẩm. CHỈ trả lời dựa trên thông tin này.\n"
         )
-    summary = catalog_info.get("summary", "")
     return (
         f"\nTHÔNG TIN CATALOG LIVE:\n"
         f"{summary}\n"
