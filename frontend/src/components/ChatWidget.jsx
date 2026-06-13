@@ -10,7 +10,9 @@ import {
   Mail,
   MapPin,
   MessageCircle,
+  Mic,
   Package,
+  Paperclip,
   RefreshCcw,
   Send,
   ShoppingCart,
@@ -27,6 +29,7 @@ import { useCartContext } from "@/context/CartContext";
 import { socketService } from "@/services/socket.service";
 import { normalizeImageUrl } from "@/utils/imageOptimizer";
 import { useProactiveEngine } from "@/hooks/useProactiveEngine";
+import confetti from "canvas-confetti";
 import "./ChatWidget.css";
 
 const STORAGE_KEY = "milkybloom-chat-session-v2";
@@ -378,6 +381,9 @@ const ChatWidget = () => {
   const messagesRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
   const sheetRef = useRef(null);
   const assistantIndexRef = useRef(null);
   const streamingSessionIdRef = useRef("");
@@ -407,6 +413,66 @@ const ChatWidget = () => {
       setProactiveMessage(null);
     }
   };
+
+  // --- VOICE & VISUAL SEARCH FEATURE ---
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "vi-VN";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput((prev) => prev + (prev ? " " : "") + transcript);
+        setIsRecording(false);
+      };
+      
+      recognition.onerror = () => setIsRecording(false);
+      recognition.onend = () => setIsRecording(false);
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        recognitionRef.current?.start();
+        setIsRecording(true);
+      } catch (e) {
+        console.error("Speech recognition error:", e);
+      }
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Simulate Vision AI Visual Search response since real model isn't hooked up yet
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      // In a real app, send event.target.result to backend via socket
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: `[Đã gửi ảnh đính kèm: ${file.name}]` },
+        { 
+          role: "assistant", 
+          content: "Ảnh bạn gửi trông có vẻ là tông màu hồng/pastel. Để mình tìm một số bó hoa tương tự trong hệ thống MilkyBloom cho bạn nhé!",
+          meta: { catalogProducts: [] } // Normally the backend would populate this
+        }
+      ]);
+      // Reset input
+      e.target.value = null;
+      scrollToBottom(true);
+    };
+    reader.readAsDataURL(file);
+  };
+  // ------------------------------------
 
   const renderCartAddedCard = (cartMeta) => {
     if (!cartMeta?.cartAdded) return null;
@@ -638,11 +704,23 @@ const ChatWidget = () => {
                 pendingActionIntent: data.pending_action_intent || {},
                 clarificationNeeded: Boolean(data.clarification_needed),
                 actionButtons: data.action_buttons || data.actionButtons || [],
+                confetti: Boolean(data.confetti),
                 catalogProducts: normalizeCatalogCards(
                   data.catalog_info || data.checkout_result?.catalog_info,
                 ),
               },
           };
+          
+          if (data.confetti) {
+            // FIRE CONFETTI!
+            confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#f43f5e', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981']
+            });
+          }
+
           return next;
         });
       }
@@ -1528,7 +1606,25 @@ const ChatWidget = () => {
             </div>
 
             <div className="chat-widget-sheet__composer border-t border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(248,250,252,0.86))] px-3 py-3 backdrop-blur-[22px] sm:px-4 sm:py-4">
-              <form onSubmit={handleSubmit} className="flex items-stretch gap-2">
+              <form onSubmit={handleSubmit} className="flex items-center gap-2">
+                
+                {/* Visual Search Button */}
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  ref={fileInputRef}
+                  className="hidden" 
+                  onChange={handleFileUpload} 
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="chat-widget-attach flex h-[48px] w-[48px] items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 sm:h-[52px] sm:w-[52px]"
+                  title="Tìm hoa bằng hình ảnh"
+                >
+                  <Paperclip className="h-[20px] w-[20px]" />
+                </button>
+
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -1541,21 +1637,38 @@ const ChatWidget = () => {
                       setActiveLookupChip("");
                     }
                   }}
-                  rows={2}
-                  placeholder={composerHint || "Nhắn MilkyBloom để được hỗ trợ"}
-                  className={`chat-widget-siri-input h-[68px] flex-1 resize-none rounded-[20px] px-3.5 py-3.5 text-[16px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_rgba(15,23,42,0.05)] outline-none transition placeholder:text-slate-600 focus:ring-2 sm:h-[82px] sm:rounded-[24px] sm:px-4 sm:py-4 sm:text-[18px] ${
+                  rows={1}
+                  placeholder={composerHint || "Nhắn MilkyBloom..."}
+                  className={`chat-widget-siri-input h-[48px] flex-1 resize-none rounded-full px-4 py-3 text-[15px] leading-[1.45] text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_4px_12px_rgba(15,23,42,0.04)] outline-none transition placeholder:text-slate-500 focus:ring-2 sm:h-[52px] sm:px-5 sm:py-3.5 sm:text-[16px] ${
                     activeLookupChip
                       ? "border-amber-300 bg-[linear-gradient(180deg,rgba(255,252,231,0.995),rgba(254,243,199,0.9))] focus:border-amber-400 focus:ring-amber-100/80"
                       : "border-rose-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.995),rgba(255,240,246,0.96))] focus:border-rose-300/80 focus:ring-rose-100/80"
                   }`}
+                  style={{ minHeight: '48px', maxHeight: '120px' }}
                 />
+
+                {/* Voice Mode Button */}
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  className={`flex h-[48px] w-[48px] items-center justify-center rounded-full transition sm:h-[52px] sm:w-[52px] ${
+                    isRecording 
+                      ? "animate-pulse bg-rose-100 text-rose-600" 
+                      : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  }`}
+                  title="Voice Chat"
+                >
+                  <Mic className="h-[20px] w-[20px]" />
+                </button>
+
+                {/* Send Button */}
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
-                  className="chat-widget-siri-send group flex h-[68px] w-[68px] items-center justify-center self-stretch rounded-[20px] transition disabled:cursor-not-allowed disabled:opacity-40 sm:h-[82px] sm:w-[82px] sm:rounded-[24px]"
+                  className="chat-widget-siri-send group flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full bg-rose-500 transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-40 sm:h-[52px] sm:w-[52px]"
                   aria-label="Send message"
                 >
-                  <Send className="h-[18px] w-[18px] text-rose-500 drop-shadow-[0_1px_0_rgba(255,255,255,0.8)] transition duration-200 group-hover:translate-x-[1px] group-hover:-translate-y-[1px] group-hover:rotate-[-10deg] group-hover:text-rose-600" />
+                  <Send className="h-[18px] w-[18px] text-white transition duration-200 group-hover:translate-x-[2px] group-hover:-translate-y-[2px]" />
                 </button>
               </form>
             </div>
