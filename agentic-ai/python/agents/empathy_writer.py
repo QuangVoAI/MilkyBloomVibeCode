@@ -12,7 +12,7 @@ from typing import AsyncGenerator, Callable, Awaitable, Optional
 from agents.llm_client import (
     groq_complete, groq_stream_complete,
     featherless_complete, featherless_stream_complete,
-    GROQ_MODEL_FAST,
+    FEATHERLESS_MODEL_FAST,
     FEATHERLESS_MODEL_FAST,
 )
 from agents.prompt_registry import prompt_header, brand_voice_block
@@ -475,7 +475,7 @@ async def generate_empathy_response(question, evidence_text, sentiment="", score
         return _finalize_response(await groq_complete(
             prompt=prompt,
             system_prompt=EMPATHY_SYSTEM_PROMPT,
-            model=GROQ_MODEL_FAST,
+            model=FEATHERLESS_MODEL_FAST,
             max_tokens=512,
             temperature=0.7,
         ))
@@ -545,7 +545,7 @@ async def generate_empathy_streaming(
             async for token in groq_stream_complete(
                 prompt=prompt,
                 system_prompt=EMPATHY_SYSTEM_PROMPT,
-                model=GROQ_MODEL_FAST,
+                model=FEATHERLESS_MODEL_FAST,
                 max_tokens=350,
                 temperature=0.7,
             ):
@@ -601,7 +601,7 @@ async def generate_casual(question, question_image=None):
         return _finalize_response(await groq_complete(
             prompt=question,
             system_prompt=CASUAL_SYSTEM_PROMPT,
-            model=GROQ_MODEL_FAST,
+            model=FEATHERLESS_MODEL_FAST,
             max_tokens=256,
             temperature=0.7,
         ))
@@ -651,7 +651,7 @@ async def generate_inquiry(question, evidence_text, order_info=None, catalog_inf
         return _finalize_response(await groq_complete(
             prompt=prompt,
             system_prompt=INQUIRY_SYSTEM_PROMPT,
-            model=GROQ_MODEL_FAST,
+            model=FEATHERLESS_MODEL_FAST,
             max_tokens=512,
             temperature=0.3,
         ))
@@ -727,7 +727,7 @@ async def generate_inquiry_streaming(
             async for token in groq_stream_complete(
                 prompt=prompt,
                 system_prompt=INQUIRY_SYSTEM_PROMPT,
-                model=GROQ_MODEL_FAST,
+                model=FEATHERLESS_MODEL_FAST,
                 max_tokens=512,
                 temperature=0.3,
             ):

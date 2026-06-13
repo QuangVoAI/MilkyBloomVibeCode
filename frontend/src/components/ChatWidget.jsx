@@ -394,7 +394,7 @@ const ChatWidget = () => {
 
   useEffect(() => {
     // Initialize audio for chat messages
-    const TING_SOUND_URL = "https://actions.google.com/sounds/v1/ui/pop.ogg";
+    const TING_SOUND_URL = "/pop.ogg";
     audioRef.current = new Audio(TING_SOUND_URL);
     audioRef.current.volume = 0.5;
   }, []);
@@ -918,6 +918,20 @@ const ChatWidget = () => {
   const sendMessage = async (text, options = {}) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
+
+    // Unlock audio context on user gesture
+    try {
+      if (audioRef.current) {
+        // Play and immediately pause to grant permission to this audio element
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {}
 
     const userMessage = { role: "user", content: trimmed };
     const nextMessages = [...messages, userMessage];
@@ -1620,7 +1634,16 @@ const ChatWidget = () => {
                       {isAssistant &&
                         renderProductCards(message.meta?.catalogProducts || [])}
                       {isAssistant && message.meta?.orderInfo?.found && renderOrderCard(message.meta.orderInfo)}
-                      {isAssistant && renderAssistantActionButtons(message)}
+                      {isAssistant && message.meta?.orderInfo?.multiple_orders && (
+                        <div className="flex flex-col gap-2 w-full mt-2">
+                          {message.meta.orderInfo.multiple_orders.map((o, idx) => (
+                            <div key={idx} onClick={() => setInput(o.order_id || o.id)} className="cursor-pointer">
+                              {renderOrderCard(o)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {isAssistant && message.meta?.catalogData && renderCatalogCards(message.meta.catalogData)}
                       {isAssistant && renderFollowupActions(message)}
                       {isAssistant && message.meta?.comparison && <ComparisonCard comparison={message.meta.comparison} />}
                       {isAssistant && message.meta?.cartAdded && renderCartAddedCard(message.meta)}

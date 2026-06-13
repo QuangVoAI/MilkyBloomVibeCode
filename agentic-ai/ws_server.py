@@ -70,7 +70,7 @@ def _merge_top_level_shop_context(payload: dict) -> dict:
 
 
 async def health(request: web.Request) -> web.Response:
-    groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_API_KEYS", "").strip())
+    groq_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip() or os.getenv("FEATHERLESS_API_KEYS", "").strip())
     featherless_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip())
     return _json_response(
         {
@@ -84,7 +84,7 @@ async def health(request: web.Request) -> web.Response:
 
 
 async def providers(request: web.Request) -> web.Response:
-    groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_API_KEYS", "").strip())
+    groq_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip() or os.getenv("FEATHERLESS_API_KEYS", "").strip())
     featherless_configured = bool(os.getenv("FEATHERLESS_API_KEY", "").strip())
     return _json_response(
         {

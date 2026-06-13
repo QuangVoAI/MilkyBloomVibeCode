@@ -6,7 +6,7 @@ Chạy từ thư mục python/:
 
 3 cấp độ test:
   [L1] Order Tool     — không cần deps, chạy ngay
-  [L2] LangGraph Full — cần GROQ_API_KEY + Qdrant (hoặc chạy không có RAG)
+  [L2] LangGraph Full — cần FEATHERLESS_API_KEY + Qdrant (hoặc chạy không có RAG)
   [L3] Hướng dẫn full stack (Docker + Rust)
 """
 import sys
@@ -1246,13 +1246,13 @@ async def test_pipeline_async(question: str, label: str):
 def test_pipeline():
     console.print(Panel.fit(
         "[bold yellow]LEVEL 2 — LangGraph Full Pipeline Test[/]\n"
-        "[dim]Cần: GROQ_API_KEY trong .env | Qdrant optional (RAG có thể trả về rỗng)[/]",
+        "[dim]Cần: FEATHERLESS_API_KEY trong .env | Qdrant optional (RAG có thể trả về rỗng)[/]",
         border_style="yellow"
     ))
 
-    from config import GROQ_API_KEY, GROQ_API_KEYS
-    if not GROQ_API_KEY and not GROQ_API_KEYS:
-        console.print("[red]✗ GROQ_API_KEY / GROQ_API_KEYS chưa được set trong .env — bỏ qua Level 2[/]")
+    from config import FEATHERLESS_API_KEY, FEATHERLESS_API_KEYS
+    if not FEATHERLESS_API_KEY and not FEATHERLESS_API_KEYS:
+        console.print("[red]✗ FEATHERLESS_API_KEY / FEATHERLESS_API_KEYS chưa được set trong .env — bỏ qua Level 2[/]")
         return
 
     test_cases = [

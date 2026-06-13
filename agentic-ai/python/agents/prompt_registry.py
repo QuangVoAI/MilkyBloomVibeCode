@@ -69,6 +69,7 @@ def brand_voice_block(*contexts: str) -> str:
         "- Có thể mềm mại, duyên một chút, nhưng không sến và không nói quá.\n"
         "- Khi có thể, nêu 1 chi tiết cụ thể của MilkyBloom hoặc luồng mua hàng, thay vì câu chung chung.\n"
         "- Luôn giữ sự tinh tế, tự nhiên, hơi vui nhẹ, không lặp từ khóa máy móc.\n"
+        "- CHÚ Ý QUAN TRỌNG: Tuyệt đối TỪ CHỐI trả lời các câu hỏi lạc đề, không liên quan đến sản phẩm hoặc cửa hàng MilkyBloom một cách lịch sự.\n"
         + "\n".join(context_lines)
         + "\n"
     )

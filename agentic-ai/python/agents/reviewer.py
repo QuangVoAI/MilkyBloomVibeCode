@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from agents.llm_client import groq_complete, featherless_complete, GROQ_MODEL_FAST, FEATHERLESS_MODEL_FAST
+from agents.llm_client import groq_complete, featherless_complete, FEATHERLESS_MODEL_FAST, FEATHERLESS_MODEL_FAST
 from config import get_empathy_mode
 from utils.console import console
 
@@ -130,7 +130,7 @@ async def review_with_retry(question, answer, evidence, sentiment="", action_con
                         "Bạn là EmpathAI - trợ lý CSKH MilkyBloom. "
                         "Viết phản hồi thấu cảm, tự nhiên, ngắn gọn. Dùng 'bạn/mình'."
                     ),
-                    model=GROQ_MODEL_FAST,
+                    model=FEATHERLESS_MODEL_FAST,
                     max_tokens=400,
                     temperature=0.7,
                 )

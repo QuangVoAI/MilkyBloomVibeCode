@@ -15,14 +15,14 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from config import (
-    GROQ_API_KEY,
-    GROQ_API_KEYS,
-    GROQ_BASE_URL,
-    GROQ_MODEL,
-    GROQ_MODEL_FAST,
-    GROQ_MODEL_SMART,
-    GROQ_HTTP_REFERER,
-    GROQ_X_TITLE,
+    FEATHERLESS_API_KEY,
+    FEATHERLESS_API_KEYS,
+    FEATHERLESS_BASE_URL,
+    FEATHERLESS_MODEL,
+    FEATHERLESS_MODEL_FAST,
+    FEATHERLESS_MODEL_SMART,
+    FEATHERLESS_HTTP_REFERER,
+    FEATHERLESS_X_TITLE,
     FEATHERLESS_API_KEY,
     FEATHERLESS_BASE_URL,
     FEATHERLESS_MODEL,
@@ -53,12 +53,12 @@ except ImportError:
 
 
 # ─── Constants ───────────────────────────────────────────
-GROQ_CHAT_API_URL = GROQ_BASE_URL.rstrip("/") + "/chat/completions"
+FEATHERLESS_CHAT_API_URL = FEATHERLESS_BASE_URL.rstrip("/") + "/chat/completions"
 FEATHERLESS_CHAT_API_URL = FEATHERLESS_BASE_URL.rstrip("/") + "/chat/completions"
 
 # Token limits
 FEATHERLESS_MAX_INPUT_TOKENS = 12000
-GROQ_MAX_INPUT_TOKENS = 12000
+FEATHERLESS_MAX_INPUT_TOKENS = 12000
 
 
 class ProviderAPIError(RuntimeError):
@@ -74,7 +74,7 @@ class ProviderAPIError(RuntimeError):
         self.retry_after = retry_after
 
 
-_GROQ_KEY_COOLDOWNS: dict[str, float] = {}
+_FEATHERLESS_KEY_COOLDOWNS: dict[str, float] = {}
 
 # Tokenizer
 try:
@@ -221,25 +221,25 @@ def _is_rate_limit_error(error: Exception | str | None) -> bool:
     )
 
 
-def _cooldown_groq_key(api_key: str, error: Exception | str | None) -> float:
+def _cooldown_featherless_key(api_key: str, error: Exception | str | None) -> float:
     retry_after = _extract_retry_after(error)
     seconds = retry_after if retry_after is not None else 60.0
     seconds = max(10.0, min(float(seconds), 3600.0))
-    _GROQ_KEY_COOLDOWNS[api_key] = time.monotonic() + seconds
+    _FEATHERLESS_KEY_COOLDOWNS[api_key] = time.monotonic() + seconds
     return seconds
 
 
-def _is_groq_key_available(api_key: str) -> bool:
-    expires_at = _GROQ_KEY_COOLDOWNS.get(api_key, 0)
+def _is_featherless_key_available(api_key: str) -> bool:
+    expires_at = _FEATHERLESS_KEY_COOLDOWNS.get(api_key, 0)
     return expires_at <= time.monotonic()
 
 
-def _available_groq_api_key_candidates() -> list[tuple[int, str]]:
-    keys = _groq_api_key_candidates()
+def _available_featherless_api_key_candidates() -> list[tuple[int, str]]:
+    keys = _featherless_api_key_candidates()
     return [
         (index, key)
         for index, key in enumerate(keys, start=1)
-        if _is_groq_key_available(key)
+        if _is_featherless_key_available(key)
     ]
 
 
@@ -255,19 +255,19 @@ def _unique_nonempty(values: list[str]) -> list[str]:
     return result
 
 
-def _groq_api_key_candidates() -> list[str]:
-    keys = _unique_nonempty(list(GROQ_API_KEYS or []))
-    if not keys and GROQ_API_KEY:
-        keys = [GROQ_API_KEY.strip()]
+def _featherless_api_key_candidates() -> list[str]:
+    keys = _unique_nonempty(list(FEATHERLESS_API_KEYS or []))
+    if not keys and FEATHERLESS_API_KEY:
+        keys = [FEATHERLESS_API_KEY.strip()]
     return keys
 
 
-def _groq_model_candidates(requested_model: str) -> list[str]:
+def _featherless_model_candidates(requested_model: str) -> list[str]:
     candidates = _unique_nonempty([
         requested_model,
-        GROQ_MODEL_SMART,
-        GROQ_MODEL_FAST,
-        GROQ_MODEL,
+        FEATHERLESS_MODEL_SMART,
+        FEATHERLESS_MODEL_FAST,
+        FEATHERLESS_MODEL,
     ])
     return candidates
 
@@ -327,7 +327,7 @@ async def _openai_chat_complete(
             f"Set it in agentic-ai/.env or export it before running."
         )
 
-    if model == GROQ_MODEL_FAST or model == FEATHERLESS_MODEL_FAST:
+    if model == FEATHERLESS_MODEL_FAST or model == FEATHERLESS_MODEL_FAST:
         messages = _truncate_messages(messages, max_input_tokens)
         max_tokens = min(max_tokens, 1500)
 
@@ -403,7 +403,7 @@ async def _openai_stream_complete(
             f"Set it in agentic-ai/.env or export it before running."
         )
 
-    if model == GROQ_MODEL_FAST or model == FEATHERLESS_MODEL_FAST:
+    if model == FEATHERLESS_MODEL_FAST or model == FEATHERLESS_MODEL_FAST:
         messages = _truncate_messages(messages, max_input_tokens)
         max_tokens = min(max_tokens, 1500)
 
@@ -482,7 +482,7 @@ async def _openai_stream_complete(
 async def groq_complete(
     prompt: str,
     system_prompt: str = "",
-    model: str = GROQ_MODEL_SMART,
+    model: str = FEATHERLESS_MODEL_SMART,
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> str:
@@ -492,7 +492,7 @@ async def groq_complete(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    return await groq_chat_complete(
+    return await featherless_chat_complete(
         messages=messages,
         model=model,
         max_tokens=max_tokens,
@@ -500,40 +500,40 @@ async def groq_complete(
     )
 
 
-@observe(name="groq_chat_complete", as_type="generation", capture_input=False, capture_output=False)
-async def groq_chat_complete(
+@observe(name="featherless_chat_complete", as_type="generation", capture_input=False, capture_output=False)
+async def featherless_chat_complete(
     messages: list[dict],
-    model: str = GROQ_MODEL_SMART,
+    model: str = FEATHERLESS_MODEL_SMART,
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> str:
     """Groq completion with ordered key failover only on rate limit/quota."""
-    model_candidates = _groq_model_candidates(model)
-    key_candidates = _available_groq_api_key_candidates()
+    model_candidates = _featherless_model_candidates(model)
+    key_candidates = _available_featherless_api_key_candidates()
     last_error: Exception | None = None
     abort_groq = False
 
-    if _groq_api_key_candidates() and not key_candidates:
+    if _featherless_api_key_candidates() and not key_candidates:
         last_error = RuntimeError("All Groq API keys are temporarily rate-limited.")
 
     for candidate_model in model_candidates:
         if abort_groq:
             break
         for key_index, candidate_key in key_candidates:
-            if not _is_groq_key_available(candidate_key):
+            if not _is_featherless_key_available(candidate_key):
                 continue
             try:
                 return await _openai_chat_complete(
                     messages=messages,
                     model=candidate_model,
                     api_key=candidate_key,
-                    base_url=GROQ_BASE_URL,
-                    referer=GROQ_HTTP_REFERER,
-                    title=GROQ_X_TITLE,
+                    base_url=FEATHERLESS_BASE_URL,
+                    referer=FEATHERLESS_HTTP_REFERER,
+                    title=FEATHERLESS_X_TITLE,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     provider_name="groq",
-                    max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+                    max_input_tokens=FEATHERLESS_MAX_INPUT_TOKENS,
                 )
             except Exception as groq_error:
                 last_error = groq_error
@@ -542,7 +542,7 @@ async def groq_chat_complete(
                     f"[llm] Groq attempt failed (model={candidate_model}, key_index={key_index}, status={status or 'n/a'}): {groq_error}"
                 )
                 if _is_rate_limit_error(groq_error):
-                    cooldown_seconds = _cooldown_groq_key(candidate_key, groq_error)
+                    cooldown_seconds = _cooldown_featherless_key(candidate_key, groq_error)
                     print(
                         f"[llm] Groq key_index={key_index} rate-limited; cooling down for {cooldown_seconds:.0f}s and trying next configured key."
                     )
@@ -560,7 +560,7 @@ async def groq_chat_complete(
     if FEATHERLESS_API_KEY:
         fallback_model = (
             FEATHERLESS_MODEL_SMART
-            if model in {GROQ_MODEL_SMART, GROQ_MODEL}
+            if model in {FEATHERLESS_MODEL_SMART, FEATHERLESS_MODEL}
             else FEATHERLESS_MODEL_FAST
         )
         print("[llm] Groq exhausted all candidates; falling back to Featherless.")
@@ -602,7 +602,7 @@ async def featherless_complete(
 async def groq_stream_complete(
     prompt: str,
     system_prompt: str = "",
-    model: str = GROQ_MODEL_SMART,
+    model: str = FEATHERLESS_MODEL_SMART,
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> AsyncGenerator[str, None]:
@@ -612,7 +612,7 @@ async def groq_stream_complete(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    async for token in groq_stream_chat_complete(
+    async for token in featherless_stream_chat_complete(
         messages=messages,
         model=model,
         max_tokens=max_tokens,
@@ -621,10 +621,10 @@ async def groq_stream_complete(
         yield token
 
 
-@observe(name="groq_stream_chat_complete", as_type="generation", capture_input=False, capture_output=False)
-async def groq_stream_chat_complete(
+@observe(name="featherless_stream_chat_complete", as_type="generation", capture_input=False, capture_output=False)
+async def featherless_stream_chat_complete(
     messages: list[dict],
-    model: str = GROQ_MODEL_SMART,
+    model: str = FEATHERLESS_MODEL_SMART,
     max_tokens: int = 4096,
     temperature: float = 0.1,
 ) -> AsyncGenerator[str, None]:
@@ -632,19 +632,19 @@ async def groq_stream_chat_complete(
 
     If Groq fails before any token is emitted, fall back to Featherless.
     """
-    model_candidates = _groq_model_candidates(model)
-    key_candidates = _available_groq_api_key_candidates()
+    model_candidates = _featherless_model_candidates(model)
+    key_candidates = _available_featherless_api_key_candidates()
     last_error: Exception | None = None
     abort_groq = False
 
-    if _groq_api_key_candidates() and not key_candidates:
+    if _featherless_api_key_candidates() and not key_candidates:
         last_error = RuntimeError("All Groq API keys are temporarily rate-limited.")
 
     for candidate_model in model_candidates:
         if abort_groq:
             break
         for key_index, candidate_key in key_candidates:
-            if not _is_groq_key_available(candidate_key):
+            if not _is_featherless_key_available(candidate_key):
                 continue
             yielded_any = False
             try:
@@ -652,13 +652,13 @@ async def groq_stream_chat_complete(
                     messages=messages,
                     model=candidate_model,
                     api_key=candidate_key,
-                    base_url=GROQ_BASE_URL,
-                    referer=GROQ_HTTP_REFERER,
-                    title=GROQ_X_TITLE,
+                    base_url=FEATHERLESS_BASE_URL,
+                    referer=FEATHERLESS_HTTP_REFERER,
+                    title=FEATHERLESS_X_TITLE,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     provider_name="groq",
-                    max_input_tokens=GROQ_MAX_INPUT_TOKENS,
+                    max_input_tokens=FEATHERLESS_MAX_INPUT_TOKENS,
                 ):
                     yielded_any = True
                     yield token
@@ -672,7 +672,7 @@ async def groq_stream_chat_complete(
                 if yielded_any:
                     raise
                 if _is_rate_limit_error(groq_error):
-                    cooldown_seconds = _cooldown_groq_key(candidate_key, groq_error)
+                    cooldown_seconds = _cooldown_featherless_key(candidate_key, groq_error)
                     print(
                         f"[llm] Groq key_index={key_index} rate-limited; cooling down for {cooldown_seconds:.0f}s and trying next configured key."
                     )
@@ -689,7 +689,7 @@ async def groq_stream_chat_complete(
         print("[llm] Groq stream exhausted all candidates; falling back to Featherless.")
         fallback_model = (
             FEATHERLESS_MODEL_SMART
-            if model in {GROQ_MODEL_SMART, GROQ_MODEL}
+            if model in {FEATHERLESS_MODEL_SMART, FEATHERLESS_MODEL}
             else FEATHERLESS_MODEL_FAST
         )
         async for token in featherless_stream_complete(

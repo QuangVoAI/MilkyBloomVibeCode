@@ -417,6 +417,9 @@ def get_order_info_by_phone(phone: str, context: dict | None = None) -> dict:
                     f"- {o.get('order_id', '')}: {o.get('status', 'unknown')}"
                     for o in orders[:5]
                 ]
+                normalized_orders = [_normalize_order_detail(o) for o in orders[:5]]
+                for idx, o in enumerate(normalized_orders):
+                    o["found"] = True
                 return {
                     "found": False,
                     "ownership_verified": False,
@@ -429,6 +432,7 @@ def get_order_info_by_phone(phone: str, context: dict | None = None) -> dict:
                     "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
                     "suggested_actions": ["ask_reconfirm_order_id"],
                     "latest_order_id": latest.get("order_id", ""),
+                    "multiple_orders": normalized_orders,
                 }
 
         return {
@@ -490,6 +494,9 @@ def get_order_info_by_email(email: str, context: dict | None = None) -> dict:
                     f"- {o.get('order_id', '')}: {o.get('status', 'unknown')}"
                     for o in orders[:5]
                 ]
+                normalized_orders = [_normalize_order_detail(o) for o in orders[:5]]
+                for idx, o in enumerate(normalized_orders):
+                    o["found"] = True
                 return {
                     "found": False,
                     "ownership_verified": False,
@@ -497,11 +504,12 @@ def get_order_info_by_email(email: str, context: dict | None = None) -> dict:
                     "matched_email": normalized_email,
                     "summary": (
                         f"Mình tìm thấy {len(orders)} đơn gắn với email **{normalized_email}**.\n"
-                        f"Bạn gửi thêm mã đơn để mình đối chiếu tiếp nhé:\n" + "\n".join(order_lines)
+                        f"Bạn chọn thẻ đơn hàng bên dưới hoặc gửi thêm mã đơn để mình đối chiếu tiếp nhé."
                     ),
                     "lookup_hints": _build_lookup_guidance(verified=False, internal_lookup=True),
                     "suggested_actions": ["ask_reconfirm_order_id"],
                     "latest_order_id": latest.get("order_id", ""),
+                    "multiple_orders": normalized_orders,
                 }
 
     return {

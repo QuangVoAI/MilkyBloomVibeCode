@@ -11,7 +11,7 @@ from agents.state import AgentState
 from agents.llm_client import (
     groq_complete,
     featherless_complete,
-    GROQ_MODEL_FAST,
+    FEATHERLESS_MODEL_FAST,
     FEATHERLESS_MODEL_FAST,
 )
 from config import get_empathy_mode
@@ -76,7 +76,7 @@ async def rewrite_query_node(state: AgentState) -> dict:
         rewritten = await groq_complete(
             prompt=prompt,
             system_prompt=REWRITE_SYSTEM_PROMPT,
-            model=GROQ_MODEL_FAST,
+            model=FEATHERLESS_MODEL_FAST,
             max_tokens=128,
             temperature=0.2,
         )

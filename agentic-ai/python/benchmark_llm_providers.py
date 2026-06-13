@@ -21,8 +21,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from config import (
-    GROQ_API_KEY,
-    GROQ_MODEL_FAST,
+    FEATHERLESS_API_KEY,
+    FEATHERLESS_MODEL_FAST,
     FEATHERLESS_API_KEY,
     FEATHERLESS_MODEL_FAST,
 )
@@ -130,15 +130,15 @@ async def main():
     print(f"Runs/provider: {RUNS}")
 
     providers = []
-    if GROQ_API_KEY:
+    if FEATHERLESS_API_KEY:
         providers.append(
             {
                 "name": "Groq",
-                "api_key": GROQ_API_KEY,
+                "api_key": FEATHERLESS_API_KEY,
                 "base_url": "https://api.groq.com/openai/v1",
                 "referer": "",
                 "title": "",
-                "model": GROQ_MODEL_FAST,
+                "model": FEATHERLESS_MODEL_FAST,
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": PROMPT},
@@ -162,7 +162,7 @@ async def main():
         )
 
     if not providers:
-        print("No provider keys found in agentic-ai/.env. Add GROQ_API_KEY or FEATHERLESS_API_KEY.")
+        print("No provider keys found in agentic-ai/.env. Add FEATHERLESS_API_KEY or FEATHERLESS_API_KEY.")
         return 1
 
     for provider in providers:

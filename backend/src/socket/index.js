@@ -306,7 +306,7 @@ module.exports = {
                 const sessionId = payload.sessionId || payload.session_id || socket.id;
                 const provider = String(payload.provider || 'agentic').toLowerCase();
                 const effectiveProvider = provider === 'auto' ? 'agentic' : provider;
-                const providerLabel = effectiveProvider === 'agentic' ? 'Groq' : effectiveProvider;
+                const providerLabel = effectiveProvider === 'agentic' ? 'Featherless' : effectiveProvider;
                 const payloadAuthToken = payload.authToken || payload.auth_token || '';
                 const messageAuthToken = payloadAuthToken || connectionAuthToken;
                 const decodedUser = decodeUserToken(messageAuthToken) || (
@@ -423,7 +423,7 @@ module.exports = {
                             );
                             const status = Number(error?.status || data?.status || 0);
                             const shouldFallback =
-                                providerLabel === 'Groq' ||
+                                providerLabel === 'Featherless' ||
                                 status === 429 ||
                                 /429|rate limit|too many requests|quota/i.test(String(error?.message || '')) ||
                                 /groq|featherless|api error|stream error|\/chat\/completions/i.test(
