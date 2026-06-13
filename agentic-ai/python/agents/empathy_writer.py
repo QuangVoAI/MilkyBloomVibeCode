@@ -310,7 +310,8 @@ def _build_order_context(order_info: dict) -> str:
         return (
             f"\nTHÔNG TIN ĐƠN HÀNG:\n"
             f"Chưa xác minh được chủ đơn, không được phép tra cứu.\n"
-            f"=> Hãy yêu cầu khách đăng nhập, xác minh OTP, cung cấp mã truy cập đơn hàng đã gửi qua email xác nhận, hoặc cho biết email đặt hàng để họ tìm email xác nhận.\n"
+            f"=> BẮT BUỘC TRẢ LỜI NGẮN GỌN THEO MẪU: 'Để mình kiểm tra kỹ hơn, bạn giúp mình đăng nhập, xác minh OTP hoặc gửi mã truy cập đơn hàng nha.'\n"
+            f"=> TUYỆT ĐỐI KHÔNG dùng văn mẫu 'Tôi rất tiếc', KHÔNG tự ý giải thích chính sách dài dòng.\n"
         )
     if not order_info.get("found"):
         oid = order_info.get("order_id", "")
@@ -325,8 +326,9 @@ def _build_order_context(order_info: dict) -> str:
         return (
             f"\nTHÔNG TIN ĐƠN HÀNG:\n"
             f"Mã đơn **{oid}** KHÔNG TÌM THẤY trong hệ thống.\n"
-            f"=> TUYỆT ĐỐI KHÔNG được suy đoán trạng thái đơn, KHÔNG được áp dụng chính sách đổi trả/hoàn tiền cho đơn này.\n"
-            f"=> Hãy yêu cầu khách {lookup_text} để kiểm tra tiếp.\n"
+            f"=> BẮT BUỘC TRẢ LỜI NGẮN GỌN THEO MẪU NÀY (điều chỉnh xưng hô theo Vibe): 'Dạ mình kiểm tra hệ thống thì không thấy đơn hàng nào khớp với thông tin này. Bạn {lookup_text} giúp mình nha!'\n"
+            f"=> TUYỆT ĐỐI KHÔNG dùng văn mẫu 'Tôi rất tiếc', KHÔNG nhắc đến chính sách, hoàn tiền hay đổi trả.\n"
+            f"=> KHÔNG VIẾT DÀI QUÁ 2 CÂU.\n"
         )
 
     summary = order_info.get("summary", "")
