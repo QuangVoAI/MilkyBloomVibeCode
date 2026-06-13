@@ -145,10 +145,12 @@ def _extract_budget_limit(question: str) -> int | None:
     patterns = [
         r"(?:dưới|tối đa|không quá|<=?|less than|under)\s*([\d.,\s]+(?:k|nghìn|ngàn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd)?)",
         r"(?:tầm|khoảng|about|around|within|budget)\s*([\d.,\s]+(?:k|nghìn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd)?)",
+        r"\b([\d.,\s]+(?:k|nghìn|ngàn|triệu|trieu|m|đ|d|vnđ|vnd))\b",
     ]
     ascii_patterns = [
         r"(?:duoi|toi da|khong qua|less than|under|<=?)\s*([\d.,\s]+(?:k|nghin|ngan|trieu|m|d|vnd)?)",
         r"(?:tam|khoang|about|around|within|budget|ngan sach)\s*([\d.,\s]+(?:k|nghin|ngan|trieu|m|d|vnd)?)",
+        r"\b([\d.,\s]+(?:k|nghin|ngan|trieu|m|d|vnd))\b",
     ]
     for source_text, source_patterns in ((text, patterns), (ascii_text, ascii_patterns)):
         for pattern in source_patterns:

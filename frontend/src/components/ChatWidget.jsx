@@ -1301,7 +1301,7 @@ const ChatWidget = () => {
                               {getVariantLabel(variant)}
                             </span>
                             <span className="ml-1 text-slate-500">
-                              {formatVnd(variant.price)} · còn {variant.stockQuantity ?? variant.stock ?? "?"}
+                              {formatVnd(variant.price ?? variant.salePrice ?? product.minPrice ?? product.price)} · còn {variant.stockQuantity ?? variant.stock ?? "?"}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
