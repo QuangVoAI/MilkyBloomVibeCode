@@ -258,7 +258,7 @@ const normalizeCatalogCards = (catalogInfo) => {
 
 const ChatWidget = () => {
   const navigate = useNavigate();
-  const { addItem } = useCartContext();
+  const { addItem, cartSummary } = useCartContext();
   const [open, setOpen] = useState(false);
   const [isPresented, setIsPresented] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -294,50 +294,24 @@ const ChatWidget = () => {
   };
 
   const renderCartAddedCard = (cartMeta) => {
-    if (!cartMeta?.cartAdded || !cartMeta?.product) return null;
-    const { name, image, variantName, price } = cartMeta.product;
+    if (!cartMeta?.cartAdded) return null;
+    
+    const count = cartSummary?.itemCount > 0 ? cartSummary.itemCount : 1;
+    const price = cartSummary?.subtotal > 0 ? cartSummary.subtotal : (cartMeta.product?.price || 0);
+
     return (
-      <div className="mt-3 animate-in slide-in-from-bottom-3 fade-in duration-500 max-w-[260px] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_8px_20px_rgba(16,185,129,0.12)]">
-        <div className="bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-700 flex items-center gap-1.5 border-b border-emerald-100">
-          <ShoppingCart className="h-3.5 w-3.5" />
-          <span>Đã thêm vào giỏ hàng</span>
+      <div className="mt-2 animate-in slide-in-from-bottom-2 fade-in duration-300 w-fit max-w-[90%] overflow-hidden rounded-full border border-emerald-200 bg-emerald-50/90 shadow-sm flex items-center gap-3 pr-1.5 pl-3 py-1.5">
+        <div className="flex items-center gap-2 text-[13px] font-medium text-emerald-800">
+          <ShoppingCart className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span className="truncate">Giỏ hàng ({count}): <strong className="font-bold">{formatVnd(price)}</strong></span>
         </div>
-        <div className="flex items-center gap-3 p-3">
-          <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
-            {image ? (
-              <img
-                src={normalizeImageUrl(image)}
-                alt={name}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-slate-300">
-                <ShoppingCart className="h-5 w-5" />
-              </div>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h4 className="truncate text-[13px] font-semibold text-slate-900" title={name}>
-              {name}
-            </h4>
-            <div className="mt-0.5 text-[11px] text-slate-500 line-clamp-1" title={variantName}>
-              {variantName}
-            </div>
-            <div className="mt-1 font-bold text-rose-600 text-[12px]">
-              {formatVnd(price)}
-            </div>
-          </div>
-        </div>
-        <div className="border-t border-emerald-100 bg-emerald-50/50 p-2 text-center">
-          <button
-            type="button"
-            onClick={() => closeChatAndNavigate("/checkout")}
-            className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white transition hover:bg-emerald-700"
-          >
-            Thanh toán ngay
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => closeChatAndNavigate("/checkout")}
+          className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white transition hover:bg-emerald-700 shadow-sm"
+        >
+          Thanh toán
+        </button>
       </div>
     );
   };
