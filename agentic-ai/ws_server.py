@@ -14,6 +14,7 @@ if str(PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(PYTHON_DIR))
 
 from agents.graph import run_streaming, startup_warmup  # noqa: E402
+from config import get_empathy_mode  # noqa: E402
 
 
 def _json_response(payload: dict, status: int = 200) -> web.Response:
@@ -75,7 +76,7 @@ async def health(request: web.Request) -> web.Response:
         {
             "ok": True,
             "service": "agentic-ai",
-            "provider": os.getenv("EMPATHY_MODE", "featherless"),
+            "provider": get_empathy_mode(),
             "groq_configured": groq_configured,
             "featherless_configured": featherless_configured,
         }

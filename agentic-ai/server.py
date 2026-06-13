@@ -14,6 +14,7 @@ if str(PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(PYTHON_DIR))
 
 from agents.graph import run_streaming, startup_warmup  # noqa: E402
+from config import get_empathy_mode  # noqa: E402
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict):
@@ -43,7 +44,7 @@ class AgenticHandler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "service": "agentic-ai",
-                    "provider": os.getenv("EMPATHY_MODE", "featherless"),
+                    "provider": get_empathy_mode(),
                 },
             )
             return
