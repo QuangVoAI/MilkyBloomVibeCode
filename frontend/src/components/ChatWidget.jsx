@@ -394,7 +394,7 @@ const ChatWidget = () => {
 
   useEffect(() => {
     // Initialize audio for chat messages
-    const TING_SOUND_URL = "/pop.ogg";
+    const TING_SOUND_URL = "/pop.wav";
     audioRef.current = new Audio(TING_SOUND_URL);
     audioRef.current.volume = 0.5;
   }, []);
