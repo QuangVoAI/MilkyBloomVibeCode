@@ -43,8 +43,17 @@ def _unique_ordered(values: list[str]) -> list[str]:
     return result
 
 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEYS = _unique_ordered(_split_env_list(os.getenv("GROQ_API_KEYS", "")))
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL_FAST = os.getenv("GROQ_MODEL_FAST", GROQ_MODEL)
+GROQ_MODEL_SMART = os.getenv("GROQ_MODEL_SMART", "llama-3.1-70b-versatile")
+GROQ_HTTP_REFERER = os.getenv("GROQ_HTTP_REFERER", "")
+GROQ_X_TITLE = os.getenv("GROQ_X_TITLE", "")
+
 FEATHERLESS_API_KEY = os.getenv("FEATHERLESS_API_KEY", "")
-FEATHERLESS_API_KEYS = []
+FEATHERLESS_API_KEYS = _unique_ordered(_split_env_list(os.getenv("FEATHERLESS_API_KEYS", "")))
 FEATHERLESS_BASE_URL = os.getenv("FEATHERLESS_BASE_URL", "https://api.featherless.ai/v1")
 FEATHERLESS_MODEL = os.getenv("FEATHERLESS_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 FEATHERLESS_MODEL_FAST = os.getenv("FEATHERLESS_MODEL_FAST", FEATHERLESS_MODEL)

@@ -14,15 +14,16 @@ from typing import AsyncGenerator
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
+import random
 from config import (
-    FEATHERLESS_API_KEY,
-    FEATHERLESS_API_KEYS,
-    FEATHERLESS_BASE_URL,
-    FEATHERLESS_MODEL,
-    FEATHERLESS_MODEL_FAST,
-    FEATHERLESS_MODEL_SMART,
-    FEATHERLESS_HTTP_REFERER,
-    FEATHERLESS_X_TITLE,
+    GROQ_API_KEY,
+    GROQ_API_KEYS,
+    GROQ_BASE_URL,
+    GROQ_MODEL,
+    GROQ_MODEL_FAST,
+    GROQ_MODEL_SMART,
+    GROQ_HTTP_REFERER,
+    GROQ_X_TITLE,
     FEATHERLESS_API_KEY,
     FEATHERLESS_BASE_URL,
     FEATHERLESS_MODEL,
@@ -221,6 +222,42 @@ def _is_rate_limit_error(error: Exception | str | None) -> bool:
     )
 
 
+_GROQ_KEY_COOLDOWNS: dict[str, float] = {}
+
+def _cooldown_groq_key(api_key: str, error: Exception | str | None) -> float:
+    retry_after = _extract_retry_after(error)
+    seconds = retry_after if retry_after is not None else 60.0
+    seconds = max(10.0, min(float(seconds), 3600.0))
+    _GROQ_KEY_COOLDOWNS[api_key] = time.monotonic() + seconds
+    return seconds
+
+def _is_groq_key_available(api_key: str) -> bool:
+    expires_at = _GROQ_KEY_COOLDOWNS.get(api_key, 0)
+    return expires_at <= time.monotonic()
+
+def _groq_api_key_candidates() -> list[str]:
+    keys = _unique_nonempty(list(GROQ_API_KEYS or []))
+    if not keys and GROQ_API_KEY:
+        keys = [GROQ_API_KEY.strip()]
+    return keys
+
+def _available_groq_api_key_candidates() -> list[tuple[int, str]]:
+    keys = _groq_api_key_candidates()
+    candidates = [
+        (index, key)
+        for index, key in enumerate(keys, start=1)
+        if _is_groq_key_available(key)
+    ]
+    random.shuffle(candidates)
+    return candidates
+
+def _groq_model_candidates(requested_model: str) -> list[str]:
+    return _unique_nonempty([
+        requested_model,
+        GROQ_MODEL_SMART,
+        GROQ_MODEL_FAST,
+        GROQ_MODEL,
+    ])
 def _cooldown_featherless_key(api_key: str, error: Exception | str | None) -> float:
     retry_after = _extract_retry_after(error)
     seconds = retry_after if retry_after is not None else 60.0
@@ -508,28 +545,28 @@ async def featherless_chat_complete(
     temperature: float = 0.1,
 ) -> str:
     """Groq completion with ordered key failover only on rate limit/quota."""
-    model_candidates = _featherless_model_candidates(model)
-    key_candidates = _available_featherless_api_key_candidates()
+    model_candidates = _groq_model_candidates(model)
+    key_candidates = _available_groq_api_key_candidates()
     last_error: Exception | None = None
     abort_groq = False
 
-    if _featherless_api_key_candidates() and not key_candidates:
+    if _groq_api_key_candidates() and not key_candidates:
         last_error = RuntimeError("All Groq API keys are temporarily rate-limited.")
 
     for candidate_model in model_candidates:
         if abort_groq:
             break
         for key_index, candidate_key in key_candidates:
-            if not _is_featherless_key_available(candidate_key):
+            if not _is_groq_key_available(candidate_key):
                 continue
             try:
                 return await _openai_chat_complete(
                     messages=messages,
                     model=candidate_model,
                     api_key=candidate_key,
-                    base_url=FEATHERLESS_BASE_URL,
-                    referer=FEATHERLESS_HTTP_REFERER,
-                    title=FEATHERLESS_X_TITLE,
+                    base_url=GROQ_BASE_URL,
+                    referer=GROQ_HTTP_REFERER,
+                    title=GROQ_X_TITLE,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     provider_name="groq",
@@ -542,7 +579,7 @@ async def featherless_chat_complete(
                     f"[llm] Groq attempt failed (model={candidate_model}, key_index={key_index}, status={status or 'n/a'}): {groq_error}"
                 )
                 if _is_rate_limit_error(groq_error):
-                    cooldown_seconds = _cooldown_featherless_key(candidate_key, groq_error)
+                    cooldown_seconds = _cooldown_groq_key(candidate_key, groq_error)
                     print(
                         f"[llm] Groq key_index={key_index} rate-limited; cooling down for {cooldown_seconds:.0f}s and trying next configured key."
                     )
@@ -632,19 +669,19 @@ async def featherless_stream_chat_complete(
 
     If Groq fails before any token is emitted, fall back to Featherless.
     """
-    model_candidates = _featherless_model_candidates(model)
-    key_candidates = _available_featherless_api_key_candidates()
+    model_candidates = _groq_model_candidates(model)
+    key_candidates = _available_groq_api_key_candidates()
     last_error: Exception | None = None
     abort_groq = False
 
-    if _featherless_api_key_candidates() and not key_candidates:
+    if _groq_api_key_candidates() and not key_candidates:
         last_error = RuntimeError("All Groq API keys are temporarily rate-limited.")
 
     for candidate_model in model_candidates:
         if abort_groq:
             break
         for key_index, candidate_key in key_candidates:
-            if not _is_featherless_key_available(candidate_key):
+            if not _is_groq_key_available(candidate_key):
                 continue
             yielded_any = False
             try:
@@ -652,9 +689,9 @@ async def featherless_stream_chat_complete(
                     messages=messages,
                     model=candidate_model,
                     api_key=candidate_key,
-                    base_url=FEATHERLESS_BASE_URL,
-                    referer=FEATHERLESS_HTTP_REFERER,
-                    title=FEATHERLESS_X_TITLE,
+                    base_url=GROQ_BASE_URL,
+                    referer=GROQ_HTTP_REFERER,
+                    title=GROQ_X_TITLE,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     provider_name="groq",
@@ -672,7 +709,7 @@ async def featherless_stream_chat_complete(
                 if yielded_any:
                     raise
                 if _is_rate_limit_error(groq_error):
-                    cooldown_seconds = _cooldown_featherless_key(candidate_key, groq_error)
+                    cooldown_seconds = _cooldown_groq_key(candidate_key, groq_error)
                     print(
                         f"[llm] Groq key_index={key_index} rate-limited; cooling down for {cooldown_seconds:.0f}s and trying next configured key."
                     )
