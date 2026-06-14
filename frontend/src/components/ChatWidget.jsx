@@ -1316,7 +1316,7 @@ const ChatWidget = () => {
                               {getVariantLabel(variant)}
                             </span>
                             <span className="ml-1 text-slate-500">
-                              {formatVnd(variant.price ?? variant.salePrice ?? product.minPrice ?? product.price)} · còn {variant.stockQuantity ?? variant.stock ?? "?"}
+                              {(variant.price ?? variant.salePrice ?? product.minPrice ?? product.price) != null ? `${formatVnd(variant.price ?? variant.salePrice ?? product.minPrice ?? product.price)} · ` : ""}còn {variant.stockQuantity ?? variant.stock ?? "?"}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -1555,6 +1555,19 @@ const ChatWidget = () => {
               </div>
 
               <div className="flex items-center gap-1">
+                {cartSummary?.itemCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/checkout")}
+                    className="chat-widget-sheet__icon-button relative rounded-full p-1.5 text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700 mr-1"
+                    aria-label="View Cart"
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white shadow-sm">
+                      {cartSummary.itemCount > 9 ? "9+" : cartSummary.itemCount}
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleClear}
